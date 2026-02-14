@@ -1,0 +1,82 @@
+import Image from "next/image";
+import { notFound } from "next/navigation";
+import { ProductCard } from "@/components/product/product-card";
+import { TrackRecent } from "@/components/product/track-recent";
+import { AddToCartInline } from "@/features/cart/ui/add-to-cart-inline";
+import { RecentlyViewed } from "@/features/recent/ui/recently-viewed";
+import { WishlistInlineButton } from "@/features/wishlist/ui/wishlist-inline-button";
+import { formatCurrency } from "@/lib/utils";
+import { getProductBySlug, getRelatedProducts } from "@/lib/catalog";
+
+export default async function ProductPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const product = getProductBySlug(slug);
+
+  if (!product) {
+    notFound();
+  }
+
+  const related = getRelatedProducts(product.id, product.category, 4);
+
+  return (
+    <div className="space-y-8 sm:space-y-10">
+      <TrackRecent productId={product.id} />
+
+      <section className="grid gap-6 sm:gap-8 lg:grid-cols-2">
+        <div className="relative aspect-square overflow-hidden rounded-2xl border border-[#edd2d9] bg-white">
+          <Image
+            src={product.images[0]}
+            alt={product.name}
+            fill
+            className="object-cover"
+            sizes="(max-width: 1024px) 100vw, 50vw"
+          />
+          {product.featured && (
+            <span className="absolute left-3 top-3 rounded bg-[#ef476f] px-2 py-1 text-[10px] font-semibold text-white">
+              Featured
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-[#edd2d9] bg-[#fff1f4] p-4 sm:space-y-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#24438f]/80">{product.category}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#24438f] sm:text-3xl">{product.name}</h1>
+          <p className="text-sm text-[#2f3a5e]/80 sm:text-base">{product.description}</p>
+
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold text-[#24438f]">{formatCurrency(product.price)}</span>
+            {product.originalPrice && (
+              <span className="text-base text-[#2f3a5e]/65 line-through">{formatCurrency(product.originalPrice)}</span>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-[#edd2d9] bg-white p-4 text-sm text-[#2f3a5e]/80">
+            <p>⭐ {product.rating} rating from {product.reviews} reviews</p>
+            <p className="mt-2">🚚 Delivery in 24-48 hours in major cities</p>
+            <p className="mt-2">🎁 Complimentary premium wrapping with every order</p>
+          </div>
+
+          <div className="grid gap-3 sm:flex sm:flex-wrap">
+            <AddToCartInline productId={product.id} disabled={!product.inStock} />
+            <WishlistInlineButton productId={product.id} />
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-2xl font-bold tracking-tight text-[#24438f]">You may also like</h2>
+        <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {related.map((item) => (
+            <ProductCard key={item.id} product={item} />
+          ))}
+        </div>
+      </section>
+
+      <RecentlyViewed currentId={product.id} />
+    </div>
+  );
+}
