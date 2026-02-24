@@ -2,8 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { X } from "lucide-react";
 import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 export function LoginPopup() {
   const pathname = usePathname();
@@ -21,54 +30,41 @@ export function LoginPopup() {
   if (!open || pathname.startsWith("/auth")) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4">
-      <div className="relative w-full max-w-md rounded-2xl border border-[#edd2d9] bg-white p-5 shadow-xl sm:p-6">
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          aria-label="Close login popup"
-          className="absolute right-3 top-3 rounded-md border border-[#edd2d9] p-1.5 text-[#2f3a5e]"
-        >
-          <X className="h-4 w-4" />
-        </button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Welcome to Gifta</p>
+          <DialogTitle>Sign in to continue</DialogTitle>
+          <DialogDescription>
+            Track orders, save wishlist and enjoy faster checkout.
+          </DialogDescription>
+        </DialogHeader>
 
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#24438f]">Welcome to Gifta</p>
-        <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#24438f]">Sign in to continue</h2>
-        <p className="mt-1 text-sm text-[#2f3a5e]/80">Track orders, save wishlist and enjoy faster checkout.</p>
-
-        <form className="mt-5 space-y-3">
-          <input
-            type="email"
-            placeholder="Email address"
-            className="min-h-11 w-full rounded-lg border border-[#edd2d9] px-3 text-sm"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            className="min-h-11 w-full rounded-lg border border-[#edd2d9] px-3 text-sm"
-          />
-          <button type="button" className="min-h-11 w-full rounded-lg bg-[#24438f] px-4 text-sm font-semibold text-white">
-            Sign in
-          </button>
+        <form className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="popup-email">Email</Label>
+            <Input id="popup-email" type="email" placeholder="Email address" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="popup-password">Password</Label>
+            <Input id="popup-password" type="password" placeholder="Password" />
+          </div>
+          <Button type="button" className="w-full">Sign in</Button>
         </form>
 
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <Link href="/auth/forgot-password" className="text-[#2f3a5e]/75 hover:text-[#24438f]" onClick={() => setOpen(false)}>
+        <div className="flex items-center justify-between text-sm">
+          <Link href="/auth/forgot-password" className="text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
             Forgot password?
           </Link>
-          <Link href="/auth/sign-up" className="font-medium text-[#24438f]" onClick={() => setOpen(false)}>
+          <Link href="/auth/sign-up" className="font-medium text-primary" onClick={() => setOpen(false)}>
             Create account
           </Link>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="mt-4 w-full text-center text-sm font-medium text-[#2f3a5e]/75 hover:text-[#24438f]"
-        >
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
           Continue as guest
-        </button>
-      </div>
-    </div>
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

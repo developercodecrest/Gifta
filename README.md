@@ -20,6 +20,69 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Backend API (MongoDB)
+
+Set the following environment variables in `.env.local`:
+
+```bash
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=gifta
+AUTH_SECRET=your-long-random-secret
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+EMAIL_FROM="Gifta <no-reply@gifta.com>"
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxx
+```
+
+Available endpoints:
+
+- `POST /api/dev/seed` - seed demo products, stores, offers, reviews, comments, profile.
+- `GET /api/home` - featured and top-rated items for home page.
+- `GET /api/profile` - fetch demo profile.
+- `PUT /api/profile` - update demo profile.
+- `GET /api/items` - search/list items with filters:
+	- `q`, `category`, `tag`, `sort`, `stock`, `page`, `pageSize`
+	- `minPrice`, `maxPrice`, `storeId`, `minRating`
+- `GET /api/items/:slug` - item details with offers, review summary, and suggestions.
+- `GET /api/items/:slug/offers` - offers from all stores for a single item.
+- `GET /api/items/:slug/reviews` - item reviews (`page`, `pageSize`).
+- `GET /api/items/:slug/comments` - item comments (`page`, `pageSize`).
+
+All APIs return an envelope format:
+
+```json
+{
+	"success": true,
+	"data": {},
+	"meta": {}
+}
+```
+
+## Multi-vendor + Admin Panel
+
+- Marketplace supports vendor-level offers per product (`offers` collection) and vendor filtering on store pages.
+- Cart and checkout are server-rendered (`/cart`, `/checkout`) with cookie-synced client interactions and vendor-level offer selection.
+- Admin panel routes are available under `/admin`.
+- Roles implemented:
+	- `sadmin` (super admin)
+	- `storeOwner`
+	- `rider`
+	- `user`
+
+## Authentication (Auth.js)
+
+- Auth.js v5 is configured with:
+	- Google OAuth login
+	- Email OTP login (custom OTP via Nodemailer + MongoDB verification)
+- Auth route: `/api/auth/[...nextauth]`
+- OTP request route: `POST /api/auth/otp/request`
+- Admin pages are session-protected via `proxy.ts` and server-side role checks.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

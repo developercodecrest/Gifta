@@ -4,6 +4,9 @@ import Link from "next/link";
 import { ProductCard } from "@/components/product/product-card";
 import { products } from "@/data/products";
 import { useWishlistStore } from "@/features/wishlist/store";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function WishlistPage() {
   const ids = useWishlistStore((state) => state.productIds);
@@ -12,31 +15,33 @@ export default function WishlistPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-[#f3ced5] bg-gradient-to-r from-[#ffeef2] via-[#ffe6ec] to-[#ffdce5] p-5 sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 sm:p-7">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#24438f]">Saved Favorites</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#24438f]">Your Wishlist</h1>
-          <p className="mt-1 text-sm text-[#2f3a5e]/80">Save favorites and move them to cart anytime.</p>
+          <Badge variant="secondary">Saved favorites</Badge>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">Your wishlist</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Save favorites and move them to cart anytime.</p>
         </div>
         {wishlistProducts.length > 0 && (
-          <button
+          <Button
             onClick={clear}
             type="button"
-            className="rounded-lg border border-[#edd2d9] bg-white px-4 py-2 text-sm font-medium text-[#24438f]"
+            variant="outline"
           >
             Clear wishlist
-          </button>
+          </Button>
         )}
       </div>
 
       {wishlistProducts.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[#e7c7cf] bg-[#fff6f8] p-10 text-center">
-          <h2 className="text-lg font-semibold">Wishlist is empty</h2>
-          <p className="mt-2 text-sm text-[#2f3a5e]/80">Explore curated products and save what you love.</p>
-          <Link href="/store" className="mt-4 inline-flex rounded-lg bg-[#24438f] px-4 py-2 text-sm font-semibold text-white">
-            Browse store
-          </Link>
-        </div>
+        <Card className="border-dashed">
+          <CardContent className="p-10 text-center">
+            <h2 className="text-lg font-semibold">Wishlist is empty</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Explore curated products and save what you love.</p>
+            <Button asChild className="mt-4">
+              <Link href="/store">Browse store</Link>
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {wishlistProducts.map((item) => (

@@ -19,10 +19,13 @@ export type Product = {
   tags: string[];
   images: string[];
   inStock: boolean;
+  minOrderQty?: number;
+  maxOrderQty?: number;
   featured?: boolean;
 };
 
 export type CartItem = {
   productId: string;
   quantity: number;
+  offerId?: string;
 };
