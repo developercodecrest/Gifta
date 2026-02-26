@@ -7,6 +7,7 @@ import {
   AdminOrderDto,
   CommentDto,
   HomePayload,
+  OrderTrackingStep,
   OfferDto,
   ProductDetailsDto,
   ProductListItemDto,
@@ -16,7 +17,9 @@ import {
   SearchMeta,
   SortOption,
   StoreDto,
+  UserOrderDetailsDto,
   UserOrderDto,
+  UserNotificationDto,
   VendorSummaryDto,
 } from "@/types/api";
 import { Product } from "@/types/ecommerce";
@@ -65,6 +68,8 @@ type ProfileDoc = {
   phone?: string;
   addresses: ProfileDto["addresses"];
   preferences: ProfileDto["preferences"];
+  notificationReadIds?: string[];
+  notificationLastReadAt?: string;
   updatedAt: string;
 };
 
@@ -447,6 +452,32 @@ export async function getItemOffers(slug: string): Promise<OfferDto[] | null> {
   return offersByProduct.get(product.id) ?? [];
 }
 
+export async function getItemsByIds(ids: string[]): Promise<ProductListItemDto[]> {
+  if (!ids.length) {
+    return [];
+  }
+
+  const uniqueIds = Array.from(new Set(ids));
+  const { products } = await getCollections();
+  const docs = (await products.find({ id: { $in: uniqueIds } }).toArray())
+    .map(normalizeInventoryProduct)
+    .filter(isPurchasableProduct);
+
+  const { offersByProduct } = await getOffersForProducts(docs.map((entry) => entry.id));
+
+  const orderIndex = new Map(uniqueIds.map((id, index) => [id, index]));
+  return docs
+    .map((product) => {
+      const productOffers = offersByProduct.get(product.id) ?? [];
+      return {
+        ...product,
+        bestOffer: productOffers[0],
+        offerCount: productOffers.length,
+      } satisfies ProductListItemDto;
+    })
+    .sort((left, right) => (orderIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+}
+
 export async function getItemReviews(slug: string, page = 1, pageSize = 10): Promise<{ items: ReviewDto[]; total: number } | null> {
   const { products, reviews } = await getCollections();
   const product = await products.findOne({ slug });
@@ -704,6 +735,289 @@ export async function getUserOrders(customerEmail?: string): Promise<UserOrderDt
   });
 
   return output.sort((left, right) => new Date(right.placedAt).getTime() - new Date(left.placedAt).getTime());
+}
+
+const trackingOrder: AdminOrderDto["status"][] = ["placed", "packed", "out-for-delivery", "delivered"];
+
+const trackingLabel: Record<AdminOrderDto["status"], string> = {
+  placed: "Placed",
+  packed: "Packed",
+  "out-for-delivery": "Out for delivery",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+export async function getUserOrderDetails(orderRef: string, customerEmail?: string): Promise<UserOrderDetailsDto | null> {
+  const trimmedOrderRef = orderRef.trim();
+  if (!trimmedOrderRef) {
+    return null;
+  }
+
+  const { orders, products, stores, riders } = await getCollections();
+
+  const query: Record<string, unknown> = {
+    $or: [{ orderRef: trimmedOrderRef }, { id: trimmedOrderRef }],
+  };
+  if (customerEmail) {
+    query.customerEmail = customerEmail;
+  }
+
+  const [orderDocs, productDocs, storeDocs, riderDocs] = await Promise.all([
+    orders.find(query).sort({ createdAt: -1 }).toArray(),
+    products.find().toArray(),
+    stores.find().toArray(),
+    riders.find().toArray(),
+  ]);
+
+  if (!orderDocs.length) {
+    return null;
+  }
+
+  const productsById = toMap(productDocs);
+  const storesById = toMap(storeDocs);
+  const ridersById = toMap(riderDocs);
+
+  const sortedByTime = [...orderDocs].sort((left, right) =>
+    new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+
+  const latestStatus = [...orderDocs]
+    .sort((left, right) => statusPriority[right.status] - statusPriority[left.status])[0]?.status ?? "placed";
+
+  const totalAmount = orderDocs.reduce((total, entry) => total + entry.totalAmount, 0);
+  const itemCount = orderDocs.reduce((total, entry) => total + entry.quantity, 0);
+
+  const productNames = orderDocs
+    .map((entry) => productsById.get(entry.productId)?.name)
+    .filter((value): value is string => Boolean(value));
+
+  const itemsSummary =
+    productNames.slice(0, 2).join(", ") +
+    (productNames.length > 2 ? ` +${productNames.length - 2} more` : "");
+
+  const currentStageIndex = trackingOrder.indexOf(latestStatus);
+  const tracking: OrderTrackingStep[] = trackingOrder.map((status, index) => ({
+    status,
+    label: trackingLabel[status],
+    completed: latestStatus === "cancelled" ? status === "placed" : index <= currentStageIndex,
+    active: latestStatus !== "cancelled" && status === latestStatus,
+  }));
+
+  if (latestStatus === "cancelled") {
+    tracking.push({
+      status: "cancelled",
+      label: trackingLabel.cancelled,
+      completed: true,
+      active: true,
+    });
+  }
+
+  const items = orderDocs.map((entry) => ({
+    id: entry.id,
+    productId: entry.productId,
+    productName: productsById.get(entry.productId)?.name ?? entry.productId,
+    storeId: entry.storeId,
+    storeName: storesById.get(entry.storeId)?.name,
+    quantity: entry.quantity,
+    totalAmount: entry.totalAmount,
+    status: entry.status,
+    riderId: entry.riderId,
+    riderName: entry.riderId ? ridersById.get(entry.riderId)?.fullName : undefined,
+    createdAt: entry.createdAt,
+  }));
+
+  return {
+    orderRef: orderDocs[0]?.orderRef ?? orderDocs[0]?.id ?? trimmedOrderRef,
+    placedAt: sortedByTime[0]?.createdAt ?? new Date().toISOString(),
+    lastUpdatedAt: sortedByTime[sortedByTime.length - 1]?.createdAt ?? new Date().toISOString(),
+    status: latestStatus,
+    totalAmount,
+    itemCount,
+    itemsSummary,
+    deliveryAddressLabel: orderDocs[0]?.deliveryAddressLabel,
+    customerName: orderDocs[0]?.customerName,
+    customerEmail: orderDocs[0]?.customerEmail,
+    customerPhone: orderDocs[0]?.customerPhone,
+    paymentId: orderDocs[0]?.paymentId,
+    items,
+    tracking,
+  } satisfies UserOrderDetailsDto;
+}
+
+async function buildNotificationSeed(customerEmail?: string): Promise<UserNotificationDto[]> {
+  const { orders } = await getCollections();
+
+  const query: Record<string, unknown> = {};
+  if (customerEmail) {
+    query.customerEmail = customerEmail;
+  }
+
+  const orderDocs = await orders.find(query).sort({ createdAt: -1 }).limit(250).toArray();
+
+  const grouped = new Map<string, AdminOrderDto[]>();
+  for (const order of orderDocs) {
+    const key = order.orderRef ?? order.id;
+    const current = grouped.get(key) ?? [];
+    current.push(order);
+    grouped.set(key, current);
+  }
+
+  const notifications: UserNotificationDto[] = [];
+
+  for (const [orderRef, entries] of grouped.entries()) {
+    const latestByTime = [...entries].sort(
+      (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    )[0];
+
+    const latestStatus = [...entries]
+      .sort((left, right) => statusPriority[right.status] - statusPriority[left.status])[0]?.status ?? "placed";
+
+    notifications.push({
+      id: `ord-${orderRef}`,
+      type: "order-update",
+      title: `Order ${trackingLabel[latestStatus]}`,
+      message: buildOrderNotificationMessage(orderRef, latestStatus),
+      createdAt: latestByTime?.createdAt ?? new Date().toISOString(),
+      isRead: false,
+      orderRef,
+      status: latestStatus,
+      actionPath: `/orders/${orderRef}`,
+    });
+
+    const paidEntry = entries.find((entry) => Boolean(entry.paymentId));
+    if (paidEntry?.paymentId) {
+      notifications.push({
+        id: `pay-${paidEntry.paymentId}`,
+        type: "payment",
+        title: "Payment confirmed",
+        message: `Payment received for order ${orderRef}.`,
+        createdAt: paidEntry.createdAt,
+        isRead: false,
+        orderRef,
+        status: paidEntry.status,
+        actionPath: `/orders/${orderRef}`,
+      });
+    }
+  }
+
+  return notifications
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+    .slice(0, 60);
+}
+
+async function ensureNotificationProfile(profileKey: string, email?: string) {
+  const { profiles } = await getCollections();
+
+  const existingByProfileKey = await profiles.findOne({ profileKey });
+  if (existingByProfileKey) {
+    return existingByProfileKey;
+  }
+
+  if (email) {
+    const existingByEmail = await profiles.findOne({ email });
+    if (existingByEmail) {
+      return existingByEmail;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const newProfile: ProfileDoc = {
+    profileKey,
+    fullName: "Gifta User",
+    email: email ?? `${profileKey}@gifta.local`,
+    addresses: [],
+    preferences: {
+      occasions: ["Birthday", "Anniversary"],
+      budgetMin: 1000,
+      budgetMax: 5000,
+      preferredTags: ["same-day", "premium"],
+    },
+    notificationReadIds: [],
+    updatedAt: now,
+  };
+
+  await profiles.updateOne(
+    { profileKey },
+    {
+      $setOnInsert: newProfile,
+    },
+    { upsert: true },
+  );
+
+  return (await profiles.findOne({ profileKey })) ?? newProfile;
+}
+
+export async function getUserNotifications(
+  input: { customerEmail?: string; profileKey: string },
+): Promise<{ notifications: UserNotificationDto[]; unreadCount: number }> {
+  const notificationSeed = await buildNotificationSeed(input.customerEmail);
+  const profile = await ensureNotificationProfile(input.profileKey, input.customerEmail);
+  const readIds = new Set(profile.notificationReadIds ?? []);
+
+  const notifications = notificationSeed.map((entry) => ({
+    ...entry,
+    isRead: readIds.has(entry.id),
+  }));
+
+  const unreadCount = notifications.reduce((count, entry) => count + (entry.isRead ? 0 : 1), 0);
+
+  return {
+    notifications,
+    unreadCount,
+  };
+}
+
+export async function markNotificationsRead(input: {
+  profileKey: string;
+  customerEmail?: string;
+  notificationIds?: string[];
+  markAll?: boolean;
+}): Promise<{ notifications: UserNotificationDto[]; unreadCount: number }> {
+  const { profiles } = await getCollections();
+  const profile = await ensureNotificationProfile(input.profileKey, input.customerEmail);
+
+  const idsToMarkRead = input.markAll
+    ? (await buildNotificationSeed(input.customerEmail)).map((entry) => entry.id)
+    : (input.notificationIds ?? []).filter((value) => value.trim().length > 0);
+
+  if (idsToMarkRead.length) {
+    await profiles.updateOne(
+      { profileKey: profile.profileKey },
+      {
+        $addToSet: {
+          notificationReadIds: {
+            $each: idsToMarkRead,
+          },
+        },
+        $set: {
+          notificationLastReadAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    );
+  }
+
+  return getUserNotifications({
+    customerEmail: input.customerEmail,
+    profileKey: profile.profileKey,
+  });
+}
+
+function buildOrderNotificationMessage(orderRef: string, status: AdminOrderDto["status"]) {
+  switch (status) {
+    case "placed":
+      return `Your order ${orderRef} has been placed successfully.`;
+    case "packed":
+      return `Your order ${orderRef} is packed and ready for dispatch.`;
+    case "out-for-delivery":
+      return `Your order ${orderRef} is out for delivery.`;
+    case "delivered":
+      return `Your order ${orderRef} was delivered.`;
+    case "cancelled":
+      return `Your order ${orderRef} was cancelled.`;
+    default:
+      return `Update available for order ${orderRef}.`;
+  }
 }
 
 export async function getAdminUsers() {

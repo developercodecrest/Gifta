@@ -1,13 +1,13 @@
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
-import { auth } from "@/auth";
 import { mergeUserCart } from "@/lib/server/user-cart-service";
+import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { CartItem } from "@/types/ecommerce";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const identity = await resolveRequestIdentity(request);
+  const userId = identity?.userId;
 
   if (!userId) {
     return unauthorized("Sign in required");

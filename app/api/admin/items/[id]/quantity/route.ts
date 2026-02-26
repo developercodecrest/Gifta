@@ -1,7 +1,7 @@
-import { auth } from "@/auth";
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
 import { canAccess, parseRole } from "@/lib/roles";
 import { updateItemQuantityLimits } from "@/lib/server/ecommerce-service";
+import { resolveRequestIdentity } from "@/lib/server/request-auth";
 
 export const runtime = "nodejs";
 
@@ -9,10 +9,10 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  const role = parseRole(session?.user?.role ?? "user");
+  const identity = await resolveRequestIdentity(request);
+  const role = parseRole(identity?.role ?? "user");
 
-  if (!session?.user?.id || !canAccess(role, "items")) {
+  if (!identity?.userId || !canAccess(role, "items")) {
     return unauthorized("Not allowed");
   }
 

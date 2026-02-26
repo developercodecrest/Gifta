@@ -50,7 +50,12 @@ export default async function OrdersPage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span className="text-muted-foreground">Placed on {formatDate(order.placedAt)} • {order.itemCount} item(s)</span>
-                  <span className="font-semibold text-primary">{formatCurrency(order.totalAmount)}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-primary">{formatCurrency(order.totalAmount)}</span>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/orders/${order.orderRef}`}>View details</Link>
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

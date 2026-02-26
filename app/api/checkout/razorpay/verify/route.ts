@@ -2,10 +2,10 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
 import { getMongoDb } from "@/lib/mongodb";
+import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { getUserCart, setUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
 
@@ -71,8 +71,8 @@ export async function POST(request: Request) {
     });
   }
 
-  const session = await auth();
-  const userId = session?.user?.id;
+  const identity = await resolveRequestIdentity(request);
+  const userId = identity?.userId;
 
   let cartItems = [];
   if (userId) {

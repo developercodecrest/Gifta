@@ -97,6 +97,56 @@ export type UserOrderDto = {
   deliveryAddressLabel?: string;
 };
 
+export type OrderTrackingStep = {
+  status: AdminOrderDto["status"];
+  label: string;
+  completed: boolean;
+  active: boolean;
+};
+
+export type UserOrderItemDto = {
+  id: string;
+  productId: string;
+  productName: string;
+  storeId: string;
+  storeName?: string;
+  quantity: number;
+  totalAmount: number;
+  status: AdminOrderDto["status"];
+  riderId?: string;
+  riderName?: string;
+  createdAt: string;
+};
+
+export type UserOrderDetailsDto = {
+  orderRef: string;
+  placedAt: string;
+  lastUpdatedAt: string;
+  status: AdminOrderDto["status"];
+  totalAmount: number;
+  itemCount: number;
+  itemsSummary: string;
+  deliveryAddressLabel?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  paymentId?: string;
+  items: UserOrderItemDto[];
+  tracking: OrderTrackingStep[];
+};
+
+export type UserNotificationDto = {
+  id: string;
+  type: "order-update" | "payment";
+  title: string;
+  message: string;
+  createdAt: string;
+  isRead: boolean;
+  orderRef?: string;
+  status?: AdminOrderDto["status"];
+  actionPath?: string;
+};
+
 export type VendorSummaryDto = StoreDto & {
   itemCount: number;
   offerCount: number;

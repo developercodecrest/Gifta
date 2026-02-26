@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export default function AccountPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [addresses, setAddresses] = useState<Address[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     fetch("/api/profile")
@@ -54,6 +56,25 @@ export default function AccountPage() {
       })
       .catch(() => setError("Unable to load profile."))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/notifications")
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success?: boolean;
+          data?: { unreadCount?: number };
+        };
+
+        if (!response.ok || !payload.success || !payload.data) {
+          return;
+        }
+
+        setUnreadNotifications(payload.data.unreadCount ?? 0);
+      })
+      .catch(() => {
+        return;
+      });
   }, []);
 
   const addAddress = () => {
@@ -132,6 +153,11 @@ export default function AccountPage() {
         <Badge variant="secondary">My profile</Badge>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">My account</h1>
         <p className="mt-2 text-sm text-muted-foreground">Manage your personal details and delivery addresses.</p>
+        <div className="mt-4">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/notifications">View notifications {unreadNotifications > 0 ? `(${unreadNotifications})` : ""}</Link>
+          </Button>
+        </div>
       </header>
 
       <Card>

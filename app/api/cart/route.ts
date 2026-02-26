@@ -1,13 +1,13 @@
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
-import { auth } from "@/auth";
+import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { setUserCart, getUserCart } from "@/lib/server/user-cart-service";
 import { CartItem } from "@/types/ecommerce";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  const session = await auth();
-  const userId = session?.user?.id;
+export async function GET(request: Request) {
+  const identity = await resolveRequestIdentity(request);
+  const userId = identity?.userId;
 
   if (!userId) {
     return unauthorized("Sign in required");
@@ -18,8 +18,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const identity = await resolveRequestIdentity(request);
+  const userId = identity?.userId;
 
   if (!userId) {
     return unauthorized("Sign in required");

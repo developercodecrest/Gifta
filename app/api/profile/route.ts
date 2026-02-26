@@ -1,14 +1,14 @@
-import { auth } from "@/auth";
 import { badRequest, notFound, ok, serverError, unauthorized } from "@/lib/api-response";
 import { profileUpdateSchema } from "@/lib/server/api-schemas";
 import { getProfile, upsertProfile } from "@/lib/server/ecommerce-service";
+import { resolveRequestIdentity } from "@/lib/server/request-auth";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const identity = await resolveRequestIdentity(request);
+    const userId = identity?.userId;
 
     if (!userId) {
       return unauthorized("Sign in required");
@@ -26,8 +26,8 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const identity = await resolveRequestIdentity(request);
+    const userId = identity?.userId;
 
     if (!userId) {
       return unauthorized("Sign in required");
@@ -43,7 +43,7 @@ export async function PUT(request: Request) {
     const updated = await upsertProfile(
       {
         ...parsed.data,
-        email: parsed.data.email ?? session?.user?.email ?? undefined,
+        email: parsed.data.email ?? identity?.email ?? undefined,
       },
       userId,
     );
