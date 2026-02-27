@@ -16,7 +16,8 @@ const statusLabel = {
 
 export default async function OrdersPage() {
   const session = await auth();
-  const orders = await getUserOrders(session?.user?.email ?? undefined).catch(() => []);
+  const userId = session?.user?.id;
+  const orders = userId ? await getUserOrders(userId, session?.user?.email ?? undefined).catch(() => []) : [];
 
   return (
     <div className="space-y-6">

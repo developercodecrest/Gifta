@@ -4,14 +4,14 @@ import { roleLabels } from "@/lib/roles";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 
 export default async function AdminSettingsPage() {
-  const role = await ensureAdminAccess("settings");
+  const identity = await ensureAdminAccess("settings");
 
   return (
     <div className="space-y-6">
       <header className="rounded-xl border border-border bg-card p-5">
         <Badge variant="secondary">Settings</Badge>
         <h1 className="mt-2 text-2xl font-bold">Marketplace Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Configure commission, payout cycle, SLA and platform-level defaults. Active role: {roleLabels[role]}.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Configure commission, payout cycle, SLA and platform-level defaults. Active role: {roleLabels[identity.role]}.</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-2">

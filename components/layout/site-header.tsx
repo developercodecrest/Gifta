@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
-  Gift,
   Heart,
   Moon,
   Sun,
@@ -60,10 +60,10 @@ export function Header() {
   const wishlistCount = useWishlistStore((state) => state.productIds.length);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/95 backdrop-blur">
-      <div className="border-b border-border/60 bg-secondary/50">
+    <header className="sticky top-0 z-40 border-b border-primary/80 bg-primary text-[#2c1220] backdrop-blur">
+      <div className="border-b border-[#2c1220]/20 bg-primary/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 text-xs sm:px-6 lg:px-8">
-          <p className="text-muted-foreground">Extra ₹250 OFF on first order above ₹999 with code <span className="font-semibold text-foreground">NEWHABIT250</span></p>
+          <p className="text-[#2c1220]/85">Extra ₹250 OFF on first order above ₹999 with code <span className="font-semibold text-[#2c1220]">NEWHABIT250</span></p>
           <Badge variant="warning" className="hidden sm:inline-flex">Flash Deals Live</Badge>
         </div>
       </div>
@@ -98,8 +98,8 @@ export function Header() {
             </SheetContent>
           </Sheet>
 
-          <Link href="/" className="inline-flex items-center gap-2 text-xl font-black tracking-tight text-primary sm:text-2xl">
-            <Gift className="h-5 w-5" /> GIFTA
+          <Link href="/" className="inline-flex items-center text-xl font-black tracking-tight text-[#2c1220] sm:text-2xl">
+            <Image src="/logo.jpeg" alt="Gifta" width={48} height={48} className="h-12 w-12 rounded-sm object-contain" />
           </Link>
         </div>
 
@@ -129,7 +129,7 @@ export function Header() {
         </div>
       </div>
 
-      <div className="border-t border-border/60 px-4 py-3 lg:hidden sm:px-6">
+      <div className="border-t border-[#2c1220]/20 px-4 py-3 lg:hidden sm:px-6">
         <HeaderSearch mobile />
       </div>
       <Separator />

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
     const result = await getUserNotifications({
       customerEmail: identity.email ?? undefined,
-      profileKey: identity.userId,
+      userId: identity.userId,
     });
     return ok(result);
   } catch (error) {
@@ -34,7 +34,7 @@ export async function PATCH(request: Request) {
     };
 
     const result = await markNotificationsRead({
-      profileKey: identity.userId,
+      userId: identity.userId,
       customerEmail: identity.email ?? undefined,
       notificationIds: payload.notificationIds,
       markAll: payload.markAll,

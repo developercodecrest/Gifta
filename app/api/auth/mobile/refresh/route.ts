@@ -31,6 +31,5 @@ export async function POST(request: Request) {
     expiresAt: tokenBundle.expiresAt,
     refreshExpiresAt: tokenBundle.refreshExpiresAt,
     userId: tokenBundle.user.id,
-    user: tokenBundle.user,
   });
 }

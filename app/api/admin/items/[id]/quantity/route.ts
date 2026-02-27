@@ -1,7 +1,6 @@
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
-import { canAccess, parseRole } from "@/lib/roles";
+import { authorizeAdminRequest } from "@/lib/server/admin-auth";
 import { updateItemQuantityLimits } from "@/lib/server/ecommerce-service";
-import { resolveRequestIdentity } from "@/lib/server/request-auth";
 
 export const runtime = "nodejs";
 
@@ -9,10 +8,8 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const identity = await resolveRequestIdentity(request);
-  const role = parseRole(identity?.role ?? "user");
-
-  if (!identity?.userId || !canAccess(role, "items")) {
+  const identity = await authorizeAdminRequest(request, "items");
+  if (!identity) {
     return unauthorized("Not allowed");
   }
 
@@ -26,11 +23,20 @@ export async function PATCH(
     return badRequest("minOrderQty and maxOrderQty are required numbers");
   }
 
-  const updated = await updateItemQuantityLimits({
-    itemId: id,
-    minOrderQty: body.minOrderQty,
-    maxOrderQty: body.maxOrderQty,
-  });
+  try {
+    const updated = await updateItemQuantityLimits({
+      itemId: id,
+      minOrderQty: body.minOrderQty,
+      maxOrderQty: body.maxOrderQty,
+      scope: identity,
+    });
 
-  return ok(updated);
+    return ok(updated);
+  } catch (error) {
+    if (error instanceof Error && error.message === "FORBIDDEN_ITEM_SCOPE") {
+      return unauthorized("Not allowed");
+    }
+
+    throw error;
+  }
 }

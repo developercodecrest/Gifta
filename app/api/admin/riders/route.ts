@@ -1,14 +1,13 @@
 import { ok, serverError, unauthorized } from "@/lib/api-response";
-import { canAccess } from "@/lib/roles";
+import { authorizeAdminRequest } from "@/lib/server/admin-auth";
 import { getAdminRiders } from "@/lib/server/ecommerce-service";
-import { resolveRequestIdentity } from "@/lib/server/request-auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const identity = await resolveRequestIdentity(request);
-    if (!identity?.userId || !canAccess(identity.role, "riders")) {
+    const identity = await authorizeAdminRequest(request, "riders");
+    if (!identity) {
       return unauthorized("Not allowed");
     }
 

@@ -1,13 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { roleLabels } from "@/lib/roles";
-import { getAdminDashboard } from "@/lib/server/ecommerce-service";
+import { getAdminDashboardScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 
 export default async function AdminDashboardPage() {
-  const role = await ensureAdminAccess("dashboard");
+  const identity = await ensureAdminAccess("dashboard");
 
-  const data = await getAdminDashboard().catch(() => ({
+  const data = await getAdminDashboardScoped(identity).catch(() => ({
     totalVendors: 0,
     activeVendors: 0,
     totalItems: 0,
@@ -35,7 +35,7 @@ export default async function AdminDashboardPage() {
       <header className="rounded-xl border border-border bg-card p-5">
         <Badge>Admin</Badge>
         <h1 className="mt-2 text-2xl font-bold">Marketplace Control Tower</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Viewing as {roleLabels[role]}. Monitor vendor operations, logistics and user activity.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Viewing as {roleLabels[identity.role]}. Monitor vendor operations, logistics and user activity.</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

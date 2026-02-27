@@ -4,14 +4,14 @@ import { roleLabels, roleOptions, rolePermissions } from "@/lib/roles";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 
 export default async function AdminRolesPage() {
-  const role = await ensureAdminAccess("roles");
+  const identity = await ensureAdminAccess("roles");
 
   return (
     <div className="space-y-6">
       <header className="rounded-xl border border-border bg-card p-5">
         <Badge variant="secondary">Roles</Badge>
         <h1 className="mt-2 text-2xl font-bold">Access Roles</h1>
-        <p className="mt-1 text-sm text-muted-foreground">System roles: sadmin, storeOwner, rider, user. Active role: {roleLabels[role]}.</p>
+        <p className="mt-1 text-sm text-muted-foreground">System roles: sadmin, storeOwner, rider, user. Active role: {roleLabels[identity.role]}.</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-2">

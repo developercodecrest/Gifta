@@ -1,20 +1,20 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { roleLabels } from "@/lib/roles";
-import { getVendorSummaries } from "@/lib/server/ecommerce-service";
+import { getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 
 export default async function AdminVendorsPage() {
-  const role = await ensureAdminAccess("vendors");
+  const identity = await ensureAdminAccess("vendors");
 
-  const vendors = await getVendorSummaries().catch(() => []);
+  const vendors = await getVendorSummariesScoped(identity).catch(() => []);
 
   return (
     <div className="space-y-6">
       <header className="rounded-xl border border-border bg-card p-5">
         <Badge variant="secondary">Vendors</Badge>
         <h1 className="mt-2 text-2xl font-bold">Vendor Directory</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Manage all sellers in the marketplace. Active role: {roleLabels[role]}.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Manage all sellers in the marketplace. Active role: {roleLabels[identity.role]}.</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -15,7 +15,7 @@ export async function GET(
     }
 
     const { orderRef } = await context.params;
-    const order = await getUserOrderDetails(orderRef, identity.email ?? undefined);
+    const order = await getUserOrderDetails(orderRef, identity.userId, identity.email ?? undefined);
     if (!order) {
       return notFound("Order not found");
     }

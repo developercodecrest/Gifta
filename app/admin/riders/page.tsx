@@ -5,7 +5,7 @@ import { getAdminRiders } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 
 export default async function AdminRidersPage() {
-  const role = await ensureAdminAccess("riders");
+  const identity = await ensureAdminAccess("riders");
 
   const riders = await getAdminRiders().catch(() => []);
 
@@ -14,7 +14,7 @@ export default async function AdminRidersPage() {
       <header className="rounded-xl border border-border bg-card p-5">
         <Badge variant="secondary">Riders</Badge>
         <h1 className="mt-2 text-2xl font-bold">Delivery Fleet</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Monitor last-mile partners and delivery load. Active role: {roleLabels[role]}.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Monitor last-mile partners and delivery load. Active role: {roleLabels[identity.role]}.</p>
       </header>
 
       <div className="grid gap-3 md:grid-cols-2">

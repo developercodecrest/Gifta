@@ -22,8 +22,13 @@ export default async function OrderDetailsPage({
 }) {
   const { orderRef } = await params;
   const session = await auth();
+  const userId = session?.user?.id;
 
-  const order = await getUserOrderDetails(orderRef, session?.user?.email ?? undefined).catch(() => null);
+  if (!userId) {
+    notFound();
+  }
+
+  const order = await getUserOrderDetails(orderRef, userId, session?.user?.email ?? undefined).catch(() => null);
   if (!order) {
     notFound();
   }

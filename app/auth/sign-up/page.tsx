@@ -29,6 +29,8 @@ function SignUpContent() {
   const [signingUp, setSigningUp] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isFinalizingAuth, setIsFinalizingAuth] = useState(false);
 
   const onRequestOtp = async () => {
     setError(null);
@@ -90,6 +92,8 @@ function SignUpContent() {
         return;
       }
 
+      setIsFinalizingAuth(true);
+
       router.push(result.url ?? callbackUrl);
       router.refresh();
     } finally {
@@ -141,10 +145,17 @@ function SignUpContent() {
         type="button"
         className="w-full"
         variant="secondary"
-        onClick={() => signIn("google", { callbackUrl })}
+        onClick={() => {
+          setIsGoogleLoading(true);
+          setIsFinalizingAuth(true);
+          signIn("google", { callbackUrl });
+        }}
+        disabled={isGoogleLoading}
       >
-        Continue with Google
+        {isGoogleLoading ? "Redirecting to Google..." : "Continue with Google"}
       </Button>
+
+      {isFinalizingAuth ? <p className="text-sm text-muted-foreground">Setting up profile...</p> : null}
 
       {status ? <p className="text-sm text-emerald-600">{status}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}

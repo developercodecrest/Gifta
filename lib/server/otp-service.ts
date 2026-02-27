@@ -83,8 +83,6 @@ export async function ensureAuthUserRole(email: string, defaultRole: Role = "use
         email: normalizedEmail,
         emailVerified: new Date(),
         name: normalizedEmail.split("@")[0],
-      },
-      $set: {
         role: defaultRole,
       },
     },

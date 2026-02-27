@@ -114,6 +114,7 @@ export async function POST(request: Request) {
     orderRef,
     paymentId: payload.razorpayPaymentId,
     razorpayOrderId: payload.razorpayOrderId,
+    customerUserId: userId,
     storeId: line.selectedOffer?.storeId ?? "direct",
     productId: line.product.id,
     quantity: line.quantity,

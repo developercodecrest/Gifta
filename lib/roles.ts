@@ -11,13 +11,18 @@ export const roleLabels: Record<Role, string> = {
 
 export const rolePermissions: Record<Role, string[]> = {
   sadmin: ["dashboard", "vendors", "items", "orders", "users", "riders", "roles", "settings"],
-  storeOwner: ["dashboard", "items", "orders"],
-  rider: ["dashboard", "orders"],
-  user: ["dashboard"],
+  storeOwner: ["dashboard", "vendors", "items", "orders", "settings"],
+  rider: [],
+  user: [],
 };
 
 export function parseRole(value: string | null | undefined): Role {
-  return roleOptions.includes(value as Role) ? (value as Role) : "user";
+  const normalized = value?.trim().toLowerCase();
+  if (normalized && /admin/i.test(normalized)) {
+    return "sadmin";
+  }
+
+  return roleOptions.includes(normalized as Role) ? (normalized as Role) : "user";
 }
 
 export function canAccess(role: Role, section: string) {

@@ -1,11 +1,17 @@
+import { ObjectId } from "mongodb";
 import { getMongoDb } from "@/lib/mongodb";
 import { CartItem } from "@/types/ecommerce";
 
 type UserCartDoc = {
-  userId: string;
+  userId: ObjectId;
+  legacyUserId?: string;
   items: CartItem[];
   updatedAt: string;
 };
+
+function toObjectId(userId: string) {
+  return ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+}
 
 function normalizeItems(items: CartItem[]) {
   return items
@@ -18,16 +24,43 @@ function normalizeItems(items: CartItem[]) {
 }
 
 export async function getUserCart(userId: string): Promise<CartItem[]> {
+  const objectId = toObjectId(userId);
+  if (!objectId) {
+    return [];
+  }
+
   const db = await getMongoDb();
   const collection = db.collection<UserCartDoc>("user_carts");
 
   await collection.createIndex({ userId: 1 }, { unique: true });
 
-  const doc = await collection.findOne({ userId });
+  const doc = await collection.findOne({
+    $or: [
+      { userId: objectId },
+      { legacyUserId: userId },
+      { userId: userId as unknown as ObjectId },
+    ],
+  });
+
+  if (doc && !doc.userId.equals(objectId)) {
+    await collection.updateOne(
+      { userId: doc.userId },
+      {
+        $set: { userId: objectId, updatedAt: new Date().toISOString() },
+        $unset: { legacyUserId: "" },
+      },
+    );
+  }
+
   return doc?.items ?? [];
 }
 
 export async function setUserCart(userId: string, items: CartItem[]): Promise<CartItem[]> {
+  const objectId = toObjectId(userId);
+  if (!objectId) {
+    return normalizeItems(items);
+  }
+
   const db = await getMongoDb();
   const collection = db.collection<UserCartDoc>("user_carts");
 
@@ -35,12 +68,21 @@ export async function setUserCart(userId: string, items: CartItem[]): Promise<Ca
 
   const normalized = normalizeItems(items);
   await collection.updateOne(
-    { userId },
+    {
+      $or: [
+        { userId: objectId },
+        { legacyUserId: userId },
+        { userId: userId as unknown as ObjectId },
+      ],
+    },
     {
       $set: {
-        userId,
+        userId: objectId,
         items: normalized,
         updatedAt: new Date().toISOString(),
+      },
+      $unset: {
+        legacyUserId: "",
       },
     },
     { upsert: true },

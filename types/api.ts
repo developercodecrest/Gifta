@@ -42,7 +42,7 @@ export type ProfilePreferences = {
 };
 
 export type ProfileDto = {
-  profileKey: string;
+  userId: string;
   fullName: string;
   email: string;
   phone?: string;
@@ -75,6 +75,7 @@ export type AdminOrderDto = {
   productId: string;
   quantity: number;
   totalAmount: number;
+  customerUserId?: string;
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;

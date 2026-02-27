@@ -22,7 +22,13 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Backend API (MongoDB)
 
-Set the following environment variables in `.env.local`:
+Environment files:
+
+- `.env.local` for local development
+- `.env.production` for production deploys
+- `.env.example` as a safe template
+
+Set the following environment variables:
 
 ```bash
 MONGODB_URI=mongodb://localhost:27017
@@ -37,7 +43,15 @@ SMTP_PASS=your-smtp-password
 EMAIL_FROM="Gifta <no-reply@gifta.com>"
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxx
+RAZORPAY_WEBHOOK_SECRET=whsec_test_xxxxxxxxxxxx
 ```
+
+Razorpay notes:
+
+- Local should use test credentials (`rzp_test_*`).
+- Production should use live credentials (`rzp_live_*`).
+- Server creates orders at `POST /api/checkout/razorpay/order` and verifies signatures at `POST /api/checkout/razorpay/verify`.
+- Configure webhook secret in `RAZORPAY_WEBHOOK_SECRET` for `POST /api/checkout/razorpay/webhook`.
 
 Available endpoints:
 

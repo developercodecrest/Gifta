@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { parseRole } from "@/lib/roles";
-import { getUserFromAccessToken } from "@/lib/server/mobile-session-service";
+import { getMobileSessionUserById, getUserFromAccessToken } from "@/lib/server/mobile-session-service";
+import { getAuthUserByEmail } from "@/lib/server/otp-service";
 import { Role } from "@/types/api";
 
 export type RequestIdentity = {
@@ -22,12 +23,21 @@ function getBearerToken(request: Request) {
 export async function resolveRequestIdentity(request: Request): Promise<RequestIdentity | null> {
   const session = await auth();
   const sessionUserId = session?.user?.id;
+  const sessionEmail = session?.user?.email;
 
-  if (sessionUserId) {
+  if (session?.user) {
+    const liveUser = sessionUserId ? await getMobileSessionUserById(sessionUserId) : null;
+    const emailUser = !liveUser && sessionEmail ? await getAuthUserByEmail(sessionEmail) : null;
+    const resolvedUserId = liveUser?.id ?? emailUser?._id?.toString() ?? sessionUserId;
+
+    if (!resolvedUserId) {
+      return null;
+    }
+
     return {
-      userId: sessionUserId,
-      email: session.user?.email ?? undefined,
-      role: parseRole(session.user?.role ?? "user"),
+      userId: resolvedUserId,
+      email: liveUser?.email ?? emailUser?.email ?? sessionEmail ?? undefined,
+      role: parseRole(liveUser?.role ?? emailUser?.role ?? session.user?.role ?? "user"),
       source: "session",
     };
   }

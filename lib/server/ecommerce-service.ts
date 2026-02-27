@@ -17,6 +17,7 @@ import {
   SearchMeta,
   SortOption,
   StoreDto,
+  Role,
   UserOrderDetailsDto,
   UserOrderDto,
   UserNotificationDto,
@@ -61,22 +62,52 @@ type CommentDoc = {
   createdAt: string;
 };
 
-type ProfileDoc = {
-  profileKey: string;
-  fullName: string;
+type UserDoc = {
+  _id?: ObjectId;
+  name?: string;
+  role?: Role;
+  fullName?: string;
   email: string;
   phone?: string;
-  addresses: ProfileDto["addresses"];
-  preferences: ProfileDto["preferences"];
+  addresses?: ProfileDto["addresses"];
+  preferences?: ProfileDto["preferences"];
   notificationReadIds?: string[];
   notificationLastReadAt?: string;
-  updatedAt: string;
+  updatedAt?: string;
 };
 
 type RiderDoc = RiderDto;
 type OrderDoc = AdminOrderDto;
 
+type AdminScope = {
+  role: Role;
+  userId: string;
+};
+
 const DEMO_PROFILE_KEY = "demo";
+
+function toObjectId(value: string) {
+  return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+
+function profileDocToDto(doc: UserDoc): ProfileDto {
+  const userId = doc._id?.toString() ?? "";
+  const fullName = doc.fullName ?? doc.name ?? "Gifta User";
+  return {
+    userId,
+    fullName,
+    email: doc.email,
+    phone: doc.phone,
+    addresses: normalizeProfileAddresses(doc.addresses, fullName, doc.phone),
+    preferences: {
+      occasions: doc.preferences?.occasions ?? ["Birthday", "Anniversary"],
+      budgetMin: doc.preferences?.budgetMin ?? 1000,
+      budgetMax: doc.preferences?.budgetMax ?? 5000,
+      preferredTags: doc.preferences?.preferredTags ?? ["same-day", "premium"],
+    },
+    updatedAt: doc.updatedAt ?? new Date().toISOString(),
+  };
+}
 
 function toMap<T extends { id: string }>(list: T[]) {
   return new Map(list.map((entry) => [entry.id, entry]));
@@ -118,12 +149,12 @@ async function getCollections() {
   const db = await getMongoDb();
 
   return {
+    users: db.collection<UserDoc>("users"),
     products: db.collection<ProductDoc>("products"),
     stores: db.collection<StoreDoc>("stores"),
     offers: db.collection<OfferDoc>("offers"),
     reviews: db.collection<ReviewDoc>("reviews"),
     comments: db.collection<CommentDoc>("comments"),
-    profiles: db.collection<ProfileDoc>("profiles"),
     riders: db.collection<RiderDoc>("riders"),
     orders: db.collection<OrderDoc>("orders"),
   };
@@ -238,17 +269,19 @@ export async function getHomeData(): Promise<HomePayload> {
   };
 }
 
-export async function getProfile(profileKey = DEMO_PROFILE_KEY): Promise<ProfileDto | null> {
-  const { profiles } = await getCollections();
-  const doc = await profiles.findOne({ profileKey });
+export async function getProfile(userId = DEMO_PROFILE_KEY): Promise<ProfileDto | null> {
+  const objectId = toObjectId(userId);
+  if (!objectId) {
+    return null;
+  }
+
+  const { users } = await getCollections();
+  const doc = await users.findOne({ _id: objectId });
   if (!doc) {
     return null;
   }
 
-  return {
-    ...doc,
-    addresses: normalizeProfileAddresses(doc.addresses, doc.fullName, doc.phone),
-  };
+  return profileDocToDto(doc);
 }
 
 export async function upsertProfile(
@@ -259,13 +292,19 @@ export async function upsertProfile(
     addresses?: ProfileDto["addresses"];
     preferences?: Partial<ProfileDto["preferences"]>;
   },
-  profileKey = DEMO_PROFILE_KEY,
+  userId = DEMO_PROFILE_KEY,
 ): Promise<ProfileDto> {
-  const { profiles } = await getCollections();
-  const existing = await profiles.findOne({ profileKey });
+  const objectId = toObjectId(userId);
+  if (!objectId) {
+    throw new Error("INVALID_USER_ID");
+  }
 
-  const nextDoc: ProfileDto = {
-    profileKey,
+  const { users } = await getCollections();
+  const existing = await users.findOne({ _id: objectId });
+
+  const nextDoc: Omit<UserDoc, "_id"> = {
+    name: existing?.name,
+    role: existing?.role,
     fullName: update.fullName ?? existing?.fullName ?? "Gifta Guest",
     email: update.email ?? existing?.email ?? "guest@gifta.local",
     phone: update.phone ?? existing?.phone,
@@ -283,8 +322,18 @@ export async function upsertProfile(
     updatedAt: new Date().toISOString(),
   };
 
-  await profiles.updateOne({ profileKey }, { $set: nextDoc }, { upsert: true });
-  return nextDoc;
+  await users.updateOne(
+    { _id: objectId },
+    {
+      $set: nextDoc,
+    },
+    { upsert: true },
+  );
+
+  return profileDocToDto({
+    _id: objectId,
+    ...nextDoc,
+  });
 }
 
 export async function searchItems(filters: {
@@ -559,11 +608,32 @@ export async function getSearchSuggestions(query: string, limit = 10) {
 }
 
 export async function getVendorSummaries(): Promise<VendorSummaryDto[]> {
+  return getVendorSummariesScoped({ role: "sadmin", userId: "system" });
+}
+
+async function getStoreIdsForScope(scope: AdminScope) {
+  const { stores } = await getCollections();
+  if (scope.role === "sadmin") {
+    const allStores = await stores.find({}, { projection: { id: 1 } }).toArray();
+    return allStores.map((store) => store.id);
+  }
+
+  const ownedStores = await stores.find({ ownerUserId: scope.userId }, { projection: { id: 1 } }).toArray();
+  return ownedStores.map((store) => store.id);
+}
+
+export async function getVendorSummariesScoped(scope: AdminScope): Promise<VendorSummaryDto[]> {
   const { stores, products, offers } = await getCollections();
+  const scopedStoreIds = await getStoreIdsForScope(scope);
+
+  if (!scopedStoreIds.length) {
+    return [];
+  }
+
   const [storeDocs, productDocs, offerDocs] = await Promise.all([
-    stores.find().toArray(),
+    stores.find({ id: { $in: scopedStoreIds } }).toArray(),
     products.find().toArray(),
-    offers.find().toArray(),
+    offers.find({ storeId: { $in: scopedStoreIds } }).toArray(),
   ]);
 
   return storeDocs
@@ -581,7 +651,64 @@ export async function getVendorSummaries(): Promise<VendorSummaryDto[]> {
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardPayload> {
-  const { stores, products, offers, orders, riders, profiles } = await getCollections();
+  return getAdminDashboardScoped({ role: "sadmin", userId: "system" });
+}
+
+export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminDashboardPayload> {
+  const { stores, products, offers, orders, riders, users } = await getCollections();
+
+  if (scope.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(scope);
+    if (!scopedStoreIds.length) {
+      return {
+        totalVendors: 0,
+        activeVendors: 0,
+        totalItems: 0,
+        totalOffers: 0,
+        totalOrders: 0,
+        pendingOrders: 0,
+        totalRiders: 0,
+        activeRiders: 0,
+        totalUsers: 0,
+      };
+    }
+
+    const [
+      totalVendors,
+      activeVendors,
+      totalOffers,
+      totalOrders,
+      pendingOrders,
+      riderIds,
+      productIds,
+    ] = await Promise.all([
+      stores.countDocuments({ id: { $in: scopedStoreIds } }),
+      stores.countDocuments({ id: { $in: scopedStoreIds }, active: true }),
+      offers.countDocuments({ storeId: { $in: scopedStoreIds } }),
+      orders.countDocuments({ storeId: { $in: scopedStoreIds } }),
+      orders.countDocuments({ storeId: { $in: scopedStoreIds }, status: { $in: ["placed", "packed", "out-for-delivery"] } }),
+      orders.distinct("riderId", { storeId: { $in: scopedStoreIds }, riderId: { $exists: true } }),
+      offers.distinct("productId", { storeId: { $in: scopedStoreIds } }),
+    ]);
+
+    const validRiderIds = riderIds.filter((value): value is string => typeof value === "string" && value.length > 0);
+    const totalRiders = validRiderIds.length;
+    const activeRiders = validRiderIds.length
+      ? await riders.countDocuments({ id: { $in: validRiderIds }, status: { $in: ["available", "on-delivery"] } })
+      : 0;
+
+    return {
+      totalVendors,
+      activeVendors,
+      totalItems: productIds.length,
+      totalOffers,
+      totalOrders,
+      pendingOrders,
+      totalRiders,
+      activeRiders,
+      totalUsers: 0,
+    };
+  }
 
   const [
     totalVendors,
@@ -602,7 +729,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardPayload> {
     orders.countDocuments({ status: { $in: ["placed", "packed", "out-for-delivery"] } }),
     riders.countDocuments(),
     riders.countDocuments({ status: { $in: ["available", "on-delivery"] } }),
-    profiles.countDocuments(),
+    users.countDocuments(),
   ]);
 
   return {
@@ -619,8 +746,49 @@ export async function getAdminDashboard(): Promise<AdminDashboardPayload> {
 }
 
 export async function getAdminItems() {
+  return getAdminItemsScoped({ role: "sadmin", userId: "system" });
+}
+
+export async function getAdminItemsScoped(scope: AdminScope) {
   const { products } = await getCollections();
-  const docs = (await products.find().sort({ featured: -1, rating: -1 }).limit(200).toArray())
+  let scopedProductIds: string[] | null = null;
+
+  if (scope.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(scope);
+    if (!scopedStoreIds.length) {
+      return {
+        items: [],
+        meta: {
+          total: 0,
+          totalPages: 1,
+          page: 1,
+          pageSize: 0,
+          filters: {
+            sort: "featured" as SortOption,
+          },
+        },
+      };
+    }
+
+    const { offers } = await getCollections();
+    scopedProductIds = await offers.distinct("productId", { storeId: { $in: scopedStoreIds } });
+    if (!scopedProductIds.length) {
+      return {
+        items: [],
+        meta: {
+          total: 0,
+          totalPages: 1,
+          page: 1,
+          pageSize: 0,
+          filters: {
+            sort: "featured" as SortOption,
+          },
+        },
+      };
+    }
+  }
+
+  const docs = (await products.find(scopedProductIds ? { id: { $in: scopedProductIds } } : {}).sort({ featured: -1, rating: -1 }).limit(200).toArray())
     .map(normalizeInventoryProduct);
   const { offersByProduct } = await getOffersForProducts(docs.map((entry) => entry.id));
 
@@ -649,8 +817,25 @@ export async function updateItemQuantityLimits(input: {
   itemId: string;
   minOrderQty: number;
   maxOrderQty: number;
+  scope?: AdminScope;
 }) {
-  const { products } = await getCollections();
+  const { products, offers } = await getCollections();
+
+  if (input.scope?.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(input.scope);
+    if (!scopedStoreIds.length) {
+      throw new Error("FORBIDDEN_ITEM_SCOPE");
+    }
+
+    const hasOwnership = await offers.findOne({
+      storeId: { $in: scopedStoreIds },
+      productId: input.itemId,
+    });
+
+    if (!hasOwnership) {
+      throw new Error("FORBIDDEN_ITEM_SCOPE");
+    }
+  }
 
   const minOrderQty = Math.max(1, Math.floor(input.minOrderQty));
   const rawMax = Math.max(0, Math.floor(input.maxOrderQty));
@@ -671,8 +856,21 @@ export async function updateItemQuantityLimits(input: {
 }
 
 export async function getAdminOrders() {
+  return getAdminOrdersScoped({ role: "sadmin", userId: "system" });
+}
+
+export async function getAdminOrdersScoped(scope: AdminScope) {
   const { orders } = await getCollections();
-  return orders.find().sort({ createdAt: -1 }).limit(200).toArray();
+  if (scope.role === "sadmin") {
+    return orders.find().sort({ createdAt: -1 }).limit(200).toArray();
+  }
+
+  const scopedStoreIds = await getStoreIdsForScope(scope);
+  if (!scopedStoreIds.length) {
+    return [];
+  }
+
+  return orders.find({ storeId: { $in: scopedStoreIds } }).sort({ createdAt: -1 }).limit(200).toArray();
 }
 
 const statusPriority: Record<AdminOrderDto["status"], number> = {
@@ -683,11 +881,17 @@ const statusPriority: Record<AdminOrderDto["status"], number> = {
   "cancelled": 4,
 };
 
-export async function getUserOrders(customerEmail?: string): Promise<UserOrderDto[]> {
+export async function getUserOrders(userId: string, customerEmail?: string): Promise<UserOrderDto[]> {
   const { orders, products } = await getCollections();
+  const objectId = toObjectId(userId);
 
   const query: Record<string, unknown> = {};
-  if (customerEmail) {
+  if (objectId) {
+    query.$or = [
+      { customerUserId: objectId.toString() },
+      ...(customerEmail ? [{ customerEmail }] : []),
+    ];
+  } else if (customerEmail) {
     query.customerEmail = customerEmail;
   }
 
@@ -747,7 +951,7 @@ const trackingLabel: Record<AdminOrderDto["status"], string> = {
   cancelled: "Cancelled",
 };
 
-export async function getUserOrderDetails(orderRef: string, customerEmail?: string): Promise<UserOrderDetailsDto | null> {
+export async function getUserOrderDetails(orderRef: string, userId: string, customerEmail?: string): Promise<UserOrderDetailsDto | null> {
   const trimmedOrderRef = orderRef.trim();
   if (!trimmedOrderRef) {
     return null;
@@ -758,7 +962,17 @@ export async function getUserOrderDetails(orderRef: string, customerEmail?: stri
   const query: Record<string, unknown> = {
     $or: [{ orderRef: trimmedOrderRef }, { id: trimmedOrderRef }],
   };
-  if (customerEmail) {
+  const objectId = toObjectId(userId);
+  if (objectId) {
+    query.$and = [
+      {
+        $or: [
+          { customerUserId: objectId.toString() },
+          ...(customerEmail ? [{ customerEmail }] : []),
+        ],
+      },
+    ];
+  } else if (customerEmail) {
     query.customerEmail = customerEmail;
   }
 
@@ -844,11 +1058,17 @@ export async function getUserOrderDetails(orderRef: string, customerEmail?: stri
   } satisfies UserOrderDetailsDto;
 }
 
-async function buildNotificationSeed(customerEmail?: string): Promise<UserNotificationDto[]> {
+async function buildNotificationSeed(userId: string, customerEmail?: string): Promise<UserNotificationDto[]> {
   const { orders } = await getCollections();
+  const objectId = toObjectId(userId);
 
   const query: Record<string, unknown> = {};
-  if (customerEmail) {
+  if (objectId) {
+    query.$or = [
+      { customerUserId: objectId.toString() },
+      ...(customerEmail ? [{ customerEmail }] : []),
+    ];
+  } else if (customerEmail) {
     query.customerEmail = customerEmail;
   }
 
@@ -905,26 +1125,23 @@ async function buildNotificationSeed(customerEmail?: string): Promise<UserNotifi
     .slice(0, 60);
 }
 
-async function ensureNotificationProfile(profileKey: string, email?: string) {
-  const { profiles } = await getCollections();
-
-  const existingByProfileKey = await profiles.findOne({ profileKey });
-  if (existingByProfileKey) {
-    return existingByProfileKey;
+async function ensureNotificationProfile(userId: string, email?: string) {
+  const objectId = toObjectId(userId);
+  if (!objectId) {
+    throw new Error("INVALID_USER_ID");
   }
 
-  if (email) {
-    const existingByEmail = await profiles.findOne({ email });
-    if (existingByEmail) {
-      return existingByEmail;
-    }
+  const { users } = await getCollections();
+
+  const existingByUserId = await users.findOne({ _id: objectId });
+  if (existingByUserId) {
+    return existingByUserId;
   }
 
   const now = new Date().toISOString();
-  const newProfile: ProfileDoc = {
-    profileKey,
+  const newProfile: Omit<UserDoc, "_id"> = {
     fullName: "Gifta User",
-    email: email ?? `${profileKey}@gifta.local`,
+    email: email ?? `${userId}@gifta.local`,
     addresses: [],
     preferences: {
       occasions: ["Birthday", "Anniversary"],
@@ -936,22 +1153,27 @@ async function ensureNotificationProfile(profileKey: string, email?: string) {
     updatedAt: now,
   };
 
-  await profiles.updateOne(
-    { profileKey },
+  await users.updateOne(
+    { _id: objectId },
     {
-      $setOnInsert: newProfile,
+      $setOnInsert: {
+        email: newProfile.email,
+        name: newProfile.fullName,
+        role: "user",
+      },
+      $set: newProfile,
     },
     { upsert: true },
   );
 
-  return (await profiles.findOne({ profileKey })) ?? newProfile;
+  return (await users.findOne({ _id: objectId })) ?? { _id: objectId, ...newProfile };
 }
 
 export async function getUserNotifications(
-  input: { customerEmail?: string; profileKey: string },
+  input: { customerEmail?: string; userId: string },
 ): Promise<{ notifications: UserNotificationDto[]; unreadCount: number }> {
-  const notificationSeed = await buildNotificationSeed(input.customerEmail);
-  const profile = await ensureNotificationProfile(input.profileKey, input.customerEmail);
+  const notificationSeed = await buildNotificationSeed(input.userId, input.customerEmail);
+  const profile = await ensureNotificationProfile(input.userId, input.customerEmail);
   const readIds = new Set(profile.notificationReadIds ?? []);
 
   const notifications = notificationSeed.map((entry) => ({
@@ -968,21 +1190,21 @@ export async function getUserNotifications(
 }
 
 export async function markNotificationsRead(input: {
-  profileKey: string;
+  userId: string;
   customerEmail?: string;
   notificationIds?: string[];
   markAll?: boolean;
 }): Promise<{ notifications: UserNotificationDto[]; unreadCount: number }> {
-  const { profiles } = await getCollections();
-  const profile = await ensureNotificationProfile(input.profileKey, input.customerEmail);
+  const { users } = await getCollections();
+  const profile = await ensureNotificationProfile(input.userId, input.customerEmail);
 
   const idsToMarkRead = input.markAll
-    ? (await buildNotificationSeed(input.customerEmail)).map((entry) => entry.id)
+    ? (await buildNotificationSeed(input.userId, input.customerEmail)).map((entry) => entry.id)
     : (input.notificationIds ?? []).filter((value) => value.trim().length > 0);
 
   if (idsToMarkRead.length) {
-    await profiles.updateOne(
-      { profileKey: profile.profileKey },
+    await users.updateOne(
+      { _id: profile._id },
       {
         $addToSet: {
           notificationReadIds: {
@@ -999,7 +1221,7 @@ export async function markNotificationsRead(input: {
 
   return getUserNotifications({
     customerEmail: input.customerEmail,
-    profileKey: profile.profileKey,
+    userId: profile._id?.toString() ?? input.userId,
   });
 }
 
@@ -1021,8 +1243,9 @@ function buildOrderNotificationMessage(orderRef: string, status: AdminOrderDto["
 }
 
 export async function getAdminUsers() {
-  const { profiles } = await getCollections();
-  return profiles.find().sort({ updatedAt: -1 }).toArray();
+  const { users } = await getCollections();
+  const docs = await users.find({ addresses: { $exists: true } }).sort({ updatedAt: -1 }).toArray();
+  return docs.map((doc) => profileDocToDto(doc));
 }
 
 export async function getAdminRiders() {
@@ -1031,12 +1254,40 @@ export async function getAdminRiders() {
 }
 
 export async function seedDemoData() {
-  const { products, stores, offers, reviews, comments, profiles, riders, orders } = await getCollections();
+  const { users, products, stores, offers, reviews, comments, riders, orders } = await getCollections();
+
+  const ensureUser = async (input: { email: string; name: string; role: Role }) => {
+    await users.updateOne(
+      { email: input.email },
+      {
+        $setOnInsert: {
+          email: input.email,
+          name: input.name,
+          role: input.role,
+          emailVerified: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+
+    return users.findOne({ email: input.email });
+  };
+
+  const [demoUser, owner1, owner2, owner3] = await Promise.all([
+    ensureUser({ email: "demo@gifta.local", name: "Gifta Demo User", role: "user" }),
+    ensureUser({ email: "owner1@gifta.local", name: "Nyra Owner", role: "storeOwner" }),
+    ensureUser({ email: "owner2@gifta.local", name: "Aurora Owner", role: "storeOwner" }),
+    ensureUser({ email: "owner3@gifta.local", name: "Bliss Owner", role: "storeOwner" }),
+  ]);
+
+  if (!demoUser?._id || !owner1?._id || !owner2?._id || !owner3?._id) {
+    throw new Error("Unable to seed users for demo data");
+  }
 
   const storeDocs: StoreDoc[] = [
-    { id: "st-nyra", name: "Nyra Gifts", slug: "nyra-gifts", ownerUserId: "usr-store-1", rating: 4.7, active: true },
-    { id: "st-aurora", name: "Aurora Hampers", slug: "aurora-hampers", ownerUserId: "usr-store-2", rating: 4.8, active: true },
-    { id: "st-bliss", name: "Bliss Crates", slug: "bliss-crates", ownerUserId: "usr-store-3", rating: 4.6, active: true },
+    { id: "st-nyra", name: "Nyra Gifts", slug: "nyra-gifts", ownerUserId: owner1._id.toString(), rating: 4.7, active: true },
+    { id: "st-aurora", name: "Aurora Hampers", slug: "aurora-hampers", ownerUserId: owner2._id.toString(), rating: 4.8, active: true },
+    { id: "st-bliss", name: "Bliss Crates", slug: "bliss-crates", ownerUserId: owner3._id.toString(), rating: 4.6, active: true },
   ];
 
   const riderDocs: RiderDoc[] = [
@@ -1143,11 +1394,10 @@ export async function seedDemoData() {
     await orders.insertMany(orderDocs);
   }
 
-  await profiles.updateOne(
-    { profileKey: DEMO_PROFILE_KEY },
+  await users.updateOne(
+    { _id: demoUser._id },
     {
       $set: {
-        profileKey: DEMO_PROFILE_KEY,
         fullName: "Gifta Demo User",
         email: "demo@gifta.local",
         phone: "+91-9000000000",
@@ -1175,11 +1425,10 @@ export async function seedDemoData() {
     { upsert: true },
   );
 
-  await profiles.updateOne(
-    { profileKey: "usr-store-1" },
+  await users.updateOne(
+    { _id: owner1._id },
     {
       $set: {
-        profileKey: "usr-store-1",
         fullName: "Nyra Owner",
         email: "owner1@gifta.local",
         updatedAt: new Date().toISOString(),
@@ -1195,11 +1444,10 @@ export async function seedDemoData() {
     { upsert: true },
   );
 
-  await profiles.updateOne(
-    { profileKey: "usr-store-2" },
+  await users.updateOne(
+    { _id: owner2._id },
     {
       $set: {
-        profileKey: "usr-store-2",
         fullName: "Aurora Owner",
         email: "owner2@gifta.local",
         updatedAt: new Date().toISOString(),
@@ -1215,11 +1463,10 @@ export async function seedDemoData() {
     { upsert: true },
   );
 
-  await profiles.updateOne(
-    { profileKey: "usr-store-3" },
+  await users.updateOne(
+    { _id: owner3._id },
     {
       $set: {
-        profileKey: "usr-store-3",
         fullName: "Bliss Owner",
         email: "owner3@gifta.local",
         updatedAt: new Date().toISOString(),

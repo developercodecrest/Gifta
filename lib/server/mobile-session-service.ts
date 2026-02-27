@@ -98,6 +98,10 @@ async function getUserById(userId: string): Promise<MobileSessionUser | null> {
   };
 }
 
+export async function getMobileSessionUserById(userId: string): Promise<MobileSessionUser | null> {
+  return getUserById(userId);
+}
+
 export async function createMobileTokenBundle(input: {
   userId: string;
   ip?: string;
