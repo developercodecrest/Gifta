@@ -1,4 +1,4 @@
-import { OAuth2Client } from "google-auth-library";
+import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
 import { createMobileTokenBundle } from "@/lib/server/mobile-session-service";
 import { ensureAuthUserRole, getAuthUserByEmail } from "@/lib/server/otp-service";
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     return unauthorized("Google auth is not configured on server");
   }
 
-  let payload: Awaited<ReturnType<typeof googleClient.verifyIdToken>>["payload"];
+  let payload: TokenPayload | undefined;
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken,

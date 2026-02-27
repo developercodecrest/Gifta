@@ -314,10 +314,10 @@ export async function upsertProfile(
       update.phone ?? existing?.phone,
     ),
     preferences: {
-      occasions: update.preferences?.occasions ?? existing?.preferences.occasions ?? ["Birthday", "Anniversary"],
-      budgetMin: update.preferences?.budgetMin ?? existing?.preferences.budgetMin ?? 1000,
-      budgetMax: update.preferences?.budgetMax ?? existing?.preferences.budgetMax ?? 5000,
-      preferredTags: update.preferences?.preferredTags ?? existing?.preferences.preferredTags ?? ["same-day", "premium"],
+      occasions: update.preferences?.occasions ?? existing?.preferences?.occasions ?? ["Birthday", "Anniversary"],
+      budgetMin: update.preferences?.budgetMin ?? existing?.preferences?.budgetMin ?? 1000,
+      budgetMax: update.preferences?.budgetMax ?? existing?.preferences?.budgetMax ?? 5000,
+      preferredTags: update.preferences?.preferredTags ?? existing?.preferences?.preferredTags ?? ["same-day", "premium"],
     },
     updatedAt: new Date().toISOString(),
   };
