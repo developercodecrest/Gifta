@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 type Address = {
   label: string;
@@ -148,8 +149,8 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-2xl border border-border bg-card p-5 sm:p-7">
+    <div className="space-y-6 sm:space-y-7">
+      <header className="rounded-4xl border border-border bg-card p-5 sm:p-7">
         <Badge variant="secondary">My profile</Badge>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">My account</h1>
         <p className="mt-2 text-sm text-muted-foreground">Manage your personal details and delivery addresses.</p>
@@ -160,8 +161,12 @@ export default function AccountPage() {
         </div>
       </header>
 
-      <Card>
+      <Card className="rounded-4xl border-border bg-card/85">
         <CardContent className="space-y-4 p-5">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Personal details</p>
+            <Separator />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Full name">
               <Input value={fullName} onChange={(event) => setFullName(event.target.value)} />
@@ -174,14 +179,15 @@ export default function AccountPage() {
             </Field>
           </div>
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 pt-1">
             <h2 className="text-lg font-semibold">Saved addresses</h2>
             <Button type="button" variant="outline" onClick={addAddress}>Add address</Button>
           </div>
+          <Separator />
 
           <div className="space-y-4">
             {addresses.map((address, index) => (
-              <div key={`${address.label}-${index}`} className="rounded-lg border border-border p-4">
+              <div key={`${address.label}-${index}`} className="rounded-2xl border border-border bg-background/60 p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">Address {index + 1}</p>
                   {addresses.length > 1 ? (

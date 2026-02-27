@@ -62,21 +62,35 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-primary/80 bg-primary text-[#2c1220] backdrop-blur">
       <div className="border-b border-[#2c1220]/20 bg-primary/90">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 text-xs sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-1.5 text-xs sm:px-6 lg:px-8">
           <p className="text-[#2c1220]/85">Extra ₹250 OFF on first order above ₹999 with code <span className="font-semibold text-[#2c1220]">NEWHABIT250</span></p>
           <Badge variant="warning" className="hidden sm:inline-flex">Flash Deals Live</Badge>
         </div>
       </div>
 
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
+        <div className="hidden min-w-0 md:block">
+          <HeaderSearch compact />
+        </div>
+
+        <div className="flex min-w-0 items-center md:hidden">
+          <HeaderSearch mobile />
+        </div>
+
+        <div className="flex justify-center">
+          <Link href="/" className="inline-flex items-center text-xl font-black tracking-tight text-[#2c1220] sm:text-2xl">
+            <Image src="/logo.jpeg" alt="Gifta" width={80} height={80} className="h-16 w-16 rounded-sm object-contain sm:h-20 sm:w-20" />
+          </Link>
+        </div>
+
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="lg:hidden" aria-label="Open menu">
                 <Sparkles className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[86%] max-w-xs">
+            <SheetContent side="right" className="w-[86%] max-w-xs">
               <SheetHeader>
                 <SheetTitle>Browse Gifta</SheetTitle>
                 <SheetDescription>Quick access to collections, wishlist and orders.</SheetDescription>
@@ -97,17 +111,17 @@ export function Header() {
               </nav>
             </SheetContent>
           </Sheet>
-
-          <Link href="/" className="inline-flex items-center text-xl font-black tracking-tight text-[#2c1220] sm:text-2xl">
-            <Image src="/logo.jpeg" alt="Gifta" width={48} height={48} className="h-12 w-12 rounded-sm object-contain" />
-          </Link>
-        </div>
-
-        <div className="hidden lg:block lg:flex-1">
-          <HeaderSearch />
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="hidden items-center gap-1.5 lg:flex">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/">Home</Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/store">Store</Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/orders">Orders</Link>
+            </Button>
+          </div>
           <IconLink href="/wishlist" label="Wishlist" icon={Heart} count={wishlistCount} />
           <IconLink href="/cart" label="Cart" icon={ShoppingCart} count={cartCount} />
           {status === "authenticated" ? <IconLink href="/account" label="Account" icon={UserCircle2} /> : null}
@@ -127,10 +141,6 @@ export function Header() {
             </Button>
           ) : null}
         </div>
-      </div>
-
-      <div className="border-t border-[#2c1220]/20 px-4 py-3 lg:hidden sm:px-6">
-        <HeaderSearch mobile />
       </div>
       <Separator />
     </header>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { categories, getProducts, SortOption } from "@/lib/catalog";
 import { searchItems, listStores } from "@/lib/server/ecommerce-service";
 
@@ -91,7 +92,7 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
 
   return (
     <div className="space-y-7 sm:space-y-8">
-      <header className="rounded-2xl border border-border bg-card p-6 sm:p-8">
+      <header className="rounded-4xl border border-border bg-card p-6 sm:p-8">
         <Badge variant="secondary" className="mb-3">Gift collection</Badge>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Shop our multi-vendor marketplace</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
@@ -99,9 +100,11 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
         </p>
       </header>
 
-      <Card>
+      <Card className="rounded-4xl border-border bg-card/80">
         <CardHeader className="pb-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Refine results</p>
           <CardTitle className="flex items-center gap-2 text-lg"><Filter className="h-4 w-4" />Filters</CardTitle>
+          <Separator />
         </CardHeader>
         <CardContent>
           <form className="grid gap-3 md:grid-cols-6" action="/store" method="get">
@@ -150,7 +153,7 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
         <p className="text-sm text-muted-foreground">
           Showing {result.items.length} of {result.meta.total} products
         </p>
@@ -167,7 +170,7 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
           {result.items.map((item) => (
             <ProductCard key={item.id} product={item} />
           ))}

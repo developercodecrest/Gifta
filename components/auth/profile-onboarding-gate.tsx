@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,23 +14,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const onboardingSchema = z.object({
-  fullName: z.string().trim().min(2),
-  phone: z.string().trim().min(7),
-  receiverName: z.string().trim().min(2),
-  receiverPhone: z.string().trim().min(7),
-  line1: z.string().trim().min(3),
-  city: z.string().trim().min(2),
-  state: z.string().trim().min(2),
-  pinCode: z.string().trim().min(3),
-  country: z.string().trim().min(2),
-});
+const DISMISS_KEY = "gifta-profile-onboarding-dismissed";
 
 export function ProfileOnboardingGate() {
   const { status, data } = useSession();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     fullName: "",
@@ -48,7 +38,27 @@ export function ProfileOnboardingGate() {
   const defaultName = useMemo(() => data?.user?.name ?? "", [data?.user?.name]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storageKey = `${DISMISS_KEY}:${data?.user?.email ?? data?.user?.name ?? "guest"}`;
+    const isDismissed = window.localStorage.getItem(storageKey) === "1";
+    setDismissed(isDismissed);
+  }, [data?.user?.email, data?.user?.name]);
+
+  const markDismissed = () => {
+    if (typeof window !== "undefined") {
+      const storageKey = `${DISMISS_KEY}:${data?.user?.email ?? data?.user?.name ?? "guest"}`;
+      window.localStorage.setItem(storageKey, "1");
+    }
+    setDismissed(true);
+  };
+
+  useEffect(() => {
     if (status !== "authenticated") {
+      setOpen(false);
+      return;
+    }
+
+    if (dismissed) {
       setOpen(false);
       return;
     }
@@ -107,7 +117,9 @@ export function ProfileOnboardingGate() {
 
     fetchProfile().catch(() => {
       if (!cancelled) {
-        setOpen(true);
+        if (!dismissed) {
+          setOpen(true);
+        }
         setLoading(false);
       }
     });
@@ -115,38 +127,71 @@ export function ProfileOnboardingGate() {
     return () => {
       cancelled = true;
     };
-  }, [defaultName, status]);
+  }, [defaultName, dismissed, status]);
 
   const submit = async () => {
     setError(null);
-    const parsed = onboardingSchema.safeParse(form);
+    const normalize = (value: string) => {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
 
-    if (!parsed.success) {
-      setError("Please fill all required fields.");
+    const fullName = normalize(form.fullName);
+    const phone = normalize(form.phone);
+    const receiverName = normalize(form.receiverName);
+    const receiverPhone = normalize(form.receiverPhone);
+    const line1 = normalize(form.line1);
+    const city = normalize(form.city);
+    const state = normalize(form.state);
+    const pinCode = normalize(form.pinCode);
+    const country = normalize(form.country);
+
+    const hasAnyAddressValue = Boolean(receiverName || receiverPhone || line1 || city || state || pinCode || country);
+    const hasCompleteAddress = Boolean(receiverName && receiverPhone && line1 && city && state && pinCode && country);
+
+    if (hasAnyAddressValue && !hasCompleteAddress) {
+      setError("To save an address, please complete all address fields, or leave them blank.");
       return;
     }
 
     try {
       setSaving(true);
+      const payloadBody: {
+        fullName?: string;
+        phone?: string;
+        addresses?: Array<{
+          label: string;
+          receiverName: string;
+          receiverPhone: string;
+          line1: string;
+          city: string;
+          state: string;
+          pinCode: string;
+          country: string;
+        }>;
+      } = {};
+
+      if (fullName) payloadBody.fullName = fullName;
+      if (phone) payloadBody.phone = phone;
+      if (hasCompleteAddress) {
+        payloadBody.addresses = [
+          {
+            label: "Primary",
+            receiverName: receiverName!,
+            receiverPhone: receiverPhone!,
+            line1: line1!,
+            city: city!,
+            state: state!,
+            pinCode: pinCode!,
+            country: country!,
+          },
+        ];
+      }
+
       const response = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: form.fullName,
-          phone: form.phone,
-          addresses: [
-            {
-              label: "Primary",
-              receiverName: form.receiverName,
-              receiverPhone: form.receiverPhone,
-              line1: form.line1,
-              city: form.city,
-              state: form.state,
-              pinCode: form.pinCode,
-              country: form.country,
-            },
-          ],
-        }),
+        body: JSON.stringify(payloadBody),
       });
 
       const payload = (await response.json()) as { success?: boolean; error?: { message?: string } };
@@ -156,6 +201,7 @@ export function ProfileOnboardingGate() {
       }
 
       setOpen(false);
+      markDismissed();
     } catch {
       setError("Unable to save profile.");
     } finally {
@@ -168,12 +214,20 @@ export function ProfileOnboardingGate() {
   }
 
   return (
-    <Dialog open={open}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) {
+          markDismissed();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Complete your profile</DialogTitle>
           <DialogDescription>
-            Please add your name, phone and at least one delivery address to continue.
+            You can skip this for now and add details later from your account.
           </DialogDescription>
         </DialogHeader>
 
@@ -215,6 +269,17 @@ export function ProfileOnboardingGate() {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setOpen(false);
+              markDismissed();
+            }}
+            disabled={saving}
+          >
+            Skip for now
+          </Button>
           <Button type="button" onClick={submit} disabled={saving}>
             {saving ? "Saving..." : "Save profile"}
           </Button>

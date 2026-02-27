@@ -14,15 +14,15 @@ type Suggestion = {
   offerCount: number;
 };
 
-export function HeaderSearch({ mobile = false }: { mobile?: boolean }) {
+export function HeaderSearch({ mobile = false, compact = false }: { mobile?: boolean; compact?: boolean }) {
   return (
-    <Suspense fallback={<HeaderSearchFallback mobile={mobile} />}>
-      <HeaderSearchContent mobile={mobile} />
+    <Suspense fallback={<HeaderSearchFallback mobile={mobile} compact={compact} />}>
+      <HeaderSearchContent mobile={mobile} compact={compact} />
     </Suspense>
   );
 }
 
-function HeaderSearchContent({ mobile = false }: { mobile?: boolean }) {
+function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boolean; compact?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -107,7 +107,7 @@ function HeaderSearchContent({ mobile = false }: { mobile?: boolean }) {
   };
 
   return (
-    <div className={mobile ? "relative w-full" : "relative max-w-xl flex-1"}>
+    <div className={mobile ? "relative w-full" : compact ? "relative w-full max-w-sm" : "relative max-w-xl flex-1"}>
       <form
         className="relative"
         onSubmit={(event) => {
@@ -126,7 +126,7 @@ function HeaderSearchContent({ mobile = false }: { mobile?: boolean }) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search gifts by keyword"
           autoComplete="off"
-          className="rounded-full pl-10 pr-12"
+          className={`rounded-full pl-10 pr-12 ${compact ? "h-9 text-sm" : ""}`}
         />
         <Button
           type="submit"
@@ -165,12 +165,12 @@ function HeaderSearchContent({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
-function HeaderSearchFallback({ mobile = false }: { mobile?: boolean }) {
+function HeaderSearchFallback({ mobile = false, compact = false }: { mobile?: boolean; compact?: boolean }) {
   return (
-    <div className={mobile ? "relative w-full" : "relative max-w-xl flex-1"}>
+    <div className={mobile ? "relative w-full" : compact ? "relative w-full max-w-sm" : "relative max-w-xl flex-1"}>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search gifts by keyword" className="rounded-full pl-10 pr-12" readOnly />
+        <Input placeholder="Search gifts by keyword" className={`rounded-full pl-10 pr-12 ${compact ? "h-9 text-sm" : ""}`} readOnly />
       </div>
     </div>
   );
