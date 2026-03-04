@@ -17,11 +17,10 @@ export async function PATCH(
     const { id } = await context.params;
     const body = (await request.json().catch(() => ({}))) as {
       status?: "placed" | "packed" | "out-for-delivery" | "delivered" | "cancelled";
-      riderId?: string;
     };
 
-    if (!body.status && typeof body.riderId !== "string") {
-      return badRequest("Provide status or riderId");
+    if (!body.status) {
+      return badRequest("Provide status");
     }
 
     const updated = await updateAdminOrderScoped({

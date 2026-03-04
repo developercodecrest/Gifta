@@ -13,7 +13,7 @@ type Props = {
   defaultRole?: string;
 };
 
-const roles = ["user", "storeOwner", "rider", "sadmin"] as const;
+const roles = ["user", "storeOwner", "sadmin"] as const;
 
 export function UserActions({ userId, defaultName, defaultEmail, defaultPhone, defaultRole }: Props) {
   const router = useRouter();

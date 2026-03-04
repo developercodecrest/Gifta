@@ -1,18 +1,15 @@
-import Razorpay from "razorpay";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
-import { checkDelhiveryServiceability, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { checkDelhiveryServiceability, createShipmentForOrderRef, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
-import { getUserCart } from "@/lib/server/user-cart-service";
-import { AdminOrderDto } from "@/types/api";
+import { getUserCart, setUserCart } from "@/lib/server/user-cart-service";
+import { AdminOrderDto, PaymentMethod, TransactionStatus } from "@/types/api";
 
-const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
-const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-
-type OrderRequest = {
+type CheckoutPlaceRequest = {
+  paymentMethod?: PaymentMethod;
   promoCode?: string;
   customer?: {
     fullName?: string;
@@ -26,18 +23,11 @@ type OrderRequest = {
   };
 };
 
-export async function POST(request: Request) {
-  if (!razorpayKeyId || !razorpayKeySecret) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "RAZORPAY_CONFIG_MISSING", message: "Razorpay is not configured on server." },
-      },
-      { status: 500 },
-    );
-  }
+export const runtime = "nodejs";
 
-  const payload = (await request.json().catch(() => ({}))) as OrderRequest;
+export async function POST(request: Request) {
+  const payload = (await request.json().catch(() => ({}))) as CheckoutPlaceRequest;
+  const paymentMethod = payload.paymentMethod ?? "cod";
 
   if (isDelhiveryConfigured()) {
     if (!payload.customer?.line1 || !payload.customer.city || !payload.customer.state || !payload.customer.pinCode) {
@@ -72,6 +62,16 @@ export async function POST(request: Request) {
     }
   }
 
+  if (paymentMethod !== "cod") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: { code: "UNSUPPORTED_PAYMENT_METHOD", message: "Only COD can be placed from this endpoint." },
+      },
+      { status: 400 },
+    );
+  }
+
   const identity = await resolveRequestIdentity(request);
   const userId = identity?.userId;
 
@@ -95,33 +95,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const promo = getPromoDetails(payload.promoCode, snapshot.subtotal);
-  const total = Math.max(0, snapshot.total - promo.discount);
-
-  const razorpay = new Razorpay({
-    key_id: razorpayKeyId,
-    key_secret: razorpayKeySecret,
-  });
-
   const orderRef = createOrderRef();
-  const order = await razorpay.orders.create({
-    amount: Math.round(total * 100),
-    currency: "INR",
-    receipt: orderRef,
-    notes: {
-      customerName: payload.customer?.fullName ?? "",
-      customerEmail: payload.customer?.email ?? "",
-      customerPhone: payload.customer?.phone ?? "",
-      city: payload.customer?.city ?? "",
-      addressLabel: payload.customer?.addressLabel ?? "",
-      promoCode: promo.code,
-      lineCount: String(snapshot.lines.length),
-    },
-  });
-
-  const db = await getMongoDb();
-  const orders = db.collection<AdminOrderDto>("orders");
   const now = new Date().toISOString();
+  const transactionStatus: TransactionStatus = "cod-pending";
   const basePackage = isDelhiveryConfigured()
     ? getDelhiveryConfig().defaultPackage
     : {
@@ -131,6 +107,7 @@ export async function POST(request: Request) {
         heightCm: 10,
         quantity: 1,
       };
+
   const orderRows: AdminOrderDto[] = snapshot.lines.map((line, index) => ({
     id: `${orderRef}-${String(index + 1).padStart(2, "0")}`,
     orderRef,
@@ -155,11 +132,10 @@ export async function POST(request: Request) {
         }
       : undefined,
     status: "placed",
-    paymentMethod: "razorpay",
-    transactionStatus: "pending",
-    razorpayOrderId: order.id,
+    paymentMethod,
+    transactionStatus,
     shippingProvider: "delhivery",
-    shippingProviderStatus: "pending-payment",
+    shippingProviderStatus: "pending-shipment",
     shippingPackage: {
       ...basePackage,
       quantity: Math.max(1, line.quantity),
@@ -167,63 +143,27 @@ export async function POST(request: Request) {
     createdAt: now,
   }));
 
+  const db = await getMongoDb();
+  const orders = db.collection<AdminOrderDto>("orders");
   await orders.insertMany(orderRows);
+
+  if (userId) {
+    await setUserCart(userId, []);
+  }
+
+  if (isDelhiveryConfigured()) {
+    await createShipmentForOrderRef(orderRef).catch(() => undefined);
+  }
 
   return NextResponse.json({
     success: true,
     data: {
-      razorpayOrderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      orderRef,
-      keyId: razorpayKeyId,
-      breakdown: {
-        subtotal: snapshot.subtotal,
-        shipping: snapshot.shipping,
-        tax: snapshot.tax,
-        platformFee: snapshot.platformFee,
-        discount: promo.discount,
-        total,
-      },
+      orderId: orderRef,
+      paymentMethod,
+      transactionStatus,
+      amount: snapshot.total,
     },
   });
-}
-
-function getPromoDetails(rawCode: string | undefined, subtotal: number) {
-  const code = (rawCode ?? "").trim().toUpperCase();
-
-  if (!code) {
-    return {
-      code: "",
-      discount: 0,
-    };
-  }
-
-  if (code === "GIFT10") {
-    return {
-      code,
-      discount: Math.round(subtotal * 0.1),
-    };
-  }
-
-  if (code === "WELCOME15") {
-    return {
-      code,
-      discount: subtotal >= 3000 ? Math.round(subtotal * 0.15) : 0,
-    };
-  }
-
-  if (code === "FREESHIP") {
-    return {
-      code,
-      discount: 199,
-    };
-  }
-
-  return {
-    code,
-    discount: 0,
-  };
 }
 
 function createOrderRef() {

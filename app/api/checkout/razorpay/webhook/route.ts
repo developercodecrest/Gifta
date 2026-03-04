@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { badRequest, ok, serverError } from "@/lib/api-response";
 import { getMongoDb } from "@/lib/mongodb";
+import { createShipmentForOrderRef, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { AdminOrderDto } from "@/types/api";
 
 export const runtime = "nodejs";
@@ -65,17 +66,29 @@ export async function POST(request: Request) {
 
     if (event === "payment.captured" || event === "order.paid") {
       if (razorpayOrderId) {
+        const matchedOrders = await orders.find({ razorpayOrderId }).project({ orderRef: 1 }).toArray();
         const updateResult = await orders.updateMany(
           { razorpayOrderId },
           {
             $set: {
+              paymentMethod: "razorpay",
               ...(paymentId ? { paymentId } : {}),
+              ...(paymentId ? { transactionId: paymentId } : {}),
+              transactionStatus: "success",
+              shippingProviderStatus: "pending-shipment",
               status: "placed",
             },
           },
         );
         matchedCount += updateResult.matchedCount;
         modifiedCount += updateResult.modifiedCount;
+
+        if (isDelhiveryConfigured()) {
+          const refs = Array.from(new Set(matchedOrders.map((entry) => entry.orderRef).filter((value): value is string => Boolean(value))));
+          for (const ref of refs) {
+            await createShipmentForOrderRef(ref).catch(() => undefined);
+          }
+        }
       }
     } else if (event === "payment.failed") {
       if (razorpayOrderId) {
@@ -83,10 +96,14 @@ export async function POST(request: Request) {
           {
             razorpayOrderId,
             status: { $in: ["placed", "packed"] },
-            $or: [{ paymentId: { $exists: false } }, { paymentId: "" }],
           },
           {
             $set: {
+              paymentMethod: "razorpay",
+              ...(paymentId ? { paymentId } : {}),
+              ...(paymentId ? { transactionId: paymentId } : {}),
+              transactionStatus: "failed",
+              shippingProviderStatus: "payment-failed",
               status: "cancelled",
             },
           },
@@ -99,11 +116,16 @@ export async function POST(request: Request) {
       if (refundPaymentId) {
         const updateResult = await orders.updateMany(
           {
-            paymentId: refundPaymentId,
+            $or: [{ paymentId: refundPaymentId }, { transactionId: refundPaymentId }],
             status: { $ne: "delivered" },
           },
           {
             $set: {
+              paymentMethod: "razorpay",
+              paymentId: refundPaymentId,
+              transactionId: refundPaymentId,
+              transactionStatus: "refunded",
+              shippingProviderStatus: "payment-refunded",
               status: "cancelled",
             },
           },

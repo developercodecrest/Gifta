@@ -78,11 +78,40 @@ type CreateOrderResponse = {
   };
 };
 
+type PlaceCodOrderResponse = {
+  success: true;
+  data: {
+    orderId: string;
+    paymentMethod: "cod";
+    transactionStatus: "cod-pending";
+  };
+} | {
+  success: false;
+  error: {
+    message: string;
+  };
+};
+
+type ServiceabilityResponse = {
+  success: true;
+  data: {
+    serviceable: boolean;
+    embargoed: boolean;
+    remark?: string;
+  };
+} | {
+  success: false;
+  error: {
+    message: string;
+  };
+};
+
 export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const router = useRouter();
   const { status } = useSession();
   const { clear } = useCartStore();
   const [promoCode, setPromoCode] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "cod">("razorpay");
   const [isPaying, setIsPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<ProfileAddress[]>([]);
@@ -279,6 +308,45 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
     try {
       setIsPaying(true);
+
+      const serviceabilityRes = await fetch(`/api/shipping/delhivery/serviceability?pinCode=${encodeURIComponent(values.pinCode)}`);
+      const serviceabilityPayload = (await serviceabilityRes.json()) as ServiceabilityResponse;
+
+      if (serviceabilityRes.ok && serviceabilityPayload.success && !serviceabilityPayload.data.serviceable) {
+        setError(serviceabilityPayload.data.remark
+          ? `Delivery unavailable for this pincode (${serviceabilityPayload.data.remark}).`
+          : "Delivery unavailable for this pincode.");
+        setIsPaying(false);
+        return;
+      }
+
+      if (paymentMethod === "cod") {
+        const codRes = await fetch("/api/checkout/place", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentMethod: "cod",
+            promoCode,
+            customer: {
+              ...values,
+              addressLabel: selectedAddress,
+            },
+          }),
+        });
+
+        const codPayload = (await codRes.json()) as PlaceCodOrderResponse;
+        if (!codRes.ok || !codPayload.success) {
+          setError(codPayload.success ? "Unable to place COD order." : codPayload.error.message);
+          setIsPaying(false);
+          return;
+        }
+
+        clear();
+        router.push(`/checkout/success?orderId=${encodeURIComponent(codPayload.data.orderId)}`);
+        router.refresh();
+        return;
+      }
+
       const orderRes = await fetch("/api/checkout/razorpay/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -383,7 +451,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
       <header className="rounded-2xl border border-border bg-card p-5 text-center sm:p-7">
         <Badge variant="secondary">Secure checkout</Badge>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Checkout</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Pay with Razorpay and place your multi-vendor gift order.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Choose Razorpay or Cash on Delivery and place your multi-vendor gift order.</p>
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.9fr)] lg:gap-10">
@@ -461,8 +529,32 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   </Field>
                 </div>
 
+                <div className="space-y-2">
+                  <Label className="mb-0 block text-xs uppercase tracking-wide text-muted-foreground">Payment method</Label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant={paymentMethod === "razorpay" ? "default" : "outline"}
+                      onClick={() => setPaymentMethod("razorpay")}
+                    >
+                      Razorpay
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={paymentMethod === "cod" ? "default" : "outline"}
+                      onClick={() => setPaymentMethod("cod")}
+                    >
+                      Cash on Delivery
+                    </Button>
+                  </div>
+                </div>
+
                 <Button type="submit" disabled={isPaying} className="w-full">
-                  {isPaying ? "Processing..." : `Pay ${formatCurrency(uiTotal)} with Razorpay`}
+                  {isPaying
+                    ? "Processing..."
+                    : paymentMethod === "razorpay"
+                      ? `Pay ${formatCurrency(uiTotal)} with Razorpay`
+                      : `Place COD order (${formatCurrency(uiTotal)})`}
                 </Button>
                 {error ? <p className="text-sm text-destructive">{error}</p> : null}
               </form>

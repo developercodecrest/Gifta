@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Eye, Filter, LayoutGrid, List, Pencil, Table2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,13 @@ type AdminOrder = {
   totalAmount: number;
   customerName: string;
   status: "placed" | "packed" | "out-for-delivery" | "delivered" | "cancelled";
+  paymentMethod?: "razorpay" | "cod";
+  transactionStatus?: "pending" | "success" | "failed" | "refunded" | "cod-pending";
+  transactionId?: string;
+  shippingProvider?: "delhivery";
+  shippingProviderStatus?: string;
+  shippingAwb?: string;
+  shippingError?: string;
   createdAt: string;
 };
 
@@ -64,6 +72,7 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                   <th className="px-4 py-3">Order</th>
                   <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Payment</th>
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Created</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -75,6 +84,11 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                     <td className="px-4 py-3 font-medium">{order.id}</td>
                     <td className="px-4 py-3 text-muted-foreground">{order.customerName}</td>
                     <td className="px-4 py-3"><Badge variant="secondary">{order.status}</Badge></td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {(order.paymentMethod ?? "razorpay").toUpperCase()} · {order.transactionStatus ?? "pending"}
+                      <br />
+                      {(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}
+                    </td>
                     <td className="px-4 py-3">₹{order.totalAmount}</td>
                     <td className="px-4 py-3 text-muted-foreground">{new Date(order.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3"><div className="flex justify-end"><OrderRowActions order={order} /></div></td>
@@ -92,6 +106,8 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                 <p className="font-semibold">{order.id}</p>
                 <p className="text-sm text-muted-foreground">{order.customerName} • Qty {order.quantity}</p>
                 <p className="text-xs text-muted-foreground">Store {order.storeId} • Product {order.productId}</p>
+                <p className="text-xs text-muted-foreground">{(order.paymentMethod ?? "razorpay").toUpperCase()} • {order.transactionStatus ?? "pending"}</p>
+                <p className="text-xs text-muted-foreground">{(order.shippingProvider ?? "delhivery").toUpperCase()} • {order.shippingProviderStatus ?? "pending-shipment"}</p>
               </div>
               <div className="flex flex-col items-end gap-2">
                 <Badge variant="secondary">{order.status}</Badge>
@@ -108,6 +124,8 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
               <p className="font-semibold">{order.id}</p>
               <p className="text-sm text-muted-foreground">{order.customerName}</p>
               <p className="text-sm text-muted-foreground">{order.status}</p>
+              <p className="text-xs text-muted-foreground">{(order.paymentMethod ?? "razorpay").toUpperCase()} · {order.transactionStatus ?? "pending"}</p>
+              <p className="text-xs text-muted-foreground">{(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}</p>
               <p className="font-semibold">₹{order.totalAmount}</p>
               <OrderRowActions order={order} />
             </CardContent></Card>
@@ -168,6 +186,26 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
     }
   };
 
+  const retryShipment = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/retry`, {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Unable to retry shipment");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("Unable to retry shipment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
@@ -179,6 +217,26 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
             <p>Status: {order.status}</p>
             <p>Amount: ₹{order.totalAmount}</p>
             <p>Qty: {order.quantity}</p>
+            <p>Payment method: {(order.paymentMethod ?? "razorpay").toUpperCase()}</p>
+            <p>Transaction status: {order.transactionStatus ?? "pending"}</p>
+            <p>Transaction ID: {order.transactionId ?? "-"}</p>
+            <p>Shipping provider: {(order.shippingProvider ?? "delhivery").toUpperCase()}</p>
+            <p>Shipping status: {order.shippingProviderStatus ?? "pending-shipment"}</p>
+            <p>AWB: {order.shippingAwb ?? "-"}</p>
+            {order.shippingAwb ? (
+              <div className="pt-1">
+                <Button asChild size="sm" variant="outline">
+                  <Link
+                    href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Track on Delhivery
+                  </Link>
+                </Button>
+              </div>
+            ) : null}
+            {order.shippingError ? <p className="text-destructive">Shipping error: {order.shippingError}</p> : null}
             <p>Store: {order.storeId}</p>
             <p>Product: {order.productId}</p>
           </div>
@@ -206,6 +264,22 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Button size="sm" variant="outline" onClick={() => void retryShipment()} disabled={saving}>
+        Retry Ship
+      </Button>
+
+      {order.shippingAwb ? (
+        <Button asChild size="sm" variant="outline">
+          <Link
+            href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Track
+          </Link>
+        </Button>
+      ) : null}
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogTrigger asChild><Button size="sm" variant="destructive"><Trash2 className="h-4 w-4" /> Delete</Button></DialogTrigger>

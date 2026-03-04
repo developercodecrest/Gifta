@@ -44,6 +44,22 @@ EMAIL_FROM="Gifta <no-reply@gifta.com>"
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxx
 RAZORPAY_WEBHOOK_SECRET=whsec_test_xxxxxxxxxxxx
+DELHIVERY_MODE=test
+DELHIVERY_API_TOKEN_TEST=delhivery_test_token
+DELHIVERY_API_TOKEN_LIVE=delhivery_live_token
+DELHIVERY_TEST_BASE_URL=https://staging-express.delhivery.com
+DELHIVERY_LIVE_BASE_URL=https://track.delhivery.com
+DELHIVERY_PINCODE_PATH=/c/api/pin-codes/json/
+DELHIVERY_SHIPMENT_CREATE_PATH=/api/cmu/create.json
+DELHIVERY_PICKUP_REQUEST_PATH=/fm/request/new/
+DELHIVERY_WAYBILL_PATH=/waybill/api/bulk/json/
+DELHIVERY_TRACK_PATH=/api/v1/packages/json/
+DELHIVERY_WEBHOOK_SECRET=optional_webhook_hmac_secret
+DELHIVERY_DEFAULT_WEIGHT_KG=0.5
+DELHIVERY_DEFAULT_LENGTH_CM=20
+DELHIVERY_DEFAULT_BREADTH_CM=15
+DELHIVERY_DEFAULT_HEIGHT_CM=10
+DELHIVERY_TRIGGER_ON_VERIFY=false
 ```
 
 Razorpay notes:
@@ -52,6 +68,22 @@ Razorpay notes:
 - Production should use live credentials (`rzp_live_*`).
 - Server creates orders at `POST /api/checkout/razorpay/order` and verifies signatures at `POST /api/checkout/razorpay/verify`.
 - Configure webhook secret in `RAZORPAY_WEBHOOK_SECRET` for `POST /api/checkout/razorpay/webhook`.
+
+Delhivery notes:
+
+- Use `DELHIVERY_MODE=test` for development and `DELHIVERY_MODE=live` for production.
+- Serviceability endpoint used by checkout: `GET /api/shipping/delhivery/serviceability?pinCode=...`
+- Tracking endpoint for user apps: `GET /api/shipping/delhivery/track?orderRef=...`
+- Shipping webhook endpoint: `POST /api/shipping/delhivery/webhook`
+- Shipment retry endpoint for admin ops: `POST /api/admin/orders/:id/shipping/retry`
+- Admin diagnostics: `GET /api/admin/integrations/razorpay/health` and `GET /api/admin/integrations/delhivery/test?pinCode=...`
+- Optional fallback: set `DELHIVERY_TRIGGER_ON_VERIFY=true` to trigger shipment creation on payment verify in addition to webhook flow.
+
+End-to-end smoke test script:
+
+- Run the script at `scripts/e2e-payment-delivery-smoke.ps1` to test: serviceability → COD order → Razorpay webhook success → Delhivery webhook updates.
+- Example (with auth token + webhook secrets):
+	- `./scripts/e2e-payment-delivery-smoke.ps1 -BaseUrl "http://localhost:3010" -AuthToken "<bearer-token>" -PinCode "400001" -RazorpayWebhookSecret "<rzp-webhook-secret>" -DelhiveryWebhookSecret "<delhivery-webhook-secret>"`
 
 Available endpoints:
 
@@ -85,7 +117,6 @@ All APIs return an envelope format:
 - Roles implemented:
 	- `sadmin` (super admin)
 	- `storeOwner`
-	- `rider`
 	- `user`
 
 ## Authentication (Auth.js)

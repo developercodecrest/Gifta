@@ -26,7 +26,6 @@ export default async function AdminDashboardPage() {
     ["Live Offers", data.totalOffers],
     ["Orders", data.totalOrders],
     ["Pending Orders", data.pendingOrders],
-    ["Riders", data.totalRiders],
     ["Users", data.totalUsers],
   ] as const;
 
@@ -35,7 +34,7 @@ export default async function AdminDashboardPage() {
       <header className="rounded-xl border border-border bg-card p-5">
         <Badge>Admin</Badge>
         <h1 className="mt-2 text-2xl font-bold">Marketplace Control Tower</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Viewing as {roleLabels[identity.role]}. Monitor vendor operations, logistics and user activity.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Viewing as {roleLabels[identity.role]}. Monitor vendor operations and user activity.</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { roleLabels } from "@/lib/roles";
 import { ensureAdminAccess } from "@/app/admin/_utils";
+import { IntegrationTestCard } from "@/app/admin/settings/integration-test-card";
 
 export default async function AdminSettingsPage() {
   const identity = await ensureAdminAccess("settings");
@@ -40,6 +41,8 @@ export default async function AdminSettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <IntegrationTestCard />
     </div>
   );
 }

@@ -56,6 +56,29 @@ export default async function OrderDetailsPage({
             <p className="text-sm text-muted-foreground">{order.itemCount} item(s)</p>
             <p className="text-lg font-semibold text-primary">{formatCurrency(order.totalAmount)}</p>
           </div>
+
+          <div className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground">
+            <p>Payment: {(order.paymentMethod ?? "razorpay").toUpperCase()}</p>
+            <p className="mt-1">Transaction: {order.transactionStatus ?? "pending"}</p>
+            <p className="mt-1">Transaction ID: {order.transactionId ?? order.paymentId ?? "-"}</p>
+            <p className="mt-1">Shipping provider: {(order.shippingProvider ?? "delhivery").toUpperCase()}</p>
+            <p className="mt-1">Shipping status: {order.shippingProviderStatus ?? "pending-shipment"}</p>
+            <p className="mt-1">AWB: {order.shippingAwb ?? "-"}</p>
+            {order.shippingAwb ? (
+              <div className="mt-3">
+                <Button asChild size="sm" variant="outline">
+                  <Link
+                    href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Track on Delhivery
+                  </Link>
+                </Button>
+              </div>
+            ) : null}
+            {order.shippingError ? <p className="mt-1 text-destructive">Shipping error: {order.shippingError}</p> : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -86,7 +109,6 @@ export default async function OrderDetailsPage({
                   <p className="font-semibold text-primary">{formatCurrency(item.totalAmount)}</p>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Qty {item.quantity} • {item.storeName ?? item.storeId}</p>
-                {item.riderName ? <p className="mt-1 text-xs text-muted-foreground">Rider: {item.riderName}</p> : null}
               </div>
             ))}
           </div>

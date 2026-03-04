@@ -15,7 +15,6 @@ function resolveHighestRole(...values: Array<string | null | undefined>): Role {
   const parsed = values.map((value) => parseRole(value));
   if (parsed.includes("sadmin")) return "sadmin";
   if (parsed.includes("storeOwner")) return "storeOwner";
-  if (parsed.includes("rider")) return "rider";
   return "user";
 }
 

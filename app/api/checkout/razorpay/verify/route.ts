@@ -1,12 +1,9 @@
 import crypto from "crypto";
-import Razorpay from "razorpay";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
-import { buildCartSnapshot } from "@/lib/server/cart-service";
 import { getMongoDb } from "@/lib/mongodb";
+import { createShipmentForOrderRef, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
-import { getUserCart, setUserCart } from "@/lib/server/user-cart-service";
+import { setUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
 
 type VerifyRequest = {
@@ -60,8 +57,34 @@ export async function POST(request: Request) {
   const db = await getMongoDb();
   const orders = db.collection<AdminOrderDto>("orders");
 
-  const existing = await orders.findOne({ paymentId: payload.razorpayPaymentId });
+  const existing = await orders.findOne({ paymentId: payload.razorpayPaymentId })
+    ?? await orders.findOne({ razorpayOrderId: payload.razorpayOrderId });
+
   if (existing) {
+    await orders.updateMany(
+      { razorpayOrderId: payload.razorpayOrderId },
+      {
+        $set: {
+          paymentMethod: "razorpay",
+          paymentId: payload.razorpayPaymentId,
+          transactionId: payload.razorpayPaymentId,
+          transactionStatus: "success",
+          shippingProviderStatus: "pending-shipment",
+        },
+      },
+    );
+
+    const shouldTriggerShipment = process.env.DELHIVERY_TRIGGER_ON_VERIFY === "true";
+    if (shouldTriggerShipment && isDelhiveryConfigured() && existing.orderRef) {
+      await createShipmentForOrderRef(existing.orderRef).catch(() => undefined);
+    }
+
+    const identity = await resolveRequestIdentity(request);
+    const userId = identity?.userId;
+    if (userId) {
+      await setUserCart(userId, []);
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -71,73 +94,14 @@ export async function POST(request: Request) {
     });
   }
 
-  const identity = await resolveRequestIdentity(request);
-  const userId = identity?.userId;
-
-  let cartItems = [];
-  if (userId) {
-    cartItems = await getUserCart(userId).catch(() => []);
-  } else {
-    const cookieStore = await cookies();
-    const cartCookie = cookieStore.get(CART_COOKIE_NAME)?.value;
-    cartItems = parseCartCookie(cartCookie);
-  }
-  const snapshot = await buildCartSnapshot(cartItems);
-
-  if (!snapshot.lines.length) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "CART_EMPTY", message: "No cart items found for this payment verification." },
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: "ORDER_NOT_FOUND",
+        message: "No order found for this Razorpay order. Retry checkout to regenerate payment order.",
       },
-      { status: 400 },
-    );
-  }
-
-  const razorpay = new Razorpay({
-    key_id: keyId,
-    key_secret: keySecret,
-  });
-
-  const razorpayOrder = await razorpay.orders.fetch(payload.razorpayOrderId);
-  const notes = razorpayOrder.notes ?? {};
-  const customerName = typeof notes.customerName === "string" ? notes.customerName : "Gifta Customer";
-  const customerEmail = typeof notes.customerEmail === "string" ? notes.customerEmail : undefined;
-  const customerPhone = typeof notes.customerPhone === "string" ? notes.customerPhone : undefined;
-  const deliveryAddressLabel = typeof notes.addressLabel === "string" ? notes.addressLabel : undefined;
-
-  const orderRef = payload.orderRef ?? `GFT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-  const now = new Date().toISOString();
-
-  const orderRows: AdminOrderDto[] = snapshot.lines.map((line, index) => ({
-    id: `${orderRef}-${String(index + 1).padStart(2, "0")}`,
-    orderRef,
-    paymentId: payload.razorpayPaymentId,
-    razorpayOrderId: payload.razorpayOrderId,
-    customerUserId: userId,
-    storeId: line.selectedOffer?.storeId ?? "direct",
-    productId: line.product.id,
-    quantity: line.quantity,
-    totalAmount: line.lineSubtotal,
-    customerName,
-    customerEmail,
-    customerPhone,
-    deliveryAddressLabel,
-    status: "placed",
-    createdAt: now,
-  }));
-
-  await orders.insertMany(orderRows);
-
-  if (userId) {
-    await setUserCart(userId, []);
-  }
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      orderId: orderRef,
-      paymentId: payload.razorpayPaymentId,
     },
-  });
+    { status: 404 },
+  );
 }

@@ -21,7 +21,37 @@ export type ApiEnvelope<TData, TMeta = Record<string, never>> = ApiSuccess<TData
 
 export type SortOption = "featured" | "price-asc" | "price-desc" | "rating";
 
-export type Role = "sadmin" | "storeOwner" | "rider" | "user";
+export type Role = "sadmin" | "storeOwner" | "user";
+
+export type PaymentMethod = "razorpay" | "cod";
+export type TransactionStatus = "pending" | "success" | "failed" | "refunded" | "cod-pending";
+
+export type ShippingProvider = "delhivery";
+
+export type ShippingAddressSnapshot = {
+  line1: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  country: string;
+  receiverName?: string;
+  receiverPhone?: string;
+};
+
+export type ShippingPackageSnapshot = {
+  deadWeightKg: number;
+  lengthCm: number;
+  breadthCm: number;
+  heightCm: number;
+  quantity: number;
+};
+
+export type ShippingEvent = {
+  timestamp: string;
+  status: string;
+  description?: string;
+  raw?: Record<string, unknown>;
+};
 
 export type ProfileAddress = {
   label: string;
@@ -87,9 +117,23 @@ export type AdminOrderDto = {
   deliveryAddressLabel?: string;
   status: "placed" | "packed" | "out-for-delivery" | "delivered" | "cancelled";
   orderRef?: string;
+  paymentMethod?: PaymentMethod;
+  transactionStatus?: TransactionStatus;
+  transactionId?: string;
   paymentId?: string;
   razorpayOrderId?: string;
   riderId?: string;
+  shippingProvider?: ShippingProvider;
+  shippingProviderStatus?: string;
+  shippingAwb?: string;
+  shippingShipmentId?: string;
+  shippingPickupRequestId?: string;
+  shippingError?: string;
+  shippingLastSyncedAt?: string;
+  deliveryAddress?: ShippingAddressSnapshot;
+  pickupAddress?: ShippingAddressSnapshot;
+  shippingPackage?: ShippingPackageSnapshot;
+  shippingEvents?: ShippingEvent[];
   createdAt: string;
 };
 
@@ -136,7 +180,16 @@ export type UserOrderDetailsDto = {
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+  paymentMethod?: PaymentMethod;
+  transactionStatus?: TransactionStatus;
+  transactionId?: string;
   paymentId?: string;
+  shippingProvider?: ShippingProvider;
+  shippingProviderStatus?: string;
+  shippingAwb?: string;
+  shippingShipmentId?: string;
+  shippingError?: string;
+  shippingLastSyncedAt?: string;
   items: UserOrderItemDto[];
   tracking: OrderTrackingStep[];
 };

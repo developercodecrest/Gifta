@@ -1087,7 +1087,7 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
     return null;
   }
 
-  const { orders, products, stores, riders } = await getCollections();
+  const { orders, products, stores } = await getCollections();
 
   const query: Record<string, unknown> = {
     $or: [{ orderRef: trimmedOrderRef }, { id: trimmedOrderRef }],
@@ -1106,11 +1106,10 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
     query.customerEmail = customerEmail;
   }
 
-  const [orderDocs, productDocs, storeDocs, riderDocs] = await Promise.all([
+  const [orderDocs, productDocs, storeDocs] = await Promise.all([
     orders.find(query).sort({ createdAt: -1 }).toArray(),
     products.find().toArray(),
     stores.find().toArray(),
-    riders.find().toArray(),
   ]);
 
   if (!orderDocs.length) {
@@ -1119,7 +1118,6 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
 
   const productsById = toMap(productDocs);
   const storesById = toMap(storeDocs);
-  const ridersById = toMap(riderDocs);
 
   const sortedByTime = [...orderDocs].sort((left, right) =>
     new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
@@ -1165,8 +1163,6 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
     quantity: entry.quantity,
     totalAmount: entry.totalAmount,
     status: entry.status,
-    riderId: entry.riderId,
-    riderName: entry.riderId ? ridersById.get(entry.riderId)?.fullName : undefined,
     createdAt: entry.createdAt,
   }));
 
@@ -1182,7 +1178,16 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
     customerName: orderDocs[0]?.customerName,
     customerEmail: orderDocs[0]?.customerEmail,
     customerPhone: orderDocs[0]?.customerPhone,
+    paymentMethod: orderDocs[0]?.paymentMethod,
+    transactionStatus: orderDocs[0]?.transactionStatus,
+    transactionId: orderDocs[0]?.transactionId,
     paymentId: orderDocs[0]?.paymentId,
+    shippingProvider: orderDocs[0]?.shippingProvider,
+    shippingProviderStatus: orderDocs[0]?.shippingProviderStatus,
+    shippingAwb: orderDocs[0]?.shippingAwb,
+    shippingShipmentId: orderDocs[0]?.shippingShipmentId,
+    shippingError: orderDocs[0]?.shippingError,
+    shippingLastSyncedAt: orderDocs[0]?.shippingLastSyncedAt,
     items,
     tracking,
   } satisfies UserOrderDetailsDto;
@@ -1234,7 +1239,7 @@ async function buildNotificationSeed(userId: string, customerEmail?: string): Pr
       actionPath: `/orders/${orderRef}`,
     });
 
-    const paidEntry = entries.find((entry) => Boolean(entry.paymentId));
+    const paidEntry = entries.find((entry) => entry.transactionStatus === "success" || Boolean(entry.paymentId));
     if (paidEntry?.paymentId) {
       notifications.push({
         id: `pay-${paidEntry.paymentId}`,
@@ -1549,7 +1554,7 @@ export async function deleteAdminItemScoped(input: { itemId: string; scope: Admi
 
 export async function updateAdminOrderScoped(input: {
   orderId: string;
-  updates: { status?: AdminOrderDto["status"]; riderId?: string };
+  updates: { status?: AdminOrderDto["status"] };
   scope: AdminScope;
 }) {
   const { orders } = await getCollections();
@@ -1567,7 +1572,6 @@ export async function updateAdminOrderScoped(input: {
 
   const patch: Record<string, unknown> = {};
   if (input.updates.status) patch.status = input.updates.status;
-  if (typeof input.updates.riderId === "string") patch.riderId = input.updates.riderId.trim() || undefined;
 
   await orders.updateOne({ id: input.orderId }, { $set: patch });
   return orders.findOne({ id: input.orderId });

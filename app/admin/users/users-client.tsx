@@ -25,7 +25,7 @@ type AdminUser = {
 };
 
 type ViewMode = "grid" | "list" | "table";
-const roles = ["user", "storeOwner", "rider", "sadmin"] as const;
+const roles = ["user", "storeOwner", "sadmin"] as const;
 
 export function UsersClient({ users }: { users: AdminUser[] }) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");

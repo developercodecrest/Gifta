@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShieldCheck, Store, Package, Truck, Users, ClipboardList, UserCog, Settings } from "lucide-react";
+import { ShieldCheck, Store, Package, Users, ClipboardList, UserCog, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Role } from "@/types/api";
 import { roleLabels, canAccess } from "@/lib/roles";
@@ -10,7 +10,6 @@ const navItems = [
   { key: "items", href: "/admin/items", label: "Items", icon: Package },
   { key: "orders", href: "/admin/orders", label: "Orders", icon: ClipboardList },
   { key: "users", href: "/admin/users", label: "Users", icon: Users },
-  { key: "riders", href: "/admin/riders", label: "Riders", icon: Truck },
   { key: "roles", href: "/admin/roles", label: "Roles", icon: UserCog },
   { key: "settings", href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;

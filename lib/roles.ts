@@ -1,18 +1,16 @@
 import { Role } from "@/types/api";
 
-export const roleOptions: Role[] = ["sadmin", "storeOwner", "rider", "user"];
+export const roleOptions: Role[] = ["sadmin", "storeOwner", "user"];
 
 export const roleLabels: Record<Role, string> = {
   sadmin: "Super Admin",
   storeOwner: "Store Owner",
-  rider: "Rider",
   user: "User",
 };
 
 export const rolePermissions: Record<Role, string[]> = {
-  sadmin: ["dashboard", "vendors", "items", "orders", "users", "riders", "roles", "settings"],
+  sadmin: ["dashboard", "vendors", "items", "orders", "users", "roles", "settings"],
   storeOwner: ["dashboard", "vendors", "items", "orders", "settings"],
-  rider: [],
   user: [],
 };
 
