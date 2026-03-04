@@ -19,7 +19,26 @@ type OtpCodeDoc = {
 type AuthUserDoc = {
   _id?: ObjectId;
   name?: string;
+  fullName?: string;
   email: string;
+  phone?: string;
+  addresses?: Array<{
+    label: string;
+    receiverName: string;
+    receiverPhone: string;
+    line1: string;
+    city: string;
+    state: string;
+    pinCode: string;
+    country: string;
+  }>;
+  preferences?: {
+    occasions?: string[];
+    budgetMin?: number;
+    budgetMax?: number;
+    preferredTags?: string[];
+  };
+  updatedAt?: string;
   emailVerified?: Date | null;
   image?: string | null;
   role?: Role;
@@ -72,28 +91,163 @@ async function getCollections() {
   };
 }
 
+function buildDefaultProfilePatch(email: string, defaultRole: Role): Omit<AuthUserDoc, "_id"> {
+  const emailLocalName = normalizeEmail(email).split("@")[0];
+  return {
+    email: normalizeEmail(email),
+    emailVerified: new Date(),
+    name: emailLocalName,
+    fullName: emailLocalName,
+    phone: "",
+    addresses: [],
+    preferences: {
+      occasions: ["Birthday", "Anniversary"],
+      budgetMin: 1000,
+      budgetMax: 5000,
+      preferredTags: ["same-day", "premium"],
+    },
+    updatedAt: new Date().toISOString(),
+    role: defaultRole,
+  };
+}
+
+async function findAuthUserByEmailInsensitive(email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  const { users } = await getCollections();
+  const escaped = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return users.findOne({ email: { $regex: `^${escaped}$`, $options: "i" } });
+}
+
+export async function ensureAuthUserById(input: {
+  userId: string;
+  email?: string;
+  name?: string;
+  defaultRole?: Role;
+}) {
+  const defaultRole = input.defaultRole ?? "user";
+  if (!ObjectId.isValid(input.userId)) {
+    if (!input.email) {
+      throw new Error("Invalid user id and missing email.");
+    }
+    return ensureAuthUserRole(input.email, defaultRole);
+  }
+
+  const { users } = await getCollections();
+  const objectId = new ObjectId(input.userId);
+  const existing = await users.findOne({ _id: objectId });
+
+  if (!existing) {
+    if (!input.email) {
+      throw new Error("User not found and missing email.");
+    }
+
+    await users.updateOne(
+      { _id: objectId },
+      {
+        $set: {
+          ...buildDefaultProfilePatch(input.email, defaultRole),
+          ...(input.name ? { name: input.name, fullName: input.name } : {}),
+        },
+      },
+      { upsert: true },
+    );
+  } else {
+    const patch: Partial<AuthUserDoc> = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (input.email) {
+      patch.email = normalizeEmail(input.email);
+    }
+    if (input.name && !existing.name) {
+      patch.name = input.name;
+    }
+    if (input.name && !existing.fullName) {
+      patch.fullName = input.name;
+    }
+    if (!existing.role) {
+      patch.role = defaultRole;
+    }
+    if (!Array.isArray(existing.addresses)) {
+      patch.addresses = [];
+    }
+    if (!existing.preferences) {
+      patch.preferences = {
+        occasions: ["Birthday", "Anniversary"],
+        budgetMin: 1000,
+        budgetMax: 5000,
+        preferredTags: ["same-day", "premium"],
+      };
+    }
+
+    await users.updateOne(
+      { _id: objectId },
+      {
+        $set: patch,
+      },
+    );
+  }
+
+  const updated = await users.findOne({ _id: objectId });
+  if (!updated) {
+    throw new Error("Unable to load auth user by id.");
+  }
+
+  return {
+    id: updated._id?.toString() ?? input.userId,
+    email: updated.email,
+    name: updated.name,
+    role: parseRole(updated.role ?? defaultRole),
+  };
+}
+
 export async function ensureAuthUserRole(email: string, defaultRole: Role = "user") {
   const normalizedEmail = normalizeEmail(email);
   const { users } = await getCollections();
 
-  const user = await users.findOneAndUpdate(
-    { email: normalizedEmail },
-    {
-      $setOnInsert: {
-        email: normalizedEmail,
-        emailVerified: new Date(),
-        name: normalizedEmail.split("@")[0],
-        role: defaultRole,
-      },
-    },
-    {
-      upsert: true,
-      returnDocument: "after",
-    },
-  );
+  let user = await findAuthUserByEmailInsensitive(normalizedEmail);
+  if (!user) {
+    const inserted = await users.insertOne(buildDefaultProfilePatch(normalizedEmail, defaultRole));
+    user = await users.findOne({ _id: inserted.insertedId });
+  }
 
   if (!user) {
     throw new Error("Unable to load or create auth user.");
+  }
+
+  if (!user.role) {
+    await users.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          role: defaultRole,
+        },
+      },
+    );
+    user.role = defaultRole;
+  }
+
+  const profilePatch: Partial<AuthUserDoc> = {};
+  if (user.email !== normalizedEmail) profilePatch.email = normalizedEmail;
+  if (!user.fullName) profilePatch.fullName = user.name ?? normalizedEmail.split("@")[0];
+  if (!Array.isArray(user.addresses)) profilePatch.addresses = [];
+  if (!user.preferences) {
+    profilePatch.preferences = {
+      occasions: ["Birthday", "Anniversary"],
+      budgetMin: 1000,
+      budgetMax: 5000,
+      preferredTags: ["same-day", "premium"],
+    };
+  }
+
+  if (Object.keys(profilePatch).length > 0) {
+    profilePatch.updatedAt = new Date().toISOString();
+    await users.updateOne(
+      { _id: user._id },
+      {
+        $set: profilePatch,
+      },
+    );
   }
 
   return {
@@ -108,6 +262,15 @@ export async function getAuthUserByEmail(email: string) {
   const normalizedEmail = normalizeEmail(email);
   const { users } = await getCollections();
   return users.findOne({ email: normalizedEmail });
+}
+
+export async function getAuthUserById(userId: string) {
+  if (!ObjectId.isValid(userId)) {
+    return null;
+  }
+
+  const { users } = await getCollections();
+  return users.findOne({ _id: new ObjectId(userId) });
 }
 
 export async function requestOtpForEmail(input: { email: string; ip?: string }) {
@@ -221,12 +384,7 @@ export async function verifyOtpAndGetUser(input: { email: string; otp: string; c
       return null;
     }
 
-    return {
-      id: existing._id?.toString() ?? "",
-      email: existing.email,
-      name: existing.name,
-      role: parseRole(existing.role ?? "user"),
-    };
+    return ensureAuthUserRole(email, "user");
   }
 
   return ensureAuthUserRole(email, "user");

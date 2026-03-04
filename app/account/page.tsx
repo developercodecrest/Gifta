@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -155,9 +156,14 @@ export default function AccountPage() {
         <h1 className="mt-3 text-3xl font-bold tracking-tight">My account</h1>
         <p className="mt-2 text-sm text-muted-foreground">Manage your personal details and delivery addresses.</p>
         <div className="mt-4">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/notifications">View notifications {unreadNotifications > 0 ? `(${unreadNotifications})` : ""}</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/notifications">View notifications {unreadNotifications > 0 ? `(${unreadNotifications})` : ""}</Link>
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => signOut({ callbackUrl: "/auth/sign-in" })}>
+              Sign out
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -198,14 +204,30 @@ export default function AccountPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input placeholder="Label" value={address.label} onChange={(event) => updateAddress(index, "label", event.target.value)} />
-                  <Input placeholder="Receiver name" value={address.receiverName} onChange={(event) => updateAddress(index, "receiverName", event.target.value)} />
-                  <Input placeholder="Receiver phone" value={address.receiverPhone} onChange={(event) => updateAddress(index, "receiverPhone", event.target.value)} />
-                  <Input placeholder="Address line" value={address.line1} onChange={(event) => updateAddress(index, "line1", event.target.value)} />
-                  <Input placeholder="City" value={address.city} onChange={(event) => updateAddress(index, "city", event.target.value)} />
-                  <Input placeholder="State" value={address.state} onChange={(event) => updateAddress(index, "state", event.target.value)} />
-                  <Input placeholder="PIN code" value={address.pinCode} onChange={(event) => updateAddress(index, "pinCode", event.target.value)} />
-                  <Input placeholder="Country" value={address.country} onChange={(event) => updateAddress(index, "country", event.target.value)} />
+                  <Field label="Address label">
+                    <Input value={address.label} onChange={(event) => updateAddress(index, "label", event.target.value)} />
+                  </Field>
+                  <Field label="Receiver name">
+                    <Input value={address.receiverName} onChange={(event) => updateAddress(index, "receiverName", event.target.value)} />
+                  </Field>
+                  <Field label="Receiver phone">
+                    <Input value={address.receiverPhone} onChange={(event) => updateAddress(index, "receiverPhone", event.target.value)} />
+                  </Field>
+                  <Field label="Address line">
+                    <Input value={address.line1} onChange={(event) => updateAddress(index, "line1", event.target.value)} />
+                  </Field>
+                  <Field label="City">
+                    <Input value={address.city} onChange={(event) => updateAddress(index, "city", event.target.value)} />
+                  </Field>
+                  <Field label="State">
+                    <Input value={address.state} onChange={(event) => updateAddress(index, "state", event.target.value)} />
+                  </Field>
+                  <Field label="PIN code">
+                    <Input value={address.pinCode} onChange={(event) => updateAddress(index, "pinCode", event.target.value)} />
+                  </Field>
+                  <Field label="Country">
+                    <Input value={address.country} onChange={(event) => updateAddress(index, "country", event.target.value)} />
+                  </Field>
                 </div>
               </div>
             ))}

@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { categories, getProducts, SortOption } from "@/lib/catalog";
-import { searchItems, listStores } from "@/lib/server/ecommerce-service";
+import { listStores, searchItems } from "@/lib/server/ecommerce-service";
 
 type SearchParams = {
   q?: string;
@@ -24,15 +24,15 @@ type SearchParams = {
   page?: string;
 };
 
-export default function StorePage({
+export default function SearchPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  return <StoreContent searchParams={searchParams} />;
+  return <SearchContent searchParams={searchParams} />;
 }
 
-async function StoreContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
+async function SearchContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const query = params.q ?? "";
   const category = params.category ?? "";
@@ -93,28 +93,28 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
   return (
     <div className="space-y-7 sm:space-y-8">
       <header className="rounded-4xl border border-border bg-card p-6 sm:p-8">
-        <Badge variant="secondary" className="mb-3">Gift collection</Badge>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Shop our multi-vendor marketplace</h1>
+        <Badge variant="secondary" className="mb-3">Search</Badge>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Find gifts, categories, and stores</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Compare offers across vendors, filter by store, and discover the best price for every gift item.
+          Search by item name, category, tags, or store name and compare offers from multiple vendors.
         </p>
       </header>
 
       <Card className="rounded-4xl border-border bg-card/80">
         <CardHeader className="pb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Refine results</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Refine search</p>
           <CardTitle className="flex items-center gap-2 text-lg"><Filter className="h-4 w-4" />Filters</CardTitle>
           <Separator />
         </CardHeader>
         <CardContent>
-          <form className="grid gap-3 md:grid-cols-6" action="/store" method="get">
+          <form className="grid gap-3 md:grid-cols-6" action="/search" method="get">
             <div className="space-y-1 md:col-span-2">
-              <Label htmlFor="store-q">Search query</Label>
+              <Label htmlFor="search-q">Search query</Label>
               <Input
-                id="store-q"
+                id="search-q"
                 defaultValue={query}
                 name="q"
-                placeholder="Search gifts, tags, categories..."
+                placeholder="Search gifts, stores, tags, categories..."
               />
             </div>
 
@@ -147,20 +147,20 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
             </Label>
 
             <div className="space-y-1">
-              <Label htmlFor="store-min-price">Min price</Label>
-              <Input id="store-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="Min price" />
+              <Label htmlFor="search-min-price">Min price</Label>
+              <Input id="search-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="Min price" />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="store-max-price">Max price</Label>
-              <Input id="store-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="Max price" />
+              <Label htmlFor="search-max-price">Max price</Label>
+              <Input id="search-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="Max price" />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="store-min-rating">Min rating</Label>
-              <Input id="store-min-rating" type="number" min={0} max={5} step={0.1} name="minRating" defaultValue={minRating} placeholder="Min rating" />
+              <Label htmlFor="search-min-rating">Min rating</Label>
+              <Input id="search-min-rating" type="number" min={0} max={5} step={0.1} name="minRating" defaultValue={minRating} placeholder="Min rating" />
             </div>
             <div className="space-y-1 md:col-span-2">
-              <Label htmlFor="store-tag">Tag</Label>
-              <Input id="store-tag" name="tag" defaultValue={tag} placeholder="Tag (same-day, luxury...)" />
+              <Label htmlFor="search-tag">Tag</Label>
+              <Input id="search-tag" name="tag" defaultValue={tag} placeholder="Tag (same-day, luxury...)" />
             </div>
 
             <Button className="md:col-span-6" type="submit">Apply filters</Button>
@@ -180,7 +180,7 @@ async function StoreContent({ searchParams }: { searchParams: Promise<SearchPara
             <h2 className="text-lg font-semibold">No products found</h2>
             <p className="mt-2 text-sm text-muted-foreground">Try changing filters or search keyword.</p>
             <Button asChild variant="outline" className="mt-4">
-              <Link href="/store">Reset filters</Link>
+              <Link href="/search">Reset filters</Link>
             </Button>
           </CardContent>
         </Card>
@@ -252,7 +252,7 @@ function Pagination({
     if (sort) params.set("sort", sort);
     if (stock) params.set("stock", "1");
     params.set("page", String(page));
-    return `/store?${params.toString()}`;
+    return `/search?${params.toString()}`;
   };
 
   return (

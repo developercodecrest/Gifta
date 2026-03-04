@@ -60,6 +60,11 @@ export type StoreDto = {
   active: boolean;
 };
 
+export type StoreCategoryOption = {
+  name: string;
+  subcategories: string[];
+};
+
 export type RiderDto = {
   id: string;
   fullName: string;
@@ -151,6 +156,9 @@ export type UserNotificationDto = {
 export type VendorSummaryDto = StoreDto & {
   itemCount: number;
   offerCount: number;
+  primaryCategory?: string;
+  primarySubcategory?: string;
+  categories: StoreCategoryOption[];
 };
 
 export type OfferDto = {

@@ -19,7 +19,7 @@ const slides: HeroSlide[] = [
     title: "Celebrate every moment with thoughtful gifting",
     subtitle: "Premium flowers, cakes, and personalized picks from trusted vendors.",
     ctaLabel: "Shop collection",
-    ctaHref: "/store",
+    ctaHref: "/search",
     image:
       "https://images.unsplash.com/photo-1513885535751-8b9238bd345a?q=80&w=1600&auto=format&fit=crop",
     imageAlt: "Gift box and flowers",
@@ -28,7 +28,7 @@ const slides: HeroSlide[] = [
     title: "Same-day surprises for birthdays and anniversaries",
     subtitle: "Find fast-delivery options with top-rated stores near you.",
     ctaLabel: "Explore fast delivery",
-    ctaHref: "/store?tag=same-day",
+    ctaHref: "/search?tag=same-day",
     image:
       "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?q=80&w=1600&auto=format&fit=crop",
     imageAlt: "Birthday celebration gifts",
@@ -37,7 +37,7 @@ const slides: HeroSlide[] = [
     title: "Make gifts personal with curated custom picks",
     subtitle: "From keepsakes to premium hampers, compare styles and prices in one place.",
     ctaLabel: "View personalized",
-    ctaHref: "/store?tag=personalized",
+    ctaHref: "/search?tag=personalized",
     image:
       "https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=1600&auto=format&fit=crop",
     imageAlt: "Personalized gift wrapping",
@@ -151,7 +151,7 @@ export function HeroSlider() {
               </span>
             </Link>
             <Link 
-              href="/store?sort=rating"
+              href="/search?sort=rating"
               className="inline-flex h-14 items-center justify-center rounded-full border-2 border-white/30 bg-black/20 px-8 font-bold text-white backdrop-blur-md transition-all hover:border-white hover:bg-white/10"
             >
               Top rated picks

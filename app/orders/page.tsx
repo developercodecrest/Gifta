@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getUserOrders } from "@/lib/server/ecommerce-service";
+import { getAuthUserById } from "@/lib/server/otp-service";
 import { formatCurrency } from "@/lib/utils";
 
 const statusLabel = {
@@ -17,7 +18,8 @@ const statusLabel = {
 export default async function OrdersPage() {
   const session = await auth();
   const userId = session?.user?.id;
-  const orders = userId ? await getUserOrders(userId, session?.user?.email ?? undefined).catch(() => []) : [];
+  const dbUser = userId ? await getAuthUserById(userId) : null;
+  const orders = userId ? await getUserOrders(userId, dbUser?.email ?? undefined).catch(() => []) : [];
 
   return (
     <div className="space-y-6">

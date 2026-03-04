@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getUserOrderDetails } from "@/lib/server/ecommerce-service";
+import { getAuthUserById } from "@/lib/server/otp-service";
 import { formatCurrency } from "@/lib/utils";
 
 const statusLabel = {
@@ -28,7 +29,8 @@ export default async function OrderDetailsPage({
     notFound();
   }
 
-  const order = await getUserOrderDetails(orderRef, userId, session?.user?.email ?? undefined).catch(() => null);
+  const dbUser = await getAuthUserById(userId);
+  const order = await getUserOrderDetails(orderRef, userId, dbUser?.email ?? undefined).catch(() => null);
   if (!order) {
     notFound();
   }

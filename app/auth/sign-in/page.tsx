@@ -24,6 +24,7 @@ function SignInContent() {
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [requestingOtp, setRequestingOtp] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -36,6 +37,7 @@ function SignInContent() {
     setError(null);
     setStatus(null);
     setOtpMeta(null);
+    setOtpSent(false);
 
     if (!email.trim()) {
       setError("Please enter an email address.");
@@ -68,6 +70,7 @@ function SignInContent() {
       }
 
       setStatus(payload.data?.message ?? "OTP sent. Check your email inbox.");
+      setOtpSent(true);
       if (typeof payload.data?.sendsLeft === "number") {
         setOtpMeta(`OTP sends left this hour: ${payload.data.sendsLeft}`);
       }
@@ -141,7 +144,13 @@ function SignInContent() {
             type="email"
             placeholder="you@example.com"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (otpSent) {
+                setOtpSent(false);
+                setOtp("");
+              }
+            }}
           />
         </Field>
 
@@ -150,21 +159,25 @@ function SignInContent() {
           {requestingOtp ? "Sending OTP..." : "Send OTP"}
         </Button>
 
-        <Field label="Enter OTP">
-          <Input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            placeholder="6-digit code"
-            value={otp}
-            onChange={(event) => setOtp(event.target.value)}
-          />
-        </Field>
+        {otpSent ? (
+          <>
+            <Field label="Enter OTP">
+              <Input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="6-digit code"
+                value={otp}
+                onChange={(event) => setOtp(event.target.value)}
+              />
+            </Field>
 
-        <Button type="button" className="w-full" onClick={onOtpSignIn} disabled={signingIn}>
-          <ShieldCheck className="h-4 w-4" />
-          {signingIn ? "Verifying..." : "Verify OTP & Sign in"}
-        </Button>
+            <Button type="button" className="w-full" onClick={onOtpSignIn} disabled={signingIn}>
+              <ShieldCheck className="h-4 w-4" />
+              {signingIn ? "Verifying..." : "Verify OTP & Sign in"}
+            </Button>
+          </>
+        ) : null}
       </div>
 
       <Button
@@ -187,10 +200,7 @@ function SignInContent() {
       {otpMeta ? <p className="text-sm text-muted-foreground">{otpMeta}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="flex items-center justify-between text-sm">
-        <Link href="/auth/forgot-password" className="text-muted-foreground transition hover:text-foreground">
-          Trouble signing in?
-        </Link>
+      <div className="flex items-center justify-end text-sm">
         <Link href="/auth/sign-up" className="font-medium text-primary">
           Create account
         </Link>

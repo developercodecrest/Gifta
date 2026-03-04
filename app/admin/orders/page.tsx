@@ -1,8 +1,8 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { roleLabels } from "@/lib/roles";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
+import { OrdersClient } from "./orders-client";
 
 export default async function AdminOrdersPage() {
   const identity = await ensureAdminAccess("orders");
@@ -17,23 +17,7 @@ export default async function AdminOrdersPage() {
         <p className="mt-1 text-sm text-muted-foreground">Track order status across stores and riders. Active role: {roleLabels[identity.role]}.</p>
       </header>
 
-      <div className="grid gap-3">
-        {orders.map((order) => (
-          <Card key={order.id}>
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div>
-                <p className="font-semibold">{order.id}</p>
-                <p className="text-sm text-muted-foreground">Store {order.storeId} • Product {order.productId} • Qty {order.quantity}</p>
-                <p className="text-xs text-muted-foreground">Customer: {order.customerName}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold">₹{order.totalAmount}</p>
-                <p className="text-xs text-muted-foreground">{order.status}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <OrdersClient orders={orders} />
     </div>
   );
 }

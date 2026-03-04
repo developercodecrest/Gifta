@@ -1,5 +1,6 @@
 import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
+import { upsertProfile } from "@/lib/server/ecommerce-service";
 import { createMobileTokenBundle } from "@/lib/server/mobile-session-service";
 import { ensureAuthUserRole, getAuthUserByEmail } from "@/lib/server/otp-service";
 
@@ -50,6 +51,13 @@ export async function POST(request: Request) {
   }
 
   const user = await ensureAuthUserRole(email, "user");
+  await upsertProfile(
+    {
+      email,
+      fullName: payload?.name?.trim() || undefined,
+    },
+    user.id,
+  );
 
   const tokenBundle = await createMobileTokenBundle({
     userId: user.id,

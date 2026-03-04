@@ -14,17 +14,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const DISMISS_KEY = "gifta-profile-onboarding-dismissed";
-
 export function ProfileOnboardingGate() {
-  const { status, data } = useSession();
+  const { status } = useSession();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     fullName: "",
+    email: "",
     phone: "",
     receiverName: "",
     receiverPhone: "",
@@ -35,30 +33,10 @@ export function ProfileOnboardingGate() {
     country: "India",
   });
 
-  const defaultName = useMemo(() => data?.user?.name ?? "", [data?.user?.name]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const storageKey = `${DISMISS_KEY}:${data?.user?.email ?? data?.user?.name ?? "guest"}`;
-    const isDismissed = window.localStorage.getItem(storageKey) === "1";
-    setDismissed(isDismissed);
-  }, [data?.user?.email, data?.user?.name]);
-
-  const markDismissed = () => {
-    if (typeof window !== "undefined") {
-      const storageKey = `${DISMISS_KEY}:${data?.user?.email ?? data?.user?.name ?? "guest"}`;
-      window.localStorage.setItem(storageKey, "1");
-    }
-    setDismissed(true);
-  };
+  const defaultName = useMemo(() => "", []);
 
   useEffect(() => {
     if (status !== "authenticated") {
-      setOpen(false);
-      return;
-    }
-
-    if (dismissed) {
       setOpen(false);
       return;
     }
@@ -72,6 +50,7 @@ export function ProfileOnboardingGate() {
         success?: boolean;
         data?: {
           fullName?: string;
+          email?: string;
           phone?: string;
           addresses?: Array<{ receiverName?: string; receiverPhone?: string }>;
         };
@@ -103,6 +82,7 @@ export function ProfileOnboardingGate() {
         setForm((prev) => ({
           ...prev,
           fullName: fallbackName,
+          email: profile.email ?? "",
           phone: profile.phone ?? "",
           receiverName: primaryAddress?.receiverName ?? fallbackName,
           receiverPhone: primaryAddress?.receiverPhone ?? profile.phone ?? "",
@@ -117,9 +97,7 @@ export function ProfileOnboardingGate() {
 
     fetchProfile().catch(() => {
       if (!cancelled) {
-        if (!dismissed) {
-          setOpen(true);
-        }
+        setOpen(true);
         setLoading(false);
       }
     });
@@ -127,7 +105,7 @@ export function ProfileOnboardingGate() {
     return () => {
       cancelled = true;
     };
-  }, [defaultName, dismissed, status]);
+  }, [defaultName, status]);
 
   const submit = async () => {
     setError(null);
@@ -137,6 +115,7 @@ export function ProfileOnboardingGate() {
     };
 
     const fullName = normalize(form.fullName);
+    const email = normalize(form.email);
     const phone = normalize(form.phone);
     const receiverName = normalize(form.receiverName);
     const receiverPhone = normalize(form.receiverPhone);
@@ -158,6 +137,7 @@ export function ProfileOnboardingGate() {
       setSaving(true);
       const payloadBody: {
         fullName?: string;
+        email?: string;
         phone?: string;
         addresses?: Array<{
           label: string;
@@ -172,6 +152,7 @@ export function ProfileOnboardingGate() {
       } = {};
 
       if (fullName) payloadBody.fullName = fullName;
+      if (email) payloadBody.email = email;
       if (phone) payloadBody.phone = phone;
       if (hasCompleteAddress) {
         payloadBody.addresses = [
@@ -201,7 +182,6 @@ export function ProfileOnboardingGate() {
       }
 
       setOpen(false);
-      markDismissed();
     } catch {
       setError("Unable to save profile.");
     } finally {
@@ -214,15 +194,7 @@ export function ProfileOnboardingGate() {
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          markDismissed();
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Complete your profile</DialogTitle>
@@ -234,6 +206,13 @@ export function ProfileOnboardingGate() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Full name">
             <Input value={form.fullName} onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))} />
+          </Field>
+          <Field label="Email">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+            />
           </Field>
           <Field label="Phone">
             <Input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} />
@@ -272,10 +251,7 @@ export function ProfileOnboardingGate() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              setOpen(false);
-              markDismissed();
-            }}
+            onClick={() => setOpen(false)}
             disabled={saving}
           >
             Skip for now

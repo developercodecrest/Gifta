@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import {
   Heart,
   Moon,
@@ -68,7 +68,7 @@ export function Header() {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 sm:px-6 lg:px-8">
         <div className="hidden min-w-0 md:block">
           <HeaderSearch compact />
         </div>
@@ -79,7 +79,7 @@ export function Header() {
 
         <div className="flex justify-center">
           <Link href="/" className="inline-flex items-center text-xl font-black tracking-tight text-[#2c1220] sm:text-2xl">
-            <Image src="/logo.jpeg" alt="Gifta" width={80} height={80} className="h-16 w-16 rounded-sm object-contain sm:h-20 sm:w-20" />
+            <Image src="/logo.jpeg" alt="Gifta" width={100} height={100} className="w-20 h-16 rounded-sm object-contain" />
           </Link>
         </div>
 
@@ -109,6 +109,16 @@ export function Header() {
                   </Link>
                 ))}
               </nav>
+              {status === "authenticated" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4 w-full"
+                  onClick={() => signOut({ callbackUrl: "/auth/sign-in" })}
+                >
+                  Sign out
+                </Button>
+              ) : null}
             </SheetContent>
           </Sheet>
           <div className="hidden items-center gap-1.5 lg:flex">
@@ -116,7 +126,7 @@ export function Header() {
               <Link href="/">Home</Link>
             </Button>
             <Button asChild variant="ghost" size="sm">
-              <Link href="/store">Store</Link>
+              <Link href="/search">Search</Link>
             </Button>
             <Button asChild variant="ghost" size="sm">
               <Link href="/orders">Orders</Link>
@@ -139,7 +149,17 @@ export function Header() {
             <Button asChild variant="outline" size="sm" className="inline-flex">
               <Link href="/auth/sign-in">Sign in</Link>
             </Button>
-          ) : null}
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="inline-flex"
+              onClick={() => signOut({ callbackUrl: "/auth/sign-in" })}
+            >
+              Sign out
+            </Button>
+          )}
         </div>
       </div>
       <Separator />

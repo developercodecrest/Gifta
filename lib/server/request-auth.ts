@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { parseRole } from "@/lib/roles";
 import { getMobileSessionUserById, getUserFromAccessToken } from "@/lib/server/mobile-session-service";
-import { getAuthUserByEmail } from "@/lib/server/otp-service";
+import { getAuthUserById } from "@/lib/server/otp-service";
 import { Role } from "@/types/api";
 
 export type RequestIdentity = {
@@ -10,6 +10,14 @@ export type RequestIdentity = {
   role: Role;
   source: "session" | "token";
 };
+
+function resolveHighestRole(...values: Array<string | null | undefined>): Role {
+  const parsed = values.map((value) => parseRole(value));
+  if (parsed.includes("sadmin")) return "sadmin";
+  if (parsed.includes("storeOwner")) return "storeOwner";
+  if (parsed.includes("rider")) return "rider";
+  return "user";
+}
 
 function getBearerToken(request: Request) {
   const authHeader = request.headers.get("authorization") ?? "";
@@ -23,12 +31,11 @@ function getBearerToken(request: Request) {
 export async function resolveRequestIdentity(request: Request): Promise<RequestIdentity | null> {
   const session = await auth();
   const sessionUserId = session?.user?.id;
-  const sessionEmail = session?.user?.email;
 
   if (session?.user) {
     const liveUser = sessionUserId ? await getMobileSessionUserById(sessionUserId) : null;
-    const emailUser = !liveUser && sessionEmail ? await getAuthUserByEmail(sessionEmail) : null;
-    const resolvedUserId = liveUser?.id ?? emailUser?._id?.toString() ?? sessionUserId;
+    const dbUser = sessionUserId ? await getAuthUserById(sessionUserId) : null;
+    const resolvedUserId = dbUser?._id?.toString() ?? liveUser?.id ?? sessionUserId;
 
     if (!resolvedUserId) {
       return null;
@@ -36,8 +43,8 @@ export async function resolveRequestIdentity(request: Request): Promise<RequestI
 
     return {
       userId: resolvedUserId,
-      email: liveUser?.email ?? emailUser?.email ?? sessionEmail ?? undefined,
-      role: parseRole(liveUser?.role ?? emailUser?.role ?? session.user?.role ?? "user"),
+      email: liveUser?.email ?? dbUser?.email ?? undefined,
+      role: resolveHighestRole(dbUser?.role, liveUser?.role, "user"),
       source: "session",
     };
   }

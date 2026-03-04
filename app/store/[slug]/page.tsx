@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ShieldCheck, Star, Store, Truck } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
@@ -70,7 +71,16 @@ export default async function ProductPage({
               <p className="flex items-center gap-2"><Truck className="h-4 w-4 text-primary" /> Delivery in 24-48 hours in major cities</p>
               <p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Complimentary premium wrapping with every order</p>
               {product?.offers?.[0]?.store?.name ? (
-                <p className="flex items-center gap-2"><Store className="h-4 w-4 text-primary" /> Lowest offer by {product.offers[0].store.name}</p>
+                <p className="flex items-center gap-2">
+                  <Store className="h-4 w-4 text-primary" />
+                  Lowest offer by {" "}
+                  <Link
+                    href={`/search?q=${encodeURIComponent(product.offers[0].store.name)}`}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {product.offers[0].store.name}
+                  </Link>
+                </p>
               ) : null}
             </div>
 
@@ -99,7 +109,16 @@ export default async function ProductPage({
               <Card key={offer.id}>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                   <div>
-                    <p className="text-sm font-semibold">{offer.store?.name ?? "Vendor"}</p>
+                    <p className="text-sm font-semibold">
+                      {offer.store?.name ? (
+                        <Link
+                          href={`/search?q=${encodeURIComponent(offer.store.name)}`}
+                          className="underline-offset-4 hover:text-primary hover:underline"
+                        >
+                          {offer.store.name}
+                        </Link>
+                      ) : "Vendor"}
+                    </p>
                     <p className="text-xs text-muted-foreground">ETA {offer.deliveryEtaHours}h • {offer.inStock ? "In stock" : "Out of stock"}</p>
                   </div>
                   <div className="text-right">

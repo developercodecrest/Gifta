@@ -29,92 +29,92 @@ import { getHomeData } from "@/lib/server/ecommerce-service";
 import type { ProductListItemDto } from "@/types/api";
 
 const quickCategories = [
-  { label: "Same Day", href: "/store?tag=same-day", icon: Truck },
-  { label: "Cakes", href: "/store?category=Cakes", icon: CakeSlice },
-  { label: "Flowers", href: "/store?category=Flowers", icon: Flower2 },
-  { label: "Personalized", href: "/store?tag=personalized", icon: Gift },
-  { label: "Plants", href: "/store?tag=plants", icon: Leaf },
-  { label: "Birthday", href: "/store?category=Birthday", icon: CalendarHeart },
-  { label: "Anniversary", href: "/store?category=Anniversary", icon: Heart },
-  { label: "Premium", href: "/store?tag=luxury", icon: Crown },
-  { label: "Corporate", href: "/store?q=corporate", icon: Shield },
+  { label: "Same Day", href: "/search?tag=same-day", icon: Truck },
+  { label: "Cakes", href: "/search?category=Cakes", icon: CakeSlice },
+  { label: "Flowers", href: "/search?category=Flowers", icon: Flower2 },
+  { label: "Personalized", href: "/search?tag=personalized", icon: Gift },
+  { label: "Plants", href: "/search?tag=plants", icon: Leaf },
+  { label: "Birthday", href: "/search?category=Birthday", icon: CalendarHeart },
+  { label: "Anniversary", href: "/search?category=Anniversary", icon: Heart },
+  { label: "Premium", href: "/search?tag=luxury", icon: Crown },
+  { label: "Corporate", href: "/search?q=corporate", icon: Shield },
 ] as const;
 
 const storyPills = [
-  { label: "Holi Edit", href: "/store?category=Festive" },
-  { label: "Women’s Day", href: "/store?q=women%27s+day" },
-  { label: "Luxe Picks", href: "/store?tag=luxury" },
-  { label: "Fresh Cakes", href: "/store?category=Cakes" },
-  { label: "Photo Gifts", href: "/store?tag=photo" },
-  { label: "Drinkware", href: "/store?q=drinkware" },
-  { label: "Home Decor", href: "/store?q=home+decor" },
-  { label: "Love Notes", href: "/store?q=romantic" },
+  { label: "Holi Edit", href: "/search?category=Festive" },
+  { label: "Women’s Day", href: "/search?q=women%27s+day" },
+  { label: "Luxe Picks", href: "/search?tag=luxury" },
+  { label: "Fresh Cakes", href: "/search?category=Cakes" },
+  { label: "Photo Gifts", href: "/search?tag=photo" },
+  { label: "Drinkware", href: "/search?q=drinkware" },
+  { label: "Home Decor", href: "/search?q=home+decor" },
+  { label: "Love Notes", href: "/search?q=romantic" },
 ] as const;
 
 const glossyBanners = [
   {
     title: "Deliver joy in 60 minutes",
     desc: "Fast slots, handpicked premium gifts, and secure delivery tracking.",
-    href: "/store?tag=same-day",
+    href: "/search?tag=same-day",
     cta: "Send now",
     icon: Clock3,
   },
   {
     title: "Personalized gifting studio",
     desc: "Create memorable gifts with names, photos, notes, and custom packs.",
-    href: "/store?tag=personalized",
+    href: "/search?tag=personalized",
     cta: "Customize gifts",
     icon: Sparkles,
   },
 ] as const;
 
 const occasionTiles = [
-  { label: "Birthdays", href: "/store?category=Birthday", icon: PartyPopper },
-  { label: "Anniversaries", href: "/store?category=Anniversary", icon: Heart },
-  { label: "Festivals", href: "/store?category=Festive", icon: Flame },
-  { label: "Housewarming", href: "/store?q=housewarming", icon: HomeIcon },
+  { label: "Birthdays", href: "/search?category=Birthday", icon: PartyPopper },
+  { label: "Anniversaries", href: "/search?category=Anniversary", icon: Heart },
+  { label: "Festivals", href: "/search?category=Festive", icon: Flame },
+  { label: "Housewarming", href: "/search?q=housewarming", icon: HomeIcon },
 ] as const;
 
 const collectionCards = [
   {
     title: "Express gifting lane",
     desc: "Handpicked last-minute gifts with reliable same-day delivery slots.",
-    href: "/store?tag=same-day",
+    href: "/search?tag=same-day",
     cta: "Shop same day",
     icon: Zap,
   },
   {
     title: "Personalized stories",
     desc: "Custom keepsakes and engraved picks for meaningful surprises.",
-    href: "/store?tag=personalized",
+    href: "/search?tag=personalized",
     cta: "Explore personalized",
     icon: Gift,
   },
   {
     title: "Festival-ready hampers",
     desc: "Seasonal packs and premium assortments made for big celebrations.",
-    href: "/store?category=Festive",
+    href: "/search?category=Festive",
     cta: "Browse festive",
     icon: Star,
   },
   {
     title: "Quality-assured picks",
     desc: "Trusted vendors, secure checkout, and transparent reviews.",
-    href: "/store?sort=rating",
+    href: "/search?sort=rating",
     cta: "Browse top rated",
     icon: Shield,
   },
 ] as const;
 
 const relationshipLinks = [
-  { label: "For Her", href: "/store?q=for+her" },
-  { label: "For Him", href: "/store?q=for+him" },
-  { label: "For Parents", href: "/store?q=parents" },
-  { label: "For Friends", href: "/store?q=friends" },
-  { label: "For Kids", href: "/store?q=kids" },
-  { label: "For Colleagues", href: "/store?q=corporate" },
-  { label: "For Couples", href: "/store?q=couple" },
-  { label: "For Family", href: "/store?q=family" },
+  { label: "For Her", href: "/search?q=for+her" },
+  { label: "For Him", href: "/search?q=for+him" },
+  { label: "For Parents", href: "/search?q=parents" },
+  { label: "For Friends", href: "/search?q=friends" },
+  { label: "For Kids", href: "/search?q=kids" },
+  { label: "For Colleagues", href: "/search?q=corporate" },
+  { label: "For Couples", href: "/search?q=couple" },
+  { label: "For Family", href: "/search?q=family" },
 ] as const;
 
 const reviews = [
@@ -146,7 +146,7 @@ export default async function Home() {
               Free shipping on select orders above ₹1199
             </div>
             <Button asChild size="sm" variant="secondary" className="w-full rounded-full sm:w-auto">
-              <Link href="/store?sort=price-asc">Shop value picks</Link>
+              <Link href="/search?sort=price-asc">Shop value picks</Link>
             </Button>
           </CardContent>
         </Card>
@@ -228,10 +228,10 @@ export default async function Home() {
             </div>
             <div className="flex w-full gap-2 sm:w-auto">
               <Button asChild size="sm" variant="outline" className="flex-1 sm:flex-none">
-                <Link href="/store?sort=rating">Top rated</Link>
+                <Link href="/search?sort=rating">Top rated</Link>
               </Button>
               <Button asChild size="sm" className="flex-1 sm:flex-none">
-                <Link href="/store">View all</Link>
+                <Link href="/search">View all</Link>
               </Button>
             </div>
           </div>
@@ -242,11 +242,27 @@ export default async function Home() {
           </div>
         </section>
 
+        <section aria-label="Mid page banner" className="rounded-3xl border border-border/60 bg-linear-to-r from-primary/10 via-card to-secondary/20 p-5 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Special offer</p>
+              <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Up to 20% off on personalized gifts</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Limited time curation on custom hampers, photo gifts, and premium add-ons.</p>
+            </div>
+            <Button asChild className="w-full rounded-full sm:w-auto">
+              <Link href="/search?tag=personalized">
+                Shop personalized
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </section>
+
         <section aria-label="Occasion gifts" className="rounded-4xl border border-border/60 bg-linear-to-r from-secondary/50 via-card to-primary/10 p-5 sm:p-8">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Gifts by occasion</h3>
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <Link href="/store?category=Festive">See all occasions</Link>
+              <Link href="/search?category=Festive">See all occasions</Link>
             </Button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -306,7 +322,7 @@ export default async function Home() {
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Shop by relationship</h3>
             <Button asChild variant="link" size="sm">
-              <Link href="/store">Browse complete catalog</Link>
+              <Link href="/search">Browse complete catalog</Link>
             </Button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -325,7 +341,7 @@ export default async function Home() {
           <div className="flex items-center justify-between gap-4">
             <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Top rated this week</h3>
             <Button asChild variant="outline" size="sm">
-              <Link href="/store?sort=rating">See all</Link>
+              <Link href="/search?sort=rating">See all</Link>
             </Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

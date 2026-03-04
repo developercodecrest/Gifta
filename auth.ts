@@ -3,8 +3,8 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { getMongoClient } from "@/lib/mongodb";
-import { parseRole } from "@/lib/roles";
-import { ensureAuthUserRole, verifyOtpAndGetUser } from "@/lib/server/otp-service";
+import { upsertProfile } from "@/lib/server/ecommerce-service";
+import { ensureAuthUserById, ensureAuthUserRole, verifyOtpAndGetUser } from "@/lib/server/otp-service";
 
 const hasMongoConfig = Boolean(process.env.MONGODB_URI);
 const mongoClient = hasMongoConfig ? getMongoClient() : undefined;
@@ -62,28 +62,48 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers,
   callbacks: {
-    async signIn({ user }) {
-      if (mongoClient && user.email) {
-        await ensureAuthUserRole(user.email, "user");
+    async signIn({ user, account }) {
+      if (mongoClient) {
+        if (user.id) {
+          await ensureAuthUserById({
+            userId: user.id,
+            email: user.email ?? undefined,
+            name: user.name ?? undefined,
+            defaultRole: "user",
+          });
+        } else if (user.email) {
+          await ensureAuthUserRole(user.email, "user");
+        }
+
+        if (account?.provider === "google" && user.id) {
+          await upsertProfile(
+            {
+              email: user.email,
+              fullName: user.name ?? undefined,
+            },
+            user.id,
+          );
+        }
       }
       return true;
     },
     async session({ session, user, token }) {
       if (session.user) {
-        if (user) {
-          session.user.id = user.id;
-          session.user.role = parseRole((user as { role?: string }).role ?? "user");
-        } else {
-          session.user.id = token.sub ?? "";
-          session.user.role = parseRole((token as { role?: string }).role ?? "user");
-        }
+        session.user.id = user?.id ?? token.sub ?? "";
+        session.user.email = undefined;
+        session.user.name = undefined;
+        session.user.image = undefined;
       }
       return session;
     },
     async jwt({ token, user }) {
-      if (user) {
-        token.role = (user as { role?: string }).role ?? "user";
+      if (user?.id) {
+        token.sub = user.id;
       }
+      delete token.email;
+      delete token.name;
+      delete token.picture;
+      delete (token as Record<string, unknown>).role;
       return token;
     },
   },

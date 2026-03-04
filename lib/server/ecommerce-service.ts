@@ -16,6 +16,7 @@ import {
   ReviewDto,
   SearchMeta,
   SortOption,
+  StoreCategoryOption,
   StoreDto,
   Role,
   UserOrderDetailsDto,
@@ -25,7 +26,11 @@ import {
 } from "@/types/api";
 import { Product } from "@/types/ecommerce";
 
-type StoreDoc = StoreDto;
+type StoreDoc = StoreDto & {
+  details?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 type OfferDoc = {
   _id?: ObjectId;
@@ -68,6 +73,7 @@ type UserDoc = {
   role?: Role;
   fullName?: string;
   email: string;
+  emailVerified?: Date;
   phone?: string;
   addresses?: ProfileDto["addresses"];
   preferences?: ProfileDto["preferences"];
@@ -143,6 +149,51 @@ function normalizeInventoryProduct<T extends ProductDoc>(product: T): T {
 function isPurchasableProduct(product: ProductDoc) {
   const normalized = normalizeInventoryProduct(product);
   return normalized.inStock && (normalized.maxOrderQty ?? 10) > 0;
+}
+
+function toStoreCategoryOptions(details: StoreDoc["details"]): StoreCategoryOption[] {
+  const raw = (details as { catalog?: { categories?: unknown } } | undefined)?.catalog?.categories;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const normalized: StoreCategoryOption[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const categoryName = typeof (entry as { name?: unknown }).name === "string"
+      ? (entry as { name: string }).name.trim()
+      : "";
+
+    if (!categoryName) {
+      continue;
+    }
+
+    const rawSubcategories = (entry as { subcategories?: unknown }).subcategories;
+    const subcategories = Array.isArray(rawSubcategories)
+      ? rawSubcategories
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter((value) => Boolean(value))
+      : [];
+
+    normalized.push({
+      name: categoryName,
+      subcategories: Array.from(new Set(subcategories)),
+    });
+  }
+
+  return normalized;
+}
+
+function getStoreBasicInfo(details: StoreDoc["details"]) {
+  const basicInfo = (details as { basicInfo?: { category?: unknown; subcategory?: unknown } } | undefined)?.basicInfo;
+  return {
+    category: typeof basicInfo?.category === "string" ? basicInfo.category.trim() : "",
+    subcategory: typeof basicInfo?.subcategory === "string" ? basicInfo.subcategory.trim() : "",
+  };
 }
 
 async function getCollections() {
@@ -349,13 +400,24 @@ export async function searchItems(filters: {
   storeId?: string;
   minRating?: number;
 }): Promise<{ items: ProductListItemDto[]; meta: SearchMeta }> {
-  const { products, offers } = await getCollections();
+  const { products, offers, stores } = await getCollections();
 
   const query: Record<string, unknown> = {};
 
   if (filters.q) {
     const regex = new RegExp(escapeRegex(filters.q), "i");
-    query.$or = [{ name: regex }, { description: regex }, { tags: regex }];
+    const matchedStores = await stores.find({ name: regex }, { projection: { id: 1 } }).toArray();
+    const matchedStoreIds = matchedStores.map((entry) => entry.id);
+    const matchedStoreProductIds = matchedStoreIds.length
+      ? await offers.distinct("productId", { storeId: { $in: matchedStoreIds } })
+      : [];
+
+    query.$or = [
+      { name: regex },
+      { description: regex },
+      { tags: regex },
+      ...(matchedStoreProductIds.length ? [{ id: { $in: matchedStoreProductIds } }] : []),
+    ];
   }
 
   if (filters.category) {
@@ -439,6 +501,64 @@ export async function searchItems(filters: {
       pageSize: filters.pageSize,
       filters,
     },
+  };
+}
+
+export async function createStoreForAdmin(
+  payload: {
+    basicInfo: {
+      name: string;
+      slug?: string;
+    };
+    meta?: {
+      status?: string;
+      isVerified?: boolean;
+      profileCompletion?: number;
+      createdAt?: string;
+      updatedAt?: string;
+    };
+  } & Record<string, unknown>,
+  scope: AdminScope,
+): Promise<StoreDto> {
+  const { stores } = await getCollections();
+  const now = new Date().toISOString();
+  const baseSlug = (payload.basicInfo.slug?.trim() || payload.basicInfo.name.trim())
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "")
+    .slice(0, 80) || `store-${Date.now()}`;
+
+  let slug = baseSlug;
+  let suffix = 1;
+  while (await stores.findOne({ slug })) {
+    suffix += 1;
+    slug = `${baseSlug}-${suffix}`;
+  }
+
+  const id = `store-${new ObjectId().toHexString().slice(-10)}`;
+  const ownerUserId = scope.role === "storeOwner" ? scope.userId : undefined;
+
+  const doc: StoreDoc = {
+    id,
+    name: payload.basicInfo.name.trim(),
+    slug,
+    ownerUserId,
+    rating: 0,
+    active: false,
+    details: payload,
+    createdAt: payload.meta?.createdAt ?? now,
+    updatedAt: payload.meta?.updatedAt ?? now,
+  };
+
+  await stores.insertOne(doc);
+
+  return {
+    id: doc.id,
+    name: doc.name,
+    slug: doc.slug,
+    ownerUserId: doc.ownerUserId,
+    rating: doc.rating,
+    active: doc.active,
   };
 }
 
@@ -641,10 +761,20 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
       const offerCount = offerDocs.filter((entry) => entry.storeId === store.id).length;
       const productIds = new Set(offerDocs.filter((entry) => entry.storeId === store.id).map((entry) => entry.productId));
       const itemCount = productDocs.filter((product) => productIds.has(product.id)).length;
+      const basicInfo = getStoreBasicInfo(store.details);
+      const categories = toStoreCategoryOptions(store.details);
       return {
-        ...store,
+        id: store.id,
+        name: store.name,
+        slug: store.slug,
+        ownerUserId: store.ownerUserId,
+        rating: store.rating,
+        active: store.active,
         itemCount,
         offerCount,
+        primaryCategory: basicInfo.category || undefined,
+        primarySubcategory: basicInfo.subcategory || undefined,
+        categories,
       };
     })
     .sort((left, right) => Number(right.active) - Number(left.active) || right.rating - left.rating);
@@ -1248,6 +1378,255 @@ export async function getAdminUsers() {
   return docs.map((doc) => profileDocToDto(doc));
 }
 
+export async function updateStoreScoped(input: {
+  storeId: string;
+  updates: {
+    name?: string;
+    slug?: string;
+    rating?: number;
+    active?: boolean;
+    category?: string;
+    subcategory?: string;
+    categories?: StoreCategoryOption[];
+  };
+  scope: AdminScope;
+}) {
+  const { stores } = await getCollections();
+  const scopedStoreIds = await getStoreIdsForScope(input.scope);
+  if (!scopedStoreIds.includes(input.storeId)) {
+    throw new Error("FORBIDDEN_STORE_SCOPE");
+  }
+
+  const patch: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (typeof input.updates.name === "string" && input.updates.name.trim()) patch.name = input.updates.name.trim();
+  if (typeof input.updates.slug === "string" && input.updates.slug.trim()) patch.slug = input.updates.slug.trim().toLowerCase();
+  if (typeof input.updates.rating === "number") patch.rating = Math.max(0, Math.min(5, input.updates.rating));
+  if (typeof input.updates.active === "boolean") patch.active = input.updates.active;
+  if (typeof input.updates.category === "string") patch["details.basicInfo.category"] = input.updates.category.trim();
+  if (typeof input.updates.subcategory === "string") patch["details.basicInfo.subcategory"] = input.updates.subcategory.trim();
+  if (Array.isArray(input.updates.categories)) {
+    patch["details.catalog.categories"] = input.updates.categories
+      .map((entry) => ({
+        name: entry.name.trim(),
+        subcategories: entry.subcategories
+          .map((subcategory) => subcategory.trim())
+          .filter((subcategory) => Boolean(subcategory)),
+      }))
+      .filter((entry) => Boolean(entry.name));
+  }
+
+  await stores.updateOne({ id: input.storeId }, { $set: patch });
+  return stores.findOne({ id: input.storeId });
+}
+
+export async function deleteStoreScoped(input: { storeId: string; scope: AdminScope }) {
+  const { stores, offers, orders } = await getCollections();
+  const scopedStoreIds = await getStoreIdsForScope(input.scope);
+  if (!scopedStoreIds.includes(input.storeId)) {
+    throw new Error("FORBIDDEN_STORE_SCOPE");
+  }
+
+  await Promise.all([
+    stores.deleteOne({ id: input.storeId }),
+    offers.deleteMany({ storeId: input.storeId }),
+    orders.deleteMany({ storeId: input.storeId }),
+  ]);
+
+  return { deleted: true };
+}
+
+export async function createAdminItemScoped(input: {
+  payload: {
+    name: string;
+    category: string;
+    price: number;
+    description?: string;
+    images?: string[];
+    tags?: string[];
+    featured?: boolean;
+    inStock?: boolean;
+    minOrderQty?: number;
+    maxOrderQty?: number;
+  };
+}) {
+  const { products } = await getCollections();
+  const id = `it-${new ObjectId().toHexString().slice(-10)}`;
+  const slug =
+    input.payload.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "") || id;
+
+  const doc: ProductDoc = {
+    id,
+    slug,
+    name: input.payload.name.trim(),
+    description: input.payload.description?.trim() || "Handpicked gift item",
+    price: Math.max(0, input.payload.price),
+    originalPrice: Math.max(0, Math.round(input.payload.price * 1.15)),
+    rating: 4.5,
+    reviews: 0,
+    category: (input.payload.category as ProductDoc["category"]) ?? "Birthday",
+    tags: input.payload.tags?.length ? input.payload.tags : ["gift"],
+    images: input.payload.images?.length ? input.payload.images : ["/products/placeholder.png"],
+    inStock: input.payload.inStock ?? true,
+    minOrderQty: input.payload.minOrderQty ?? 1,
+    maxOrderQty: input.payload.maxOrderQty ?? 10,
+    featured: input.payload.featured ?? false,
+  };
+
+  await products.insertOne(normalizeInventoryProduct(doc));
+  return doc;
+}
+
+export async function updateAdminItemScoped(input: {
+  itemId: string;
+  updates: {
+    name?: string;
+    description?: string;
+    category?: string;
+    price?: number;
+    inStock?: boolean;
+    featured?: boolean;
+    tags?: string[];
+    images?: string[];
+  };
+  scope: AdminScope;
+}) {
+  const { products, offers } = await getCollections();
+  if (input.scope.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(input.scope);
+    const hasOwnership = await offers.findOne({ storeId: { $in: scopedStoreIds }, productId: input.itemId });
+    if (!hasOwnership) {
+      throw new Error("FORBIDDEN_ITEM_SCOPE");
+    }
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (typeof input.updates.name === "string" && input.updates.name.trim()) {
+    patch.name = input.updates.name.trim();
+    patch.slug = input.updates.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+  }
+  if (typeof input.updates.description === "string") patch.description = input.updates.description.trim();
+  if (typeof input.updates.category === "string" && input.updates.category.trim()) patch.category = input.updates.category.trim();
+  if (typeof input.updates.price === "number") patch.price = Math.max(0, input.updates.price);
+  if (typeof input.updates.inStock === "boolean") patch.inStock = input.updates.inStock;
+  if (typeof input.updates.featured === "boolean") patch.featured = input.updates.featured;
+  if (Array.isArray(input.updates.tags)) patch.tags = input.updates.tags;
+  if (Array.isArray(input.updates.images) && input.updates.images.length) patch.images = input.updates.images;
+
+  await products.updateOne({ id: input.itemId }, { $set: patch });
+  return products.findOne({ id: input.itemId });
+}
+
+export async function deleteAdminItemScoped(input: { itemId: string; scope: AdminScope }) {
+  const { products, offers, orders, reviews, comments } = await getCollections();
+  if (input.scope.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(input.scope);
+    const hasOwnership = await offers.findOne({ storeId: { $in: scopedStoreIds }, productId: input.itemId });
+    if (!hasOwnership) {
+      throw new Error("FORBIDDEN_ITEM_SCOPE");
+    }
+  }
+
+  await Promise.all([
+    products.deleteOne({ id: input.itemId }),
+    offers.deleteMany({ productId: input.itemId }),
+    orders.deleteMany({ productId: input.itemId }),
+    reviews.deleteMany({ productId: input.itemId }),
+    comments.deleteMany({ productId: input.itemId }),
+  ]);
+
+  return { deleted: true };
+}
+
+export async function updateAdminOrderScoped(input: {
+  orderId: string;
+  updates: { status?: AdminOrderDto["status"]; riderId?: string };
+  scope: AdminScope;
+}) {
+  const { orders } = await getCollections();
+  const existing = await orders.findOne({ id: input.orderId });
+  if (!existing) {
+    throw new Error("ORDER_NOT_FOUND");
+  }
+
+  if (input.scope.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(input.scope);
+    if (!scopedStoreIds.includes(existing.storeId)) {
+      throw new Error("FORBIDDEN_ORDER_SCOPE");
+    }
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (input.updates.status) patch.status = input.updates.status;
+  if (typeof input.updates.riderId === "string") patch.riderId = input.updates.riderId.trim() || undefined;
+
+  await orders.updateOne({ id: input.orderId }, { $set: patch });
+  return orders.findOne({ id: input.orderId });
+}
+
+export async function deleteAdminOrderScoped(input: { orderId: string; scope: AdminScope }) {
+  const { orders } = await getCollections();
+  const existing = await orders.findOne({ id: input.orderId });
+  if (!existing) {
+    return { deleted: true };
+  }
+
+  if (input.scope.role === "storeOwner") {
+    const scopedStoreIds = await getStoreIdsForScope(input.scope);
+    if (!scopedStoreIds.includes(existing.storeId)) {
+      throw new Error("FORBIDDEN_ORDER_SCOPE");
+    }
+  }
+
+  await orders.deleteOne({ id: input.orderId });
+  return { deleted: true };
+}
+
+export async function updateAdminUser(input: {
+  userId: string;
+  updates: { fullName?: string; phone?: string; role?: Role; email?: string };
+}) {
+  const { users } = await getCollections();
+  const objectId = toObjectId(input.userId);
+  if (!objectId) {
+    throw new Error("INVALID_USER_ID");
+  }
+
+  const patch: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (typeof input.updates.fullName === "string") {
+    patch.fullName = input.updates.fullName.trim();
+    patch.name = input.updates.fullName.trim();
+  }
+  if (typeof input.updates.phone === "string") patch.phone = input.updates.phone.trim();
+  if (typeof input.updates.email === "string") patch.email = input.updates.email.trim().toLowerCase();
+  if (input.updates.role) patch.role = input.updates.role;
+
+  await users.updateOne({ _id: objectId }, { $set: patch });
+  return users.findOne({ _id: objectId });
+}
+
+export async function deleteAdminUser(userId: string) {
+  const { users } = await getCollections();
+  const objectId = toObjectId(userId);
+  if (!objectId) {
+    throw new Error("INVALID_USER_ID");
+  }
+
+  await users.deleteOne({ _id: objectId });
+  return { deleted: true };
+}
+
 export async function getAdminRiders() {
   const { riders } = await getCollections();
   return riders.find().sort({ activeDeliveries: -1, fullName: 1 }).toArray();
@@ -1256,38 +1635,11 @@ export async function getAdminRiders() {
 export async function seedDemoData() {
   const { users, products, stores, offers, reviews, comments, riders, orders } = await getCollections();
 
-  const ensureUser = async (input: { email: string; name: string; role: Role }) => {
-    await users.updateOne(
-      { email: input.email },
-      {
-        $setOnInsert: {
-          email: input.email,
-          name: input.name,
-          role: input.role,
-          emailVerified: new Date(),
-        },
-      },
-      { upsert: true },
-    );
-
-    return users.findOne({ email: input.email });
-  };
-
-  const [demoUser, owner1, owner2, owner3] = await Promise.all([
-    ensureUser({ email: "demo@gifta.local", name: "Gifta Demo User", role: "user" }),
-    ensureUser({ email: "owner1@gifta.local", name: "Nyra Owner", role: "storeOwner" }),
-    ensureUser({ email: "owner2@gifta.local", name: "Aurora Owner", role: "storeOwner" }),
-    ensureUser({ email: "owner3@gifta.local", name: "Bliss Owner", role: "storeOwner" }),
-  ]);
-
-  if (!demoUser?._id || !owner1?._id || !owner2?._id || !owner3?._id) {
-    throw new Error("Unable to seed users for demo data");
-  }
-
-  const storeDocs: StoreDoc[] = [
-    { id: "st-nyra", name: "Nyra Gifts", slug: "nyra-gifts", ownerUserId: owner1._id.toString(), rating: 4.7, active: true },
-    { id: "st-aurora", name: "Aurora Hampers", slug: "aurora-hampers", ownerUserId: owner2._id.toString(), rating: 4.8, active: true },
-    { id: "st-bliss", name: "Bliss Crates", slug: "bliss-crates", ownerUserId: owner3._id.toString(), rating: 4.6, active: true },
+  const userSeeds: Array<{ email: string; name: string; role: Role; phone?: string }> = [
+    { email: "demo@gifta.local", name: "Gifta Demo User", role: "user", phone: "+91-9000000000" },
+    { email: "owner1@gifta.local", name: "Nyra Owner", role: "storeOwner", phone: "+91-9000100001" },
+    { email: "owner2@gifta.local", name: "Aurora Owner", role: "storeOwner", phone: "+91-9000100002" },
+    { email: "owner3@gifta.local", name: "Bliss Owner", role: "storeOwner", phone: "+91-9000100003" },
   ];
 
   const riderDocs: RiderDoc[] = [
@@ -1303,10 +1655,66 @@ export async function seedDemoData() {
   await comments.deleteMany({});
   await riders.deleteMany({});
   await orders.deleteMany({});
+  await users.deleteMany({ email: /@gifta\.local$/i });
 
-  if (seedProducts.length) {
-    await products.insertMany(seedProducts.map(normalizeInventoryProduct));
+  const userInsertDocs = userSeeds.map((userSeed) => ({
+    email: userSeed.email,
+    name: userSeed.name,
+    fullName: userSeed.name,
+    role: userSeed.role,
+    phone: userSeed.phone,
+    emailVerified: new Date(),
+    updatedAt: new Date().toISOString(),
+    addresses: userSeed.role === "user"
+      ? [
+          {
+            label: "Home",
+            receiverName: userSeed.name,
+            receiverPhone: userSeed.phone ?? "",
+            line1: "42 Celebration Avenue",
+            city: "Bengaluru",
+            state: "Karnataka",
+            pinCode: "560001",
+            country: "India",
+          },
+        ]
+      : [],
+    preferences:
+      userSeed.role === "user"
+        ? {
+            occasions: ["Birthday", "Anniversary", "Festive"],
+            budgetMin: 1000,
+            budgetMax: 5000,
+            preferredTags: ["same-day", "luxury", "personalized"],
+          }
+        : {
+            occasions: ["Corporate", "Wedding"],
+            budgetMin: 500,
+            budgetMax: 20000,
+            preferredTags: ["premium", "bulk"],
+          },
+  }));
+
+  const userInsertResult = await users.insertMany(userInsertDocs);
+  const insertedUsers = await users
+    .find({ _id: { $in: Object.values(userInsertResult.insertedIds) } })
+    .toArray();
+
+  const userByEmail = new Map(insertedUsers.map((user) => [user.email.toLowerCase(), user]));
+  const demoUser = userByEmail.get("demo@gifta.local");
+  const owner1 = userByEmail.get("owner1@gifta.local");
+  const owner2 = userByEmail.get("owner2@gifta.local");
+  const owner3 = userByEmail.get("owner3@gifta.local");
+
+  if (!demoUser?._id || !owner1?._id || !owner2?._id || !owner3?._id) {
+    throw new Error("Unable to seed users for demo data");
   }
+
+  const storeDocs: StoreDoc[] = [
+    { id: "st-nyra", name: "Nyra Gifts", slug: "nyra-gifts", ownerUserId: owner1._id.toString(), rating: 4.7, active: true },
+    { id: "st-aurora", name: "Aurora Hampers", slug: "aurora-hampers", ownerUserId: owner2._id.toString(), rating: 4.8, active: true },
+    { id: "st-bliss", name: "Bliss Crates", slug: "bliss-crates", ownerUserId: owner3._id.toString(), rating: 4.6, active: true },
+  ];
 
   if (storeDocs.length) {
     await stores.insertMany(storeDocs);
@@ -1315,70 +1723,93 @@ export async function seedDemoData() {
     await riders.insertMany(riderDocs);
   }
 
+  const productDocs: ProductDoc[] = [];
+  storeDocs.forEach((store, storeIndex) => {
+    seedProducts.forEach((seedProduct) => {
+      productDocs.push(
+        normalizeInventoryProduct({
+          ...seedProduct,
+          id: `${seedProduct.id}-${store.id}`,
+          slug: `${seedProduct.slug}-${store.slug}`,
+          storeId: store.id,
+          featured: storeIndex === 0 ? seedProduct.featured : false,
+        }),
+      );
+    });
+  });
+
+  if (productDocs.length) {
+    await products.insertMany(productDocs);
+  }
+
   const offerDocs: OfferDoc[] = [];
   const reviewDocs: ReviewDoc[] = [];
   const commentDocs: CommentDoc[] = [];
   const orderDocs: OrderDoc[] = [];
 
-  seedProducts.forEach((product, productIndex) => {
-    storeDocs.forEach((store, storeIndex) => {
-      const multiplier = 0.92 + ((productIndex + storeIndex) % 7) * 0.03;
-      const price = Math.round(product.price * multiplier);
-      const originalPrice = Math.max(price + 200, product.originalPrice ?? Math.round(price * 1.15));
-      const offerId = `of-${product.id}-${store.id}`;
-      const reviewId = `rv-${product.id}-${store.id}`;
+  productDocs.forEach((product, productIndex) => {
+    const store = storeDocs.find((entry) => entry.id === product.storeId);
+    if (!store) {
+      return;
+    }
 
-      offerDocs.push({
-        id: offerId,
-        productId: product.id,
-        storeId: store.id,
-        price,
-        originalPrice,
-        inStock: product.inStock && (productIndex + storeIndex) % 4 !== 0,
-        deliveryEtaHours: 12 + ((productIndex + storeIndex) % 5) * 8,
-      });
+    const multiplier = 0.92 + (productIndex % 7) * 0.03;
+    const price = Math.round(product.price * multiplier);
+    const originalPrice = Math.max(price + 200, product.originalPrice ?? Math.round(price * 1.15));
+    const offerId = `of-${product.id}`;
+    const reviewId = `rv-${product.id}`;
 
-      reviewDocs.push({
-        id: reviewId,
-        productId: product.id,
-        author: `Shopper ${productIndex + storeIndex + 1}`,
-        rating: Math.min(5, Math.max(3, Math.round(product.rating))),
-        title: "Great gifting experience",
-        comment: `Loved the ${product.name}. Packaging and delivery were smooth.`,
-        createdAt: new Date(Date.now() - (productIndex + storeIndex) * 86_400_000).toISOString(),
-        helpfulCount: (productIndex + storeIndex) % 12,
-      });
-
-      commentDocs.push({
-        id: `cm-${product.id}-${store.id}`,
-        productId: product.id,
-        reviewId,
-        author: "Gifta Support",
-        message: "Thank you for the feedback. We are glad you liked it!",
-        createdAt: new Date(Date.now() - (productIndex + storeIndex) * 43_200_000).toISOString(),
-      });
-
-      if (storeIndex === 0 && productIndex < 8) {
-        orderDocs.push({
-          id: `ord-${product.id}-${store.id}`,
-          storeId: store.id,
-          productId: product.id,
-          quantity: 1 + (productIndex % 3),
-          totalAmount: price * (1 + (productIndex % 3)),
-          customerName: `Customer ${productIndex + 1}`,
-          status:
-            productIndex % 4 === 0
-              ? "placed"
-              : productIndex % 4 === 1
-                ? "packed"
-                : productIndex % 4 === 2
-                  ? "out-for-delivery"
-                  : "delivered",
-          riderId: riderDocs[productIndex % riderDocs.length]?.id,
-          createdAt: new Date(Date.now() - productIndex * 32_400_000).toISOString(),
-        });
-      }
+    offerDocs.push({
+      id: offerId,
+      productId: product.id,
+      storeId: store.id,
+      price,
+      originalPrice,
+      inStock: product.inStock && productIndex % 4 !== 0,
+      deliveryEtaHours: 12 + (productIndex % 5) * 8,
     });
+
+    reviewDocs.push({
+      id: reviewId,
+      productId: product.id,
+      author: `Shopper ${productIndex + 1}`,
+      rating: Math.min(5, Math.max(3, Math.round(product.rating))),
+      title: "Great gifting experience",
+      comment: `Loved the ${product.name}. Packaging and delivery were smooth.`,
+      createdAt: new Date(Date.now() - productIndex * 86_400_000).toISOString(),
+      helpfulCount: productIndex % 12,
+    });
+
+    commentDocs.push({
+      id: `cm-${product.id}`,
+      productId: product.id,
+      reviewId,
+      author: "Gifta Support",
+      message: "Thank you for the feedback. We are glad you liked it!",
+      createdAt: new Date(Date.now() - productIndex * 43_200_000).toISOString(),
+    });
+
+    if (productIndex < 12) {
+      const quantity = 1 + (productIndex % 3);
+      orderDocs.push({
+        id: `ord-${product.id}`,
+        storeId: store.id,
+        productId: product.id,
+        quantity,
+        totalAmount: price * quantity,
+        customerName: `Customer ${productIndex + 1}`,
+        status:
+          productIndex % 4 === 0
+            ? "placed"
+            : productIndex % 4 === 1
+              ? "packed"
+              : productIndex % 4 === 2
+                ? "out-for-delivery"
+                : "delivered",
+        riderId: riderDocs[productIndex % riderDocs.length]?.id,
+        createdAt: new Date(Date.now() - productIndex * 32_400_000).toISOString(),
+      });
+    }
   });
 
   if (offerDocs.length) {
@@ -1394,95 +1825,8 @@ export async function seedDemoData() {
     await orders.insertMany(orderDocs);
   }
 
-  await users.updateOne(
-    { _id: demoUser._id },
-    {
-      $set: {
-        fullName: "Gifta Demo User",
-        email: "demo@gifta.local",
-        phone: "+91-9000000000",
-        addresses: [
-          {
-            label: "Home",
-            receiverName: "Gifta Demo User",
-            receiverPhone: "+91-9000000000",
-            line1: "42 Celebration Avenue",
-            city: "Bengaluru",
-            state: "Karnataka",
-            pinCode: "560001",
-            country: "India",
-          },
-        ],
-        preferences: {
-          occasions: ["Birthday", "Anniversary", "Festive"],
-          budgetMin: 1000,
-          budgetMax: 5000,
-          preferredTags: ["same-day", "luxury", "personalized"],
-        },
-        updatedAt: new Date().toISOString(),
-      },
-    },
-    { upsert: true },
-  );
-
-  await users.updateOne(
-    { _id: owner1._id },
-    {
-      $set: {
-        fullName: "Nyra Owner",
-        email: "owner1@gifta.local",
-        updatedAt: new Date().toISOString(),
-        addresses: [],
-        preferences: {
-          occasions: ["Corporate", "Wedding"],
-          budgetMin: 500,
-          budgetMax: 20000,
-          preferredTags: ["luxury", "bulk"],
-        },
-      },
-    },
-    { upsert: true },
-  );
-
-  await users.updateOne(
-    { _id: owner2._id },
-    {
-      $set: {
-        fullName: "Aurora Owner",
-        email: "owner2@gifta.local",
-        updatedAt: new Date().toISOString(),
-        addresses: [],
-        preferences: {
-          occasions: ["Anniversary", "Birthday"],
-          budgetMin: 600,
-          budgetMax: 15000,
-          preferredTags: ["same-day", "premium"],
-        },
-      },
-    },
-    { upsert: true },
-  );
-
-  await users.updateOne(
-    { _id: owner3._id },
-    {
-      $set: {
-        fullName: "Bliss Owner",
-        email: "owner3@gifta.local",
-        updatedAt: new Date().toISOString(),
-        addresses: [],
-        preferences: {
-          occasions: ["Festive", "Self Care"],
-          budgetMin: 400,
-          budgetMax: 12000,
-          preferredTags: ["family", "daily"],
-        },
-      },
-    },
-    { upsert: true },
-  );
-
   await products.createIndex({ id: 1 }, { unique: true });
+  await products.createIndex({ storeId: 1, category: 1 });
   await products.createIndex({ slug: 1 }, { unique: true });
   await products.createIndex({ category: 1, rating: -1 });
   await offers.createIndex({ productId: 1, price: 1 });
@@ -1493,7 +1837,8 @@ export async function seedDemoData() {
   await riders.createIndex({ status: 1, zone: 1 });
 
   return {
-    products: seedProducts.length,
+    users: userInsertDocs.length,
+    products: productDocs.length,
     stores: storeDocs.length,
     offers: offerDocs.length,
     reviews: reviewDocs.length,

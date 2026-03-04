@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type Suggestion = {
   id: string;
@@ -52,7 +53,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
 
       if (currentQ !== trimmed) {
         params.delete("page");
-        router.replace(`/store?${params.toString()}`, { scroll: false });
+        router.replace(`/search?${params.toString()}`, { scroll: false });
       }
     }
 
@@ -102,7 +103,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
     }
 
     params.delete("page");
-    router.replace(`/store?${params.toString()}`, { scroll: false });
+    router.replace(`/search?${params.toString()}`, { scroll: false });
     setOpen(false);
   };
 
@@ -117,8 +118,10 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
         role="search"
         aria-label="Search gifts"
       >
+        <Label htmlFor="header-search-input" className="sr-only">Search gifts</Label>
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          id="header-search-input"
           name="q"
           value={query}
           onFocus={() => setOpen(suggestions.length > 0)}
@@ -169,8 +172,9 @@ function HeaderSearchFallback({ mobile = false, compact = false }: { mobile?: bo
   return (
     <div className={mobile ? "relative w-full" : compact ? "relative w-full max-w-sm" : "relative max-w-xl flex-1"}>
       <div className="relative">
+        <Label htmlFor="header-search-input-fallback" className="sr-only">Search gifts</Label>
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search gifts by keyword" className={`rounded-full pl-10 pr-12 ${compact ? "h-9 text-sm" : ""}`} readOnly />
+        <Input id="header-search-input-fallback" placeholder="Search gifts by keyword" className={`rounded-full pl-10 pr-12 ${compact ? "h-9 text-sm" : ""}`} readOnly />
       </div>
     </div>
   );

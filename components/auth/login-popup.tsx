@@ -22,6 +22,7 @@ export function LoginPopup() {
   const pathname = usePathname();
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [requestingOtp, setRequestingOtp] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function LoginPopup() {
   const onRequestOtp = async () => {
     setError(null);
     setStatusText(null);
+    setOtpSent(false);
 
     if (!email.trim()) {
       setError("Please enter an email address.");
@@ -66,6 +68,7 @@ export function LoginPopup() {
       }
 
       setStatusText(payload.data?.message ?? "OTP sent. Check your email inbox.");
+      setOtpSent(true);
     } catch {
       setError("Unable to send OTP right now. Please try again.");
     } finally {
@@ -141,19 +144,13 @@ export function LoginPopup() {
               type="email"
               placeholder="Email address"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="popup-otp">OTP</Label>
-            <Input
-              id="popup-otp"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="6-digit OTP"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (otpSent) {
+                  setOtpSent(false);
+                  setOtp("");
+                }
+              }}
             />
           </div>
 
@@ -162,10 +159,27 @@ export function LoginPopup() {
             {requestingOtp ? "Sending OTP..." : "Send OTP"}
           </Button>
 
-          <Button type="button" className="w-full" onClick={onOtpSignIn} disabled={signingIn}>
-            <ShieldCheck className="h-4 w-4" />
-            {signingIn ? "Verifying..." : "Verify OTP & Sign in"}
-          </Button>
+          {otpSent ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="popup-otp">OTP</Label>
+                <Input
+                  id="popup-otp"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="6-digit OTP"
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value)}
+                />
+              </div>
+
+              <Button type="button" className="w-full" onClick={onOtpSignIn} disabled={signingIn}>
+                <ShieldCheck className="h-4 w-4" />
+                {signingIn ? "Verifying..." : "Verify OTP & Sign in"}
+              </Button>
+            </>
+          ) : null}
 
           <Button
             type="button"
@@ -180,10 +194,7 @@ export function LoginPopup() {
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <div className="flex items-center justify-between text-sm">
-          <Link href="/auth/forgot-password" className="text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)}>
-            Forgot password?
-          </Link>
+        <div className="flex items-center justify-end text-sm">
           <Link href="/auth/sign-up" className="font-medium text-primary" onClick={() => setOpen(false)}>
             Create account
           </Link>

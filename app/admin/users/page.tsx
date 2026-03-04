@@ -1,8 +1,8 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { roleLabels } from "@/lib/roles";
 import { getAdminUsers } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
+import { UsersClient } from "./users-client";
 
 export default async function AdminUsersPage() {
   const identity = await ensureAdminAccess("users");
@@ -17,18 +17,7 @@ export default async function AdminUsersPage() {
         <p className="mt-1 text-sm text-muted-foreground">View customer and owner user records. Active role: {roleLabels[identity.role]}.</p>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {users.map((user) => (
-          <Card key={user.userId}>
-            <CardContent className="space-y-2 p-4">
-              <p className="font-semibold">{user.fullName}</p>
-              <p className="text-sm text-muted-foreground">{user.email}</p>
-              <p className="text-xs text-muted-foreground">User ID: {user.userId}</p>
-              <p className="text-xs text-muted-foreground">Updated: {new Date(user.updatedAt).toLocaleString()}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <UsersClient users={users} />
     </div>
   );
 }
