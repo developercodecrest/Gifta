@@ -1661,7 +1661,7 @@ export async function seedDemoData() {
   await orders.deleteMany({});
   await users.deleteMany({ email: /@gifta\.local$/i });
 
-  const userInsertDocs = userSeeds.map((userSeed) => ({
+  const userInsertDocs: Array<Omit<UserDoc, "_id">> = userSeeds.map((userSeed) => ({
     email: userSeed.email,
     name: userSeed.name,
     fullName: userSeed.name,
@@ -1686,13 +1686,13 @@ export async function seedDemoData() {
     preferences:
       userSeed.role === "user"
         ? {
-            occasions: ["Birthday", "Anniversary", "Festive"],
+            occasions: ["Birthday", "Anniversary", "Festive"] as ProfileDto["preferences"]["occasions"],
             budgetMin: 1000,
             budgetMax: 5000,
             preferredTags: ["same-day", "luxury", "personalized"],
           }
         : {
-            occasions: ["Corporate", "Wedding"],
+            occasions: ["Corporate", "Wedding"] as ProfileDto["preferences"]["occasions"],
             budgetMin: 500,
             budgetMax: 20000,
             preferredTags: ["premium", "bulk"],

@@ -78,7 +78,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (account?.provider === "google" && user.id) {
           await upsertProfile(
             {
-              email: user.email,
+              email: user.email ?? undefined,
               fullName: user.name ?? undefined,
             },
             user.id,
@@ -90,9 +90,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, user, token }) {
       if (session.user) {
         session.user.id = user?.id ?? token.sub ?? "";
-        session.user.email = undefined;
-        session.user.name = undefined;
-        session.user.image = undefined;
+        session.user.email = "";
+        session.user.name = "";
+        session.user.image = "";
       }
       return session;
     },
