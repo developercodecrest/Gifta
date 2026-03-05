@@ -70,7 +70,7 @@ type CommentDoc = {
 type UserDoc = {
   _id?: ObjectId;
   name?: string;
-  role?: Role;
+  role?: string;
   fullName?: string;
   email: string;
   emailVerified?: Date;

@@ -11,7 +11,7 @@ type AuthUserDoc = {
   _id?: ObjectId;
   email: string;
   name?: string;
-  role?: Role;
+  role?: string;
 };
 
 type MobileSessionDoc = {

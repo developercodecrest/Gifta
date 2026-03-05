@@ -41,7 +41,7 @@ type AuthUserDoc = {
   updatedAt?: string;
   emailVerified?: Date | null;
   image?: string | null;
-  role?: Role;
+  role?: string;
 };
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -141,6 +141,36 @@ export async function ensureAuthUserById(input: {
       throw new Error("User not found and missing email.");
     }
 
+    const existingByEmail = await findAuthUserByEmailInsensitive(input.email);
+    if (existingByEmail?._id) {
+      const profilePatch: Partial<AuthUserDoc> = {
+        updatedAt: new Date().toISOString(),
+      };
+      if (!existingByEmail.name && input.name) profilePatch.name = input.name;
+      if (!existingByEmail.fullName && input.name) profilePatch.fullName = input.name;
+      if (!existingByEmail.role) profilePatch.role = defaultRole;
+      if (!Array.isArray(existingByEmail.addresses)) profilePatch.addresses = [];
+      if (!existingByEmail.preferences) {
+        profilePatch.preferences = {
+          occasions: ["Birthday", "Anniversary"],
+          budgetMin: 1000,
+          budgetMax: 5000,
+          preferredTags: ["same-day", "premium"],
+        };
+      }
+
+      if (Object.keys(profilePatch).length > 0) {
+        await users.updateOne({ _id: existingByEmail._id }, { $set: profilePatch });
+      }
+
+      return {
+        id: existingByEmail._id.toString(),
+        email: existingByEmail.email,
+        name: existingByEmail.name,
+        role: parseRole(existingByEmail.role ?? defaultRole),
+      };
+    }
+
     await users.updateOne(
       { _id: objectId },
       {
@@ -201,21 +231,31 @@ export async function ensureAuthUserById(input: {
   };
 }
 
-export async function ensureAuthUserRole(email: string, defaultRole: Role = "user") {
+export async function ensureAuthUserRole(
+  email: string,
+  defaultRole: Role = "user",
+  options?: { forceDefaultRole?: boolean },
+) {
   const normalizedEmail = normalizeEmail(email);
   const { users } = await getCollections();
 
   let user = await findAuthUserByEmailInsensitive(normalizedEmail);
   if (!user) {
-    const inserted = await users.insertOne(buildDefaultProfilePatch(normalizedEmail, defaultRole));
-    user = await users.findOne({ _id: inserted.insertedId });
+    await users.updateOne(
+      { email: normalizedEmail },
+      {
+        $setOnInsert: buildDefaultProfilePatch(normalizedEmail, defaultRole),
+      },
+      { upsert: true },
+    );
+    user = await findAuthUserByEmailInsensitive(normalizedEmail);
   }
 
   if (!user) {
     throw new Error("Unable to load or create auth user.");
   }
 
-  if (!user.role) {
+  if (!user.role || options?.forceDefaultRole) {
     await users.updateOne(
       { _id: user._id },
       {
@@ -259,9 +299,7 @@ export async function ensureAuthUserRole(email: string, defaultRole: Role = "use
 }
 
 export async function getAuthUserByEmail(email: string) {
-  const normalizedEmail = normalizeEmail(email);
-  const { users } = await getCollections();
-  return users.findOne({ email: normalizedEmail });
+  return findAuthUserByEmailInsensitive(email);
 }
 
 export async function getAuthUserById(userId: string) {

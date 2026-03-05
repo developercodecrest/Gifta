@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canAccess, parseRole } from "@/lib/roles";
 import { getMobileSessionUserById } from "@/lib/server/mobile-session-service";
-import { getAuthUserById } from "@/lib/server/otp-service";
+import { getAuthUserByEmail, getAuthUserById } from "@/lib/server/otp-service";
 import { Role } from "@/types/api";
 
 export type AdminPageIdentity = {
@@ -11,10 +11,17 @@ export type AdminPageIdentity = {
   role: "sadmin" | "storeOwner";
 };
 
-function resolveHighestRole(...values: Array<string | null | undefined>): Role {
-  const parsed = values.map((value) => parseRole(value));
-  if (parsed.includes("sadmin")) return "sadmin";
-  if (parsed.includes("storeOwner")) return "storeOwner";
+function resolveDbRole(authDbRole?: string | null, mobileDbRole?: string | null): Role {
+  const authRole = parseRole(authDbRole);
+  if (authRole === "sadmin" || authRole === "storeOwner") {
+    return authRole;
+  }
+
+  const mobileRole = parseRole(mobileDbRole);
+  if (mobileRole === "sadmin" || mobileRole === "storeOwner") {
+    return mobileRole;
+  }
+
   return "user";
 }
 
@@ -25,10 +32,14 @@ export async function getCurrentRole(): Promise<Role> {
     redirect("/auth/sign-in");
   }
 
-  const liveUser = session.user.id ? await getMobileSessionUserById(session.user.id) : null;
-  const dbUser = session.user.id ? await getAuthUserById(session.user.id) : null;
+  const [liveUser, dbUserById] = await Promise.all([
+    session.user.id ? getMobileSessionUserById(session.user.id) : null,
+    session.user.id ? getAuthUserById(session.user.id) : null,
+  ]);
 
-  return resolveHighestRole(dbUser?.role, liveUser?.role, "user");
+  const dbUser = dbUserById ?? (session.user.email ? await getAuthUserByEmail(session.user.email) : null);
+
+  return resolveDbRole(dbUser?.role, liveUser?.role);
 }
 
 export async function ensureAdminAccess(section: string): Promise<AdminPageIdentity> {
@@ -37,11 +48,15 @@ export async function ensureAdminAccess(section: string): Promise<AdminPageIdent
     redirect("/auth/sign-in");
   }
 
-  const liveUser = session.user.id ? await getMobileSessionUserById(session.user.id) : null;
-  const dbUser = session.user.id ? await getAuthUserById(session.user.id) : null;
+  const [liveUser, dbUserById] = await Promise.all([
+    session.user.id ? getMobileSessionUserById(session.user.id) : null,
+    session.user.id ? getAuthUserById(session.user.id) : null,
+  ]);
+  const dbUser =
+    dbUserById ?? (session.user.email ? await getAuthUserByEmail(session.user.email) : null);
   const userId = dbUser?._id?.toString() ?? liveUser?.id ?? session.user.id ?? "";
-  const role = resolveHighestRole(dbUser?.role, liveUser?.role, "user");
-  console.log("Admin access check:", { userId, role, section });
+  const role = resolveDbRole(dbUser?.role, liveUser?.role);
+  console.log("Admin access check:", dbUser);
 
   if (!userId) {
     redirect("/auth/sign-in");

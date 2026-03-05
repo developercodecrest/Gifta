@@ -1,17 +1,119 @@
 import NextAuth from "next-auth";
+import type { Adapter } from "next-auth/adapters";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import { getMongoClient } from "@/lib/mongodb";
+import { getMongoClient, getMongoDb } from "@/lib/mongodb";
 import { upsertProfile } from "@/lib/server/ecommerce-service";
 import { ensureAuthUserById, ensureAuthUserRole, verifyOtpAndGetUser } from "@/lib/server/otp-service";
 
 const hasMongoConfig = Boolean(process.env.MONGODB_URI);
 const mongoClient = hasMongoConfig ? getMongoClient() : undefined;
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+const adapter: Adapter | undefined = mongoClient
+  ? (() => {
+      const baseAdapter = MongoDBAdapter(mongoClient);
+      const getUser = baseAdapter.getUser?.bind(baseAdapter);
+      const getUserByEmail = baseAdapter.getUserByEmail?.bind(baseAdapter);
+      const updateUser = baseAdapter.updateUser?.bind(baseAdapter);
+
+      if (!getUser || !getUserByEmail || !updateUser) {
+        throw new Error("MongoDB adapter is missing required user methods");
+      }
+
+      const findUserByEmailInsensitive = async (email: string) => {
+        const normalizedEmail = normalizeEmail(email);
+        const direct = await getUserByEmail(normalizedEmail);
+        if (direct) {
+          return direct;
+        }
+
+        const db = await getMongoDb();
+        const escaped = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const existing = await db.collection<{ _id?: unknown }>("users").findOne({
+          email: { $regex: `^${escaped}$`, $options: "i" },
+        });
+
+        if (!existing?._id) {
+          return null;
+        }
+
+        return getUser(String(existing._id));
+      };
+
+      return {
+        ...baseAdapter,
+        async getUserByEmail(email) {
+          return findUserByEmailInsensitive(email);
+        },
+        async createUser(user) {
+          const normalizedEmail = normalizeEmail(user.email);
+          const existing = await findUserByEmailInsensitive(normalizedEmail);
+          if (existing) {
+            return existing;
+          }
+
+          const db = await getMongoDb();
+          const users = db.collection<{
+            _id: unknown;
+            name?: string | null;
+            email: string;
+            emailVerified?: Date | null;
+            image?: string | null;
+          }>("users");
+
+          await users.updateOne(
+            { email: normalizedEmail },
+            {
+              $setOnInsert: {
+                name: user.name ?? null,
+                email: normalizedEmail,
+                emailVerified: user.emailVerified ?? null,
+                image: user.image ?? null,
+              },
+            },
+            { upsert: true },
+          );
+
+          const createdOrExisting = await users.findOne({ email: normalizedEmail });
+          if (!createdOrExisting?._id) {
+            throw new Error("Failed to resolve user after createUser upsert");
+          }
+
+          return {
+            id: String(createdOrExisting._id),
+            name: createdOrExisting.name ?? null,
+            email: createdOrExisting.email,
+            emailVerified: createdOrExisting.emailVerified ?? null,
+            image: createdOrExisting.image ?? null,
+          };
+        },
+        async updateUser(user) {
+          return updateUser({
+            ...user,
+            ...(user.email ? { email: normalizeEmail(user.email) } : {}),
+          });
+        },
+      } satisfies Adapter;
+    })()
+  : undefined;
 const providers = [
   Google({
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    allowDangerousEmailAccountLinking: true,
+    profile(profile) {
+      return {
+        id: profile.sub,
+        email: profile.email?.trim().toLowerCase() ?? "",
+        name: profile.name,
+        image: profile.picture,
+      };
+    },
   }),
   ...(hasMongoConfig
     ? [
@@ -53,7 +155,7 @@ const providers = [
 ];
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...(mongoClient ? { adapter: MongoDBAdapter(mongoClient) } : {}),
+  ...(adapter ? { adapter } : {}),
   session: {
     strategy: mongoClient ? "database" : "jwt",
   },
@@ -64,7 +166,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account }) {
       if (mongoClient) {
-        if (user.id) {
+        const provider = account?.provider;
+
+        if (provider === "google" && user.email) {
+          // For OAuth, use email as source of truth to avoid creating a second user doc
+          // when an OTP/credentials user already exists with the same email.
+          await ensureAuthUserRole(user.email, "user", { forceDefaultRole: true });
+        } else if (user.id) {
           await ensureAuthUserById({
             userId: user.id,
             email: user.email ?? undefined,
@@ -75,7 +183,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await ensureAuthUserRole(user.email, "user");
         }
 
-        if (account?.provider === "google" && user.id) {
+        if (provider === "google" && user.id) {
           await upsertProfile(
             {
               email: user.email ?? undefined,
@@ -90,9 +198,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, user, token }) {
       if (session.user) {
         session.user.id = user?.id ?? token.sub ?? "";
-        session.user.email = "";
-        session.user.name = "";
-        session.user.image = "";
+        session.user.email = user?.email ?? session.user.email ?? null;
+        session.user.name = user?.name ?? session.user.name ?? null;
+        session.user.image = user?.image ?? session.user.image ?? null;
       }
       return session;
     },
