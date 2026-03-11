@@ -127,6 +127,34 @@ const popularCategoryProducts: ProductListItemDto[] = [
     image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1200&q=80",
     deliveryEtaHours: 10,
   }),
+  createDemoProduct({
+    id: "demo-category-corporate-signature-desk-box",
+    slug: "corporate-signature-desk-box",
+    name: "Corporate Signature Desk Box",
+    description: "A polished desk-ready gift set with premium snacks, a notebook, and executive finishing details.",
+    price: 2099,
+    originalPrice: 2599,
+    rating: 4.7,
+    reviews: 98,
+    category: "Corporate",
+    tags: ["corporate", "executive", "premium"],
+    image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
+    deliveryEtaHours: 14,
+  }),
+  createDemoProduct({
+    id: "demo-category-self-care-moonlight-retreat",
+    slug: "self-care-moonlight-retreat",
+    name: "Self Care Moonlight Retreat",
+    description: "A calming self-care box with candles, tea, bath essentials, and wellness treats.",
+    price: 1399,
+    originalPrice: 1699,
+    rating: 4.8,
+    reviews: 156,
+    category: "Self Care",
+    tags: ["self-care", "wellness", "relaxation"],
+    image: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=1200&q=80",
+    deliveryEtaHours: 9,
+  }),
 ];
 
 export default async function Home() {
@@ -165,12 +193,12 @@ export default async function Home() {
           </Button>
         </div>
 
-        <div className="rounded-[2rem] border border-[rgba(201,160,122,0.24)] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(248,238,228,0.94))] px-3 py-5 shadow-[0_28px_65px_-50px_rgba(88,52,24,0.4)] sm:px-5">
-          <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-between sm:gap-5">
+        <div className="rounded-[2rem] border border-[rgba(201,160,122,0.24)] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(248,238,228,0.94))] px-3 py-5 shadow-[0_28px_65px_-50px_rgba(88,52,24,0.4)] sm:px-4 lg:px-5">
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-between sm:gap-4 lg:gap-3">
             {popularCategoryProducts.map((item) => (
-              <div key={item.id} className="min-w-[110px] shrink-0 text-center sm:min-w-0 sm:flex-1">
-                <Link href={`/store/${item.slug}`} className="group flex flex-col items-center gap-3">
-                  <span className="relative block h-24 w-24 rounded-full bg-[linear-gradient(135deg,rgba(242,213,189,0.92),rgba(255,246,238,0.98))] p-[4px] shadow-[0_18px_34px_-24px_rgba(78,42,26,0.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_24px_40px_-24px_rgba(78,42,26,0.52)] sm:h-28 sm:w-28 lg:h-32 lg:w-32">
+              <div key={item.id} className="min-w-[96px] shrink-0 snap-start text-center sm:min-w-0 sm:flex-1">
+                <Link href={`/store/${item.slug}`} className="group flex flex-col items-center gap-2.5">
+                  <span className="relative block h-22 w-22 rounded-full bg-[linear-gradient(135deg,rgba(242,213,189,0.92),rgba(255,246,238,0.98))] p-[4px] shadow-[0_18px_34px_-24px_rgba(78,42,26,0.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_24px_40px_-24px_rgba(78,42,26,0.52)] sm:h-24 sm:w-24 lg:h-28 lg:w-28">
                     <span className="relative block h-full w-full overflow-hidden rounded-full border border-white/80 bg-[#f6e6d6]">
                       <Image
                         src={item.images[0]}
@@ -182,14 +210,9 @@ export default async function Home() {
                     </span>
                   </span>
 
-                  <div className="space-y-1">
-                    <p className="text-base font-semibold leading-none text-foreground transition group-hover:text-primary sm:text-[1.05rem]">
-                      {item.category}
-                    </p>
-                    <p className="line-clamp-2 text-xs leading-4 text-[#736357] sm:text-[0.8rem]">
-                      {item.name}
-                    </p>
-                  </div>
+                  <p className="text-sm font-medium leading-none text-foreground transition group-hover:text-primary sm:text-[0.95rem] lg:text-base">
+                    {item.category}
+                  </p>
                 </Link>
               </div>
             ))}
