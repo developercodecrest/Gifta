@@ -1,25 +1,17 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  CakeSlice,
   CalendarHeart,
   Clock3,
-  Crown,
-  Flame,
-  Flower2,
+  Gem,
   Gift,
   Heart,
-  Home as HomeIcon,
-  Leaf,
   PartyPopper,
-  PackageCheck,
   ShieldCheck,
-  Shield,
   Sparkles,
   Star,
   Truck,
-  UserRound,
-  Zap,
+  WandSparkles,
 } from "lucide-react";
 import { HeroSlider } from "@/components/home/hero-slider";
 import { ProductCard } from "@/components/product/product-card";
@@ -29,80 +21,70 @@ import { getHomeData } from "@/lib/server/ecommerce-service";
 import type { ProductListItemDto } from "@/types/api";
 
 const quickCategories = [
-  { label: "Same Day", href: "/search?tag=same-day", icon: Truck },
-  { label: "Cakes", href: "/search?category=Cakes", icon: CakeSlice },
-  { label: "Flowers", href: "/search?category=Flowers", icon: Flower2 },
-  { label: "Personalized", href: "/search?tag=personalized", icon: Gift },
-  { label: "Plants", href: "/search?tag=plants", icon: Leaf },
-  { label: "Birthday", href: "/search?category=Birthday", icon: CalendarHeart },
-  { label: "Anniversary", href: "/search?category=Anniversary", icon: Heart },
-  { label: "Premium", href: "/search?tag=luxury", icon: Crown },
-  { label: "Corporate", href: "/search?q=corporate", icon: Shield },
+  { label: "Same Day", href: "/search?tag=same-day", icon: Truck, tone: "from-[#fff1dc] via-[#fff7f1] to-[#ffe3d2]" },
+  { label: "Birthday", href: "/search?category=Birthday", icon: CalendarHeart, tone: "from-[#ffe2d7] via-[#fff4ec] to-[#ffd6c5]" },
+  { label: "Anniversary", href: "/search?category=Anniversary", icon: Heart, tone: "from-[#ffe0eb] via-[#fff6f9] to-[#ffd8df]" },
+  { label: "Personalized", href: "/search?tag=personalized", icon: WandSparkles, tone: "from-[#f2ebff] via-[#fbf8ff] to-[#ece2ff]" },
+  { label: "Luxury", href: "/search?tag=luxury", icon: Gem, tone: "from-[#fff0d9] via-[#fff9ef] to-[#ffe3b8]" },
+  { label: "Hampers", href: "/search?q=hamper", icon: Gift, tone: "from-[#dff8f1] via-[#f4fdfa] to-[#d7f1ea]" },
 ] as const;
 
-const storyPills = [
-  { label: "Holi Edit", href: "/search?category=Festive" },
-  { label: "Women’s Day", href: "/search?q=women%27s+day" },
-  { label: "Luxe Picks", href: "/search?tag=luxury" },
-  { label: "Fresh Cakes", href: "/search?category=Cakes" },
-  { label: "Photo Gifts", href: "/search?tag=photo" },
-  { label: "Drinkware", href: "/search?q=drinkware" },
-  { label: "Home Decor", href: "/search?q=home+decor" },
-  { label: "Love Notes", href: "/search?q=romantic" },
-] as const;
-
-const glossyBanners = [
+const spotlightCards = [
   {
-    title: "Deliver joy in 60 minutes",
-    desc: "Fast slots, handpicked premium gifts, and secure delivery tracking.",
+    title: "60-minute gifting lane",
+    desc: "Quick dispatch, prominent value communication, and premium presentation for urgent celebrations.",
     href: "/search?tag=same-day",
-    cta: "Send now",
     icon: Clock3,
   },
   {
-    title: "Personalized gifting studio",
-    desc: "Create memorable gifts with names, photos, notes, and custom packs.",
+    title: "Personalized story studio",
+    desc: "Photo gifts, custom keepsakes, engraved ideas, and relationship-led gifting stories.",
     href: "/search?tag=personalized",
-    cta: "Customize gifts",
     icon: Sparkles,
+  },
+  {
+    title: "Premium curated collections",
+    desc: "High-intent discovery inspired by the strongest gifting storefronts and editorial layouts.",
+    href: "/search?tag=luxury",
+    icon: Gem,
   },
 ] as const;
 
 const occasionTiles = [
   { label: "Birthdays", href: "/search?category=Birthday", icon: PartyPopper },
   { label: "Anniversaries", href: "/search?category=Anniversary", icon: Heart },
-  { label: "Festivals", href: "/search?category=Festive", icon: Flame },
-  { label: "Housewarming", href: "/search?q=housewarming", icon: HomeIcon },
+  { label: "Same-day", href: "/search?tag=same-day", icon: Truck },
+  { label: "Premium", href: "/search?tag=luxury", icon: Gem },
 ] as const;
 
 const collectionCards = [
   {
     title: "Express gifting lane",
-    desc: "Handpicked last-minute gifts with reliable same-day delivery slots.",
+    desc: "Handpicked last-minute gifts with strong visual hierarchy and reliable delivery cues.",
     href: "/search?tag=same-day",
     cta: "Shop same day",
-    icon: Zap,
+    icon: Truck,
   },
   {
     title: "Personalized stories",
-    desc: "Custom keepsakes and engraved picks for meaningful surprises.",
+    desc: "Custom keepsakes, photo memories, and handcrafted gifts for more emotional moments.",
     href: "/search?tag=personalized",
     cta: "Explore personalized",
     icon: Gift,
   },
   {
-    title: "Festival-ready hampers",
-    desc: "Seasonal packs and premium assortments made for big celebrations.",
-    href: "/search?category=Festive",
-    cta: "Browse festive",
+    title: "Premium hamper stories",
+    desc: "Seasonal packs and premium assortments designed with a richer editorial feel.",
+    href: "/search?q=hamper",
+    cta: "Browse hampers",
     icon: Star,
   },
   {
     title: "Quality-assured picks",
-    desc: "Trusted vendors, secure checkout, and transparent reviews.",
+    desc: "Trusted vendors, secure checkout, and reviews surfaced as confidence builders.",
     href: "/search?sort=rating",
     cta: "Browse top rated",
-    icon: Shield,
+    icon: ShieldCheck,
   },
 ] as const;
 
@@ -136,266 +118,261 @@ export default async function Home() {
     arrivals = [];
   }
 
+  const leadProducts = (featured.length ? featured : arrivals).slice(0, 8);
+  const ratedProducts = (arrivals.length ? arrivals : featured).slice(0, 4);
+
   return (
-    <div className="pb-10 sm:pb-14">
-      <section className="mx-auto mt-3 w-full max-w-7xl px-3 sm:mt-4 sm:px-4">
-        <Card className="overflow-hidden border-primary/20 bg-linear-to-r from-primary/10 via-card to-secondary/20">
-          <CardContent className="flex flex-col items-start justify-between gap-2.5 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Free shipping on select orders above ₹1199
-            </div>
-            <Button asChild size="sm" variant="secondary" className="w-full rounded-full sm:w-auto">
-              <Link href="/search?sort=price-asc">Shop value picks</Link>
-            </Button>
-          </CardContent>
-        </Card>
+    <div className="space-y-8 pb-10 sm:space-y-10 sm:pb-16">
+      <section className="full-bleed overflow-hidden">
+        <HeroSlider />
       </section>
 
-      <section className="mx-auto mt-5 w-full max-w-7xl px-3 sm:mt-6 sm:px-4">
-        <Card className="overflow-hidden border-border/60 bg-card/80 shadow-sm backdrop-blur">
-          <CardContent className="p-2 sm:p-3">
-            <div className="flex snap-x snap-mandatory items-center justify-between gap-1 overflow-x-auto divide-x divide-border/60 scrollbar-hide">
+      <section className="space-y-4">
+        <SectionBanner eyebrow="Gift lanes" title="Browse by mood, moment, and gifting speed" description="Each home section now gets a cleaner horizontal ribbon instead of heavy framed blocks." />
+        <div className="grid gap-4 xl:grid-cols-[1.18fr_0.82fr]">
+        <Card className="surface-mesh overflow-hidden rounded-4xl border border-black/5 subtle-shadow">
+          <CardContent className="p-5 sm:p-7 lg:p-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Curated discovery</p>
+                <h2 className="font-display mt-3 text-3xl font-semibold leading-tight sm:text-4xl">A cleaner first section with broader categories and no screenshot-style design block</h2>
+              </div>
+              <Button asChild variant="outline" className="border-transparent bg-white/80 shadow-[0_16px_28px_-24px_rgba(113,52,39,0.24)]">
+                <Link href="/search">
+                  Explore full catalog
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {quickCategories.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.label}
                     href={item.href}
-                    className="group flex min-w-[90px] snap-start flex-1 flex-col items-center gap-1.5 px-2 py-2.5 text-center text-muted-foreground transition-colors hover:text-foreground sm:min-w-[92px]"
+                    className={`group rounded-3xl bg-linear-to-br ${item.tone} p-4 shadow-[0_16px_28px_-24px_rgba(113,52,39,0.18)] transition duration-300 hover:-translate-y-1`}
                   >
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-secondary/60 transition-colors group-hover:bg-primary/15">
-                      <Icon className="h-4 w-4" />
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/88 text-slate-800 shadow-[0_12px_22px_-18px_rgba(44,23,16,0.24)]">
+                      <Icon className="h-5 w-5" />
                     </span>
-                    <span className="text-[11px] font-medium sm:text-xs">{item.label}</span>
+                    <p className="mt-4 text-base font-semibold text-slate-900">{item.label}</p>
+                    <p className="mt-1 text-sm text-slate-600">Browse expanded collections with a cleaner, more product-first layout.</p>
                   </Link>
                 );
               })}
             </div>
           </CardContent>
         </Card>
+
+        <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1">
+            {spotlightCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <Link key={card.title} href={card.href} className="glass-panel rounded-[1.7rem] border border-black/5 p-5 shadow-[0_18px_34px_-28px_rgba(67,34,29,0.18)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_40px_-32px_rgba(67,34,29,0.26)]">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff2e6] text-slate-800">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </span>
+                  <p className="mt-4 text-lg font-semibold">{card.title}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{card.desc}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </section>
 
-      <section className="mx-auto mt-5 w-full max-w-7xl px-3 sm:mt-6 sm:px-4">
-        <div className="flex snap-x snap-mandatory items-start gap-3 overflow-x-auto pb-1 scrollbar-hide sm:justify-center sm:gap-7">
-          {storyPills.map((item) => (
-            <Link key={item.label} href={item.href} className="group flex min-w-[82px] snap-start flex-col items-center gap-2 text-center">
-              <span className="relative inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-border/70 bg-linear-to-br from-secondary to-card text-sm font-semibold shadow-sm transition-all group-hover:scale-[1.02] group-hover:border-primary/40 sm:h-20 sm:w-20">
-                {item.label.slice(0, 2).toUpperCase()}
-                <span className="absolute inset-0 bg-linear-to-b from-background/0 to-primary/10 opacity-0 transition-opacity group-hover:opacity-100" />
-              </span>
-              <span className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground sm:text-sm">{item.label}</span>
-            </Link>
+      <section className="space-y-4">
+        <SectionBanner eyebrow="Trending now" title="Bestsellers with more breathing room" description="The section ribbon separates collections cleanly without turning the entire page into one long banner." />
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Expanded bestsellers with more room for the products to breathe</h2>
+          </div>
+          <Button asChild variant="outline" className="border-transparent bg-white/85 shadow-[0_16px_28px_-24px_rgba(113,52,39,0.24)]">
+            <Link href="/search?sort=rating">See top-rated gifts</Link>
+          </Button>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {leadProducts.map((item) => (
+            <ProductCard key={`home-${item.id}`} product={item} />
           ))}
         </div>
       </section>
 
-      <section className="mx-auto mt-6 w-full max-w-7xl px-3 sm:mt-7 sm:px-4">
-        <div className="overflow-hidden rounded-3xl border border-border/60 shadow-sm">
-          <HeroSlider />
+      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="lg:col-span-2">
+          <SectionBanner eyebrow="Occasions" title="Category-led sections now have their own horizontal header" description="This keeps the home page structured while leaving the hero banner untouched." />
+        </div>
+        <Card className="overflow-hidden rounded-4xl border border-black/5 bg-[linear-gradient(135deg,#fff2e4_0%,#fffaf5_50%,#ffe6d4_100%)] subtle-shadow">
+          <CardContent className="p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Occasion-led discovery</p>
+            <h3 className="font-display mt-3 text-3xl font-semibold leading-tight">A more visual category system with stronger gifting intent</h3>
+            <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
+              The redesigned homepage uses broader cards, richer gradients, and cleaner grouping so customers reach the right gifting lane faster.
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {occasionTiles.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link key={item.label} href={item.href} className="rounded-3xl bg-white/82 p-4 shadow-[0_16px_28px_-24px_rgba(113,52,39,0.18)] transition duration-300 hover:-translate-y-1">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[#fff1e6] text-primary">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <p className="mt-3 text-base font-semibold">{item.label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Thoughtful edits for key celebration moments.</p>
+                  </Link>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {collectionCards.map((collection) => {
+            const Icon = collection.icon;
+            return (
+              <Card key={collection.title} className="glass-panel overflow-hidden rounded-[1.8rem] border border-black/5 shadow-[0_16px_30px_-26px_rgba(113,52,39,0.18)]">
+                <CardHeader className="space-y-3 pb-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff2e6] text-primary">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <CardTitle className="text-xl">{collection.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">{collection.desc}</p>
+                  <Button asChild variant="outline" className="border-transparent bg-white/85 shadow-[0_14px_26px_-24px_rgba(113,52,39,0.2)]">
+                    <Link href={collection.href}>
+                      {collection.cta}
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </section>
 
-      <section className="mx-auto mt-5 grid w-full max-w-7xl gap-3 px-3 sm:mt-6 sm:gap-4 sm:px-4 lg:grid-cols-2">
-        {glossyBanners.map((banner) => {
-          const Icon = banner.icon;
-          return (
-            <Card key={banner.title} className="overflow-hidden border-primary/20 bg-linear-to-br from-card via-card to-primary/10">
-              <CardContent className="relative p-5 sm:p-7">
-                <span className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <h2 className="max-w-xs text-lg font-bold tracking-tight sm:text-2xl">{banner.title}</h2>
-                <p className="mt-2 max-w-sm text-sm text-muted-foreground">{banner.desc}</p>
-                <Button asChild className="mt-4 w-full rounded-full sm:w-auto">
-                  <Link href={banner.href}>
-                    {banner.cta}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
+      <section className="space-y-4">
+        <SectionBanner eyebrow="Recipients" title="Every relationship block now reads like its own guided lane" description="The ribbon treatment keeps each grouping distinct without heavy outlines." />
+        <div className="rounded-4xl border border-black/5 bg-white/78 p-5 subtle-shadow sm:p-7">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display mt-2 text-3xl font-semibold">Clear pathways for every recipient</h3>
+          </div>
+          <Button asChild>
+            <Link href="/search">Browse all gifts</Link>
+          </Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {relationshipLinks.map((item) => (
+            <Link key={item.label} href={item.href} className="flex items-center justify-between rounded-3xl bg-background/88 px-4 py-3.5 text-sm font-medium shadow-[0_12px_24px_-22px_rgba(113,52,39,0.14)] transition hover:-translate-y-0.5 hover:bg-[#fff6f0]">
+              <span>{item.label}</span>
+              <ArrowRight className="h-4 w-4 text-primary" />
+            </Link>
+          ))}
+        </div>
+        </div>
       </section>
 
-      <section className="mx-auto mt-8 w-full max-w-7xl space-y-9 px-3 sm:mt-10 sm:space-y-14 sm:px-4">
-        <section aria-label="Featured products" className="space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Trending now</p>
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Bestsellers from top vendors</h2>
+      <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="lg:col-span-2">
+          <SectionBanner eyebrow="Customer trust" title="Social proof and confidence blocks with a cleaner professional finish" description="Heavy dark framing is removed here in favor of lighter review and assurance surfaces." />
+        </div>
+        <Card className="surface-mesh overflow-hidden rounded-4xl border border-black/5 subtle-shadow">
+          <CardContent className="p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Why customers stay confident</p>
+            <h3 className="font-display mt-3 text-3xl font-semibold leading-tight">The home page now feels more polished, easier to scan, and less visually boxed in</h3>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <FeatureBullet label="Cleaner merchandising" text="Less border weight and softer section separation." />
+              <FeatureBullet label="Better rhythm" text="Each home section starts with its own horizontal ribbon." />
+              <FeatureBullet label="Stronger trust" text="Confidence cues sit beside products without overpowering them." />
             </div>
-            <div className="flex w-full gap-2 sm:w-auto">
-              <Button asChild size="sm" variant="outline" className="flex-1 sm:flex-none">
-                <Link href="/search?sort=rating">Top rated</Link>
-              </Button>
-              <Button asChild size="sm" className="flex-1 sm:flex-none">
-                <Link href="/search">View all</Link>
-              </Button>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {(featured.length ? featured : arrivals).slice(0, 8).map((item) => (
-              <ProductCard key={`home-${item.id}`} product={item} />
-            ))}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section aria-label="Mid page banner" className="rounded-3xl border border-border/60 bg-linear-to-r from-primary/10 via-card to-secondary/20 p-5 sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Special offer</p>
-              <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Up to 20% off on personalized gifts</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Limited time curation on custom hampers, photo gifts, and premium add-ons.</p>
-            </div>
-            <Button asChild className="w-full rounded-full sm:w-auto">
-              <Link href="/search?tag=personalized">
-                Shop personalized
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </section>
-
-        <section aria-label="Occasion gifts" className="rounded-4xl border border-border/60 bg-linear-to-r from-secondary/50 via-card to-primary/10 p-5 sm:p-8">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Gifts by occasion</h3>
-            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <Link href="/search?category=Festive">See all occasions</Link>
-            </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {occasionTiles.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="group rounded-2xl border border-border/60 bg-card/90 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
-                >
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <p className="mt-3 text-sm font-semibold sm:text-base">{item.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Find curated picks for every celebration.</p>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        <section aria-label="Curated collections" className="space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Curated</p>
-              <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">Designer-style gift collections</h3>
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {collectionCards.map((collection) => {
-              const Icon = collection.icon;
-              return (
-                <Card key={collection.title} className="overflow-hidden border-border/60 bg-card/80 backdrop-blur">
-                  <CardHeader className="space-y-2 pb-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <CardTitle className="text-lg">{collection.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{collection.desc}</p>
-                    <Button asChild variant="outline" className="w-full justify-between rounded-full">
-                      <Link href={collection.href}>
-                        {collection.cta}
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="rounded-4xl border border-border/60 bg-card/70 p-5 sm:p-8" aria-label="Gift by relationship">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Shop by relationship</h3>
-            <Button asChild variant="link" size="sm">
-              <Link href="/search">Browse complete catalog</Link>
-            </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {relationshipLinks.map((item) => (
-              <Button key={item.label} asChild variant="secondary" className="h-11 justify-between rounded-xl px-4 sm:h-12">
-                <Link href={item.href}>
-                  <span>{item.label}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-5" aria-label="Top rated products">
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Top rated this week</h3>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/search?sort=rating">See all</Link>
-            </Button>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {(arrivals.length ? arrivals : featured).slice(0, 4).map((item) => (
-              <ProductCard key={`rating-${item.id}`} product={item} />
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-4xl border border-border/60 bg-linear-to-r from-primary/10 via-card to-secondary/30 p-6 sm:p-9" aria-label="Customer reviews">
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Social proof</p>
-              <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">Loved by thousands of gifters</h3>
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {reviews.map((review) => (
-              <Card key={review.name} className="border-border/60 bg-card/90">
-                <CardContent className="space-y-3 p-5">
+        <Card className="surface-mesh overflow-hidden rounded-4xl border border-black/5 subtle-shadow">
+          <CardContent className="p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Customer love</p>
+            <h3 className="font-display mt-3 text-3xl font-semibold">Social proof with a warmer, more premium feel</h3>
+            <div className="mt-6 grid gap-3">
+              {reviews.map((review) => (
+                <div key={review.name} className="rounded-3xl bg-white/84 p-4 shadow-[0_16px_30px_-26px_rgba(113,52,39,0.18)]">
                   <div className="flex gap-1 text-primary">
                     {[...Array(review.rating)].map((_, index) => (
                       <Star key={`${review.name}-${index}`} className="h-4 w-4 fill-current" />
                     ))}
                   </div>
-                  <p className="text-sm text-muted-foreground">“{review.text}”</p>
-                  <p className="text-sm font-semibold">{review.name}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-border/60 bg-card p-5 sm:p-8 shadow-sm" aria-label="Trust markers">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <div className="rounded-xl bg-background p-4 text-center">
-              <PackageCheck className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-2 text-sm font-semibold">Trusted vendors</p>
+                  <p className="mt-3 text-sm text-muted-foreground">“{review.text}”</p>
+                  <p className="mt-3 text-sm font-semibold">{review.name}</p>
+                </div>
+              ))}
             </div>
-            <div className="rounded-xl bg-background p-4 text-center">
-              <Truck className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-2 text-sm font-semibold">Same-day options</p>
-            </div>
-            <div className="rounded-xl bg-background p-4 text-center">
-              <ShieldCheck className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-2 text-sm font-semibold">Secure checkout</p>
-            </div>
-            <div className="rounded-xl bg-background p-4 text-center">
-              <UserRound className="mx-auto h-5 w-5 text-primary" />
-              <p className="mt-2 text-sm font-semibold">Real-time support</p>
-            </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       </section>
+
+      <section className="space-y-4">
+        <SectionBanner eyebrow="Top rated" title="High-converting picks with a softer section frame" description="The same horizontal section treatment carries through to the final product grid." />
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-display mt-2 text-3xl font-semibold">Products with strong reviews and stronger presentation</h3>
+          </div>
+          <Button asChild variant="outline" className="border-transparent bg-white/85 shadow-[0_16px_28px_-24px_rgba(113,52,39,0.24)]">
+            <Link href="/search?sort=rating">View all</Link>
+          </Button>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {ratedProducts.map((item) => (
+            <ProductCard key={`rating-${item.id}`} product={item} />
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FeatureBullet({
+  label,
+  text,
+}: {
+  label: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-3xl bg-white/84 p-4 shadow-[0_16px_30px_-26px_rgba(113,52,39,0.18)]">
+      <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-[#fff1e6] text-primary">
+        <Sparkles className="h-4 w-4" />
+      </span>
+      <p className="mt-3 text-sm font-semibold text-foreground">{label}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
+function SectionBanner({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="section-banner rounded-3xl px-5 py-4 sm:px-6">
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{eyebrow}</p>
+          <h2 className="font-display mt-1 text-2xl font-semibold leading-tight text-slate-900 sm:text-[2rem]">{title}</h2>
+        </div>
+        <p className="max-w-xl text-sm text-[#6f5a55]">{description}</p>
+      </div>
     </div>
   );
 }

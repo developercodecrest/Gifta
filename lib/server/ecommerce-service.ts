@@ -929,6 +929,7 @@ export async function getAdminItemsScoped(scope: AdminScope) {
         ...item,
         bestOffer: itemOffers[0],
         offerCount: itemOffers.length,
+        offers: itemOffers,
       };
     }),
     meta: {
@@ -1444,9 +1445,12 @@ export async function deleteStoreScoped(input: { storeId: string; scope: AdminSc
 
 export async function createAdminItemScoped(input: {
   payload: {
+    storeId?: string;
     name: string;
     category: string;
     price: number;
+    originalPrice?: number;
+    deliveryEtaHours?: number;
     description?: string;
     images?: string[];
     tags?: string[];
@@ -1455,8 +1459,32 @@ export async function createAdminItemScoped(input: {
     minOrderQty?: number;
     maxOrderQty?: number;
   };
+  scope: AdminScope;
 }) {
-  const { products } = await getCollections();
+  const { products, offers } = await getCollections();
+  const scopedStoreIds = await getStoreIdsForScope(input.scope);
+  const requestedStoreId = input.payload.storeId?.trim();
+
+  if (input.scope.role === "storeOwner") {
+    if (!scopedStoreIds.length) {
+      throw new Error("FORBIDDEN_STORE_SCOPE");
+    }
+
+    if (requestedStoreId && !scopedStoreIds.includes(requestedStoreId)) {
+      throw new Error("FORBIDDEN_STORE_SCOPE");
+    }
+  }
+
+  const storeId = requestedStoreId || (input.scope.role === "storeOwner" ? scopedStoreIds[0] : undefined);
+
+  if (!storeId) {
+    throw new Error("STORE_REQUIRED_FOR_ITEM_CREATE");
+  }
+
+  if (input.scope.role === "sadmin" && scopedStoreIds.length && !scopedStoreIds.includes(storeId)) {
+    throw new Error("FORBIDDEN_STORE_SCOPE");
+  }
+
   const id = `it-${new ObjectId().toHexString().slice(-10)}`;
   const slug =
     input.payload.name
@@ -1481,10 +1509,27 @@ export async function createAdminItemScoped(input: {
     minOrderQty: input.payload.minOrderQty ?? 1,
     maxOrderQty: input.payload.maxOrderQty ?? 10,
     featured: input.payload.featured ?? false,
+    storeId,
   };
 
   await products.insertOne(normalizeInventoryProduct(doc));
-  return doc;
+
+  const offer: OfferDoc = {
+    id: `of-${new ObjectId().toHexString().slice(-10)}`,
+    productId: id,
+    storeId,
+    price: Math.max(0, input.payload.price),
+    originalPrice: typeof input.payload.originalPrice === "number" ? Math.max(0, input.payload.originalPrice) : Math.max(0, Math.round(input.payload.price * 1.15)),
+    inStock: input.payload.inStock ?? true,
+    deliveryEtaHours: Math.max(1, Math.floor(input.payload.deliveryEtaHours ?? 24)),
+  };
+
+  await offers.insertOne(offer);
+
+  return {
+    ...doc,
+    offer,
+  };
 }
 
 export async function updateAdminItemScoped(input: {
@@ -1498,6 +1543,11 @@ export async function updateAdminItemScoped(input: {
     featured?: boolean;
     tags?: string[];
     images?: string[];
+    offerStoreId?: string;
+    offerPrice?: number;
+    originalPrice?: number;
+    deliveryEtaHours?: number;
+    offerInStock?: boolean;
   };
   scope: AdminScope;
 }) {
@@ -1510,6 +1560,7 @@ export async function updateAdminItemScoped(input: {
     }
   }
 
+  const existingOffers = await offers.find({ productId: input.itemId }).toArray();
   const patch: Record<string, unknown> = {};
   if (typeof input.updates.name === "string" && input.updates.name.trim()) {
     patch.name = input.updates.name.trim();
@@ -1527,8 +1578,98 @@ export async function updateAdminItemScoped(input: {
   if (Array.isArray(input.updates.tags)) patch.tags = input.updates.tags;
   if (Array.isArray(input.updates.images) && input.updates.images.length) patch.images = input.updates.images;
 
-  await products.updateOne({ id: input.itemId }, { $set: patch });
+  if (Object.keys(patch).length) {
+    await products.updateOne({ id: input.itemId }, { $set: patch });
+  }
+
+  const selectedOfferStoreId = input.updates.offerStoreId?.trim() || existingOffers[0]?.storeId;
+  const offerPatch: Record<string, unknown> = {};
+  if (typeof input.updates.offerPrice === "number") {
+    offerPatch.price = Math.max(0, input.updates.offerPrice);
+    if (typeof input.updates.price !== "number") {
+      await products.updateOne({ id: input.itemId }, { $set: { price: Math.max(0, input.updates.offerPrice) } });
+    }
+  }
+  if (typeof input.updates.originalPrice === "number") offerPatch.originalPrice = Math.max(0, input.updates.originalPrice);
+  if (typeof input.updates.deliveryEtaHours === "number") offerPatch.deliveryEtaHours = Math.max(1, Math.floor(input.updates.deliveryEtaHours));
+  if (typeof input.updates.offerInStock === "boolean") offerPatch.inStock = input.updates.offerInStock;
+
+  if (selectedOfferStoreId && Object.keys(offerPatch).length) {
+    const targetOffer = existingOffers.find((entry) => entry.storeId === selectedOfferStoreId);
+    if (!targetOffer) {
+      throw new Error("OFFER_NOT_FOUND");
+    }
+
+    if (input.scope.role === "storeOwner") {
+      const scopedStoreIds = await getStoreIdsForScope(input.scope);
+      if (!scopedStoreIds.includes(selectedOfferStoreId)) {
+        throw new Error("FORBIDDEN_ITEM_SCOPE");
+      }
+    }
+
+    await offers.updateOne({ id: targetOffer.id }, { $set: offerPatch });
+  }
+
   return products.findOne({ id: input.itemId });
+}
+
+export async function upsertAdminItemOfferScoped(input: {
+  itemId: string;
+  payload: {
+    storeId: string;
+    price: number;
+    originalPrice?: number;
+    inStock?: boolean;
+    deliveryEtaHours?: number;
+  };
+  scope: AdminScope;
+}) {
+  const { products, offers } = await getCollections();
+  const product = await products.findOne({ id: input.itemId });
+  if (!product) {
+    throw new Error("ITEM_NOT_FOUND");
+  }
+
+  const scopedStoreIds = await getStoreIdsForScope(input.scope);
+  if (!scopedStoreIds.includes(input.payload.storeId)) {
+    throw new Error("FORBIDDEN_STORE_SCOPE");
+  }
+
+  const patch = {
+    price: Math.max(0, input.payload.price),
+    originalPrice: typeof input.payload.originalPrice === "number" ? Math.max(0, input.payload.originalPrice) : Math.max(0, Math.round(input.payload.price * 1.15)),
+    inStock: input.payload.inStock ?? true,
+    deliveryEtaHours: Math.max(1, Math.floor(input.payload.deliveryEtaHours ?? 24)),
+  };
+  const existing = await offers.findOne({ productId: input.itemId, storeId: input.payload.storeId });
+
+  if (existing) {
+    await offers.updateOne({ id: existing.id }, { $set: patch });
+  } else {
+    await offers.insertOne({
+      id: `of-${new ObjectId().toHexString().slice(-10)}`,
+      productId: input.itemId,
+      storeId: input.payload.storeId,
+      ...patch,
+    });
+  }
+
+  return offers.find({ productId: input.itemId }).toArray();
+}
+
+export async function deleteAdminItemOfferScoped(input: {
+  itemId: string;
+  storeId: string;
+  scope: AdminScope;
+}) {
+  const { offers } = await getCollections();
+  const scopedStoreIds = await getStoreIdsForScope(input.scope);
+  if (!scopedStoreIds.includes(input.storeId)) {
+    throw new Error("FORBIDDEN_STORE_SCOPE");
+  }
+
+  await offers.deleteOne({ productId: input.itemId, storeId: input.storeId });
+  return { deleted: true };
 }
 
 export async function deleteAdminItemScoped(input: { itemId: string; scope: AdminScope }) {

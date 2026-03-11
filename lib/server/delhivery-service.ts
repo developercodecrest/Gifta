@@ -25,6 +25,20 @@ type ServiceabilityResult = {
   raw: unknown;
 };
 
+export class DelhiveryApiError extends Error {
+  status: number;
+  body: unknown;
+  code: string;
+
+  constructor(message: string, options: { status: number; body: unknown; code?: string }) {
+    super(message);
+    this.name = "DelhiveryApiError";
+    this.status = options.status;
+    this.body = options.body;
+    this.code = options.code ?? "DELHIVERY_API_ERROR";
+  }
+}
+
 type ShipmentCreateInput = {
   orderRef: string;
   storeId: string;
@@ -78,6 +92,18 @@ export type DelhiveryTrackingResult = {
   raw: unknown;
 };
 
+function shouldBypassServiceabilityAuthFailure() {
+  const explicit = process.env.DELHIVERY_BYPASS_SERVICEABILITY_ON_AUTH_FAILURE?.trim().toLowerCase();
+  if (explicit === "true") {
+    return true;
+  }
+  if (explicit === "false") {
+    return false;
+  }
+
+  return (process.env.DELHIVERY_MODE ?? "test").trim().toLowerCase() !== "live";
+}
+
 type StoreDoc = {
   _id?: ObjectId;
   id: string;
@@ -93,8 +119,7 @@ type StoreDoc = {
   };
 };
 
-const DEFAULT_TEST_BASE_URL = "https://staging-express.delhivery.com";
-const DEFAULT_LIVE_BASE_URL = "https://track.delhivery.com";
+const TEMPORARY_DELHIVERY_BASE_URL = "https://staging-express.delhivery.com";
 
 export function isDelhiveryConfigured() {
   try {
@@ -107,16 +132,15 @@ export function isDelhiveryConfigured() {
 
 export function getDelhiveryConfig(): DelhiveryConfig {
   const mode = (process.env.DELHIVERY_MODE ?? "test").toLowerCase() === "live" ? "live" : "test";
-  const testToken = process.env.DELHIVERY_API_TOKEN_TEST;
-  const liveToken = process.env.DELHIVERY_API_TOKEN_LIVE;
+  const testToken = process.env.DELHIVERY_API_TOKEN_TEST?.trim();
+  const liveToken = process.env.DELHIVERY_API_TOKEN_LIVE?.trim();
 
   const token = mode === "live" ? liveToken : testToken;
   if (!token) {
     throw new Error(`Delhivery token missing for mode: ${mode}. Set DELHIVERY_API_TOKEN_${mode.toUpperCase()}.`);
   }
 
-  const baseUrl = (mode === "live" ? process.env.DELHIVERY_LIVE_BASE_URL : process.env.DELHIVERY_TEST_BASE_URL)
-    ?? (mode === "live" ? DEFAULT_LIVE_BASE_URL : DEFAULT_TEST_BASE_URL);
+  const baseUrl = TEMPORARY_DELHIVERY_BASE_URL.trim();
 
   const defaultPackage = {
     deadWeightKg: Number(process.env.DELHIVERY_DEFAULT_WEIGHT_KG ?? "0.5"),
@@ -130,11 +154,11 @@ export function getDelhiveryConfig(): DelhiveryConfig {
     mode,
     baseUrl: baseUrl.replace(/\/$/, ""),
     token,
-    pincodePath: process.env.DELHIVERY_PINCODE_PATH ?? "/c/api/pin-codes/json/",
-    shipmentCreatePath: process.env.DELHIVERY_SHIPMENT_CREATE_PATH ?? "/api/cmu/create.json",
-    pickupRequestPath: process.env.DELHIVERY_PICKUP_REQUEST_PATH ?? "/fm/request/new/",
-    waybillPath: process.env.DELHIVERY_WAYBILL_PATH ?? "/waybill/api/bulk/json/",
-    trackPath: process.env.DELHIVERY_TRACK_PATH ?? "/api/v1/packages/json/",
+    pincodePath: (process.env.DELHIVERY_PINCODE_PATH ?? "/c/api/pin-codes/json/").trim(),
+    shipmentCreatePath: (process.env.DELHIVERY_SHIPMENT_CREATE_PATH ?? "/api/cmu/create.json").trim(),
+    pickupRequestPath: (process.env.DELHIVERY_PICKUP_REQUEST_PATH ?? "/fm/request/new/").trim(),
+    waybillPath: (process.env.DELHIVERY_WAYBILL_PATH ?? "/waybill/api/bulk/json/").trim(),
+    trackPath: (process.env.DELHIVERY_TRACK_PATH ?? "/api/v1/packages/json/").trim(),
     webhookSecret: process.env.DELHIVERY_WEBHOOK_SECRET,
     defaultPackage,
   };
@@ -156,7 +180,21 @@ export async function checkDelhiveryServiceability(pinCode: string): Promise<Ser
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Delhivery serviceability check failed (${response.status}).`);
+    if (response.status === 401 && shouldBypassServiceabilityAuthFailure()) {
+      return {
+        pinCode: normalizedPin,
+        serviceable: true,
+        embargoed: false,
+        remark: "AUTH_BYPASSED",
+        raw: body,
+      };
+    }
+
+    throw new DelhiveryApiError(`Delhivery serviceability check failed (${response.status}).`, {
+      status: response.status,
+      body,
+      code: response.status === 401 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_SERVICEABILITY_FAILED",
+    });
   }
 
   const records = extractServiceabilityRecords(body);

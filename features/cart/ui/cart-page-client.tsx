@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { Minus, Plus, Store, Trash2, Truck } from "lucide-react";
+import { Gift, Minus, Plus, ShieldCheck, Sparkles, Store, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCartStore } from "@/features/cart/store";
@@ -63,23 +63,32 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const hasItems = liveLines.length > 0;
 
   return (
-    <div className="grid gap-6 sm:gap-8 lg:grid-cols-[2fr_1fr]">
-      <section className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Your multi-vendor cart</h1>
+    <div className="space-y-6">
+      <header className="surface-mesh soft-shadow rounded-4xl border border-white/70 p-6 sm:p-8 lg:p-10">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Multi-vendor cart</p>
+            <h1 className="font-display mt-3 text-4xl font-semibold leading-tight sm:text-5xl">A cleaner cart with bigger product blocks and a stronger order summary</h1>
+            <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">The cart now uses wider cards, calmer spacing, and clearer vendor grouping before checkout.</p>
+          </div>
           {hasItems ? (
-            <Button onClick={clear} type="button" variant="ghost" size="sm">
+            <Button onClick={clear} type="button" variant="outline" className="border-[#efc9ba] bg-white/80">
               Clear cart
             </Button>
           ) : null}
         </div>
+      </header>
 
-        {!hasItems ? (
-          <Card className="border-dashed">
+      <div className="grid gap-6 sm:gap-8 lg:grid-cols-[2fr_1fr]">
+        <section className="space-y-4">
+
+          {!hasItems ? (
+          <Card className="rounded-4xl border-dashed border-[#e5c9bb] bg-white/70">
             <CardContent className="p-10 text-center">
-              <h2 className="text-lg font-semibold">Cart is empty</h2>
+              <Gift className="mx-auto h-10 w-10 text-primary" />
+              <h2 className="font-display mt-4 text-3xl font-semibold">Cart is empty</h2>
               <p className="mt-2 text-sm text-muted-foreground">Add gifts from multiple vendors and compare live offers.</p>
-              <Button asChild className="mt-4">
+              <Button asChild className="mt-5">
                 <Link href="/store">Start shopping</Link>
               </Button>
             </CardContent>
@@ -91,9 +100,9 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               const maxQty = line.product.maxOrderQty ?? 10;
 
               return (
-              <Card key={line.product.id}>
-                <CardContent className="grid grid-cols-[96px_1fr] gap-3 p-3 sm:grid-cols-[120px_1fr_auto] sm:gap-4 sm:p-4 sm:items-center">
-                  <div className="relative aspect-square overflow-hidden rounded-lg">
+              <Card key={line.product.id} className="glass-panel rounded-4xl border-white/60">
+                <CardContent className="grid grid-cols-[96px_1fr] gap-3 p-3 sm:grid-cols-[128px_1fr_auto] sm:gap-5 sm:p-5 sm:items-center">
+                  <div className="relative aspect-square overflow-hidden rounded-3xl bg-[#fff2e8]">
                     <Image
                       src={line.product.images[0]}
                       alt={line.product.name}
@@ -104,12 +113,12 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   </div>
 
                   <div className="min-w-0 space-y-2">
-                    <p className="text-xs text-muted-foreground">{line.product.category}</p>
-                    <h3 className="font-semibold leading-snug">{line.product.name}</h3>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{line.product.category}</p>
+                    <h3 className="text-lg font-semibold leading-snug">{line.product.name}</h3>
 
                     {line.offers.length > 0 ? (
                       <select
-                        className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        className="min-h-11 w-full rounded-full border border-input bg-background/90 px-3 py-2 text-sm"
                         value={line.selectedOffer?.id ?? ""}
                         onChange={(event) => setOffer(line.product.id, event.target.value || undefined)}
                       >
@@ -125,7 +134,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   </div>
 
                   <div className="col-span-2 space-y-3 sm:col-span-1">
-                    <div className="inline-flex min-h-10 items-center rounded-md border border-border bg-card">
+                    <div className="inline-flex min-h-11 items-center rounded-full border border-border/70 bg-background/90 px-1">
                       <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity - 1, minQty, maxQty)} disabled={line.quantity <= minQty}>
                         <Minus className="h-4 w-4" />
                       </Button>
@@ -138,9 +147,9 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                     <p className="text-sm font-semibold text-primary sm:text-right">{formatCurrency(line.lineSubtotal)}</p>
                     <Button
                       onClick={() => removeItem(line.product.id)}
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="gap-1 sm:ml-auto"
+                      className="gap-1 border-[#efc9ba] bg-white/80 sm:ml-auto"
                       type="button"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remove
@@ -154,14 +163,14 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
         )}
       </section>
 
-      <aside>
-        <Card className="h-fit lg:sticky lg:top-24">
+        <aside>
+        <Card className="h-fit rounded-4xl border-white/60 bg-[linear-gradient(180deg,#fffaf5_0%,#fff4ed_100%)] lg:sticky lg:top-24">
           <CardHeader>
-            <CardTitle>Order Summary</CardTitle>
+            <CardTitle className="font-display text-3xl">Order Summary</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {vendorRows.length > 0 ? (
-              <div className="space-y-3 rounded-lg border border-border p-3">
+              <div className="space-y-3 rounded-3xl border border-white/70 bg-white/80 p-4">
                 {vendorRows.map((vendor) => (
                   <div key={vendor.storeId} className="space-y-1 text-sm">
                     <p className="flex items-center gap-2 font-medium"><Store className="h-3.5 w-3.5" />{vendor.name}</p>
@@ -171,6 +180,24 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 ))}
               </div>
             ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="rounded-3xl border border-white/70 bg-white/75 p-4">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <p className="mt-3 text-sm font-semibold">Premium presentation</p>
+                <p className="mt-1 text-sm text-muted-foreground">Cleaner review before payment.</p>
+              </div>
+              <div className="rounded-3xl border border-white/70 bg-white/75 p-4">
+                <Truck className="h-4 w-4 text-primary" />
+                <p className="mt-3 text-sm font-semibold">Shipping visibility</p>
+                <p className="mt-1 text-sm text-muted-foreground">Vendor-level freight remains visible.</p>
+              </div>
+              <div className="rounded-3xl border border-white/70 bg-white/75 p-4">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <p className="mt-3 text-sm font-semibold">Checkout ready</p>
+                <p className="mt-1 text-sm text-muted-foreground">Proceed with a calmer summary state.</p>
+              </div>
+            </div>
 
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between">
@@ -200,7 +227,8 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
             </Button>
           </CardContent>
         </Card>
-      </aside>
+        </aside>
+      </div>
     </div>
   );
 }

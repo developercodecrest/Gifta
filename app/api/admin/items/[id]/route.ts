@@ -24,6 +24,11 @@ export async function PATCH(
       featured?: boolean;
       tags?: string[];
       images?: string[];
+      offerStoreId?: string;
+      offerPrice?: number;
+      originalPrice?: number;
+      deliveryEtaHours?: number;
+      offerInStock?: boolean;
     };
 
     if (
@@ -34,7 +39,12 @@ export async function PATCH(
       typeof body.inStock !== "boolean" &&
       typeof body.featured !== "boolean" &&
       !Array.isArray(body.tags) &&
-      !Array.isArray(body.images)
+      !Array.isArray(body.images) &&
+      typeof body.offerStoreId !== "string" &&
+      typeof body.offerPrice !== "number" &&
+      typeof body.originalPrice !== "number" &&
+      typeof body.deliveryEtaHours !== "number" &&
+      typeof body.offerInStock !== "boolean"
     ) {
       return badRequest("Provide at least one valid field to update");
     }
@@ -49,6 +59,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === "FORBIDDEN_ITEM_SCOPE") {
       return unauthorized("Not allowed");
+    }
+    if (error instanceof Error && error.message === "OFFER_NOT_FOUND") {
+      return badRequest("Offer not found for selected store");
     }
 
     return serverError("Unable to update item", error);

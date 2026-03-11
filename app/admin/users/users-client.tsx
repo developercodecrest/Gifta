@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, Filter, LayoutGrid, List, Pencil, Table2, Trash2 } from "lucide-react";
+import { Eye, LayoutGrid, List, Pencil, Table2, Trash2 } from "lucide-react";
+import { AdminEmptyState } from "@/app/admin/_components/admin-surface";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -29,16 +30,30 @@ const roles = ["user", "storeOwner", "sadmin"] as const;
 
 export function UsersClient({ users }: { users: AdminUser[] }) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [search, setSearch] = useState("");
 
-  const sorted = useMemo(
-    () => [...users].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
-    [users],
-  );
+  const sorted = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return [...users]
+      .filter((user) => {
+        if (!query) return true;
+        return [user.fullName, user.email, user.phone, user.userId]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  }, [users, search]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-3">
-        <div className="flex items-center gap-2">
+      <div className="grid gap-3 rounded-[1.4rem] border border-border/70 bg-card/85 p-4 lg:grid-cols-[minmax(0,1.4fr)_auto_auto]">
+        <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, phone, user ID" />
+        <div className="flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground">
+          {sorted.length} users
+        </div>
+        <div className="flex items-center justify-end gap-2">
           <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
             <List className="h-4 w-4" /> List
           </Button>
@@ -49,10 +64,11 @@ export function UsersClient({ users }: { users: AdminUser[] }) {
             <Table2 className="h-4 w-4" /> Table
           </Button>
         </div>
-        <Button variant="outline" size="sm"><Filter className="h-4 w-4" /> Filters</Button>
       </div>
 
-      {viewMode === "table" ? (
+      {!sorted.length ? (
+        <AdminEmptyState title="No users matched" description="Try a broader search to locate the account you want to review or edit." />
+      ) : viewMode === "table" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -82,7 +98,7 @@ export function UsersClient({ users }: { users: AdminUser[] }) {
       ) : viewMode === "list" ? (
         <div className="space-y-3">
           {sorted.map((user) => (
-            <Card key={user.userId}><CardContent className="flex items-start justify-between gap-3 p-4">
+            <Card key={user.userId} className="border-border/70 bg-background/80"><CardContent className="flex items-start justify-between gap-3 p-4">
               <div className="space-y-1.5">
                 <p className="font-semibold">{user.fullName}</p>
                 <p className="text-sm text-muted-foreground">{user.email}</p>
@@ -95,7 +111,7 @@ export function UsersClient({ users }: { users: AdminUser[] }) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sorted.map((user) => (
-            <Card key={user.userId}><CardContent className="space-y-2 p-5">
+            <Card key={user.userId} className="border-border/70 bg-background/80"><CardContent className="space-y-2 p-5">
               <p className="font-semibold">{user.fullName}</p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
               <p className="text-xs text-muted-foreground">{user.phone ?? "-"}</p>

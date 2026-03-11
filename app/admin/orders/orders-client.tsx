@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Eye, Filter, LayoutGrid, List, Pencil, Table2, Trash2 } from "lucide-react";
+import { Eye, LayoutGrid, List, Pencil, Table2, Trash2 } from "lucide-react";
+import { AdminEmptyState } from "@/app/admin/_components/admin-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type AdminOrder = {
@@ -40,16 +42,40 @@ const statuses: AdminOrder["status"][] = ["placed", "packed", "out-for-delivery"
 
 export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<"all" | AdminOrder["status"]>("all");
 
-  const sorted = useMemo(
-    () => [...orders].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
-    [orders],
-  );
+  const sorted = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return [...orders]
+      .filter((order) => {
+        if (status !== "all" && order.status !== status) return false;
+        if (!query) return true;
+        return [order.id, order.customerName, order.customerEmail, order.storeId, order.productId, order.shippingAwb]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+  }, [orders, search, status]);
+
+  const pendingCount = sorted.filter((order) => ["placed", "packed", "out-for-delivery"].includes(order.status)).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-3">
-        <div className="flex items-center gap-2">
+      <div className="grid gap-3 rounded-[1.4rem] border border-border/70 bg-card/85 p-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.85fr)_auto_auto]">
+        <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search order, customer, store, AWB" />
+        <select value={status} onChange={(event) => setStatus(event.target.value as "all" | AdminOrder["status"])} className="min-h-11 rounded-full border border-input bg-background px-4 py-2 text-sm">
+          <option value="all">All statuses</option>
+          {statuses.map((entry) => (
+            <option key={entry} value={entry}>{entry}</option>
+          ))}
+        </select>
+        <div className="flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground">
+          {sorted.length} orders • {pendingCount} pending
+        </div>
+        <div className="flex items-center justify-end gap-2">
           <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
             <List className="h-4 w-4" /> List
           </Button>
@@ -60,10 +86,11 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
             <Table2 className="h-4 w-4" /> Table
           </Button>
         </div>
-        <Button variant="outline" size="sm"><Filter className="h-4 w-4" /> Filters</Button>
       </div>
 
-      {viewMode === "table" ? (
+      {!sorted.length ? (
+        <AdminEmptyState title="No orders matched" description="Broaden the search or status filter to inspect more of the fulfillment queue." />
+      ) : viewMode === "table" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -101,7 +128,7 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
       ) : viewMode === "list" ? (
         <div className="space-y-3">
           {sorted.map((order) => (
-            <Card key={order.id}><CardContent className="flex items-start justify-between gap-3 p-4">
+            <Card key={order.id} className="border-border/70 bg-background/80"><CardContent className="flex items-start justify-between gap-3 p-4">
               <div className="space-y-1.5">
                 <p className="font-semibold">{order.id}</p>
                 <p className="text-sm text-muted-foreground">{order.customerName} • Qty {order.quantity}</p>
@@ -120,7 +147,7 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sorted.map((order) => (
-            <Card key={order.id}><CardContent className="space-y-2 p-5">
+            <Card key={order.id} className="border-border/70 bg-background/80"><CardContent className="space-y-2 p-5">
               <p className="font-semibold">{order.id}</p>
               <p className="text-sm text-muted-foreground">{order.customerName}</p>
               <p className="text-sm text-muted-foreground">{order.status}</p>

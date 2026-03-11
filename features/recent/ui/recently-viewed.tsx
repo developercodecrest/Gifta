@@ -20,10 +20,10 @@ export function RecentlyViewed({ currentId }: { currentId: string }) {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-2xl font-bold tracking-tight">Recently viewed</h2>
+        <h2 className="font-display text-3xl font-semibold tracking-tight">Recently viewed</h2>
         <Separator className="flex-1" />
       </div>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {list.map((item) => (
           <ProductCard key={item.id} product={item} />
         ))}

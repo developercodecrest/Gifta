@@ -4,13 +4,28 @@ import { NextResponse } from "next/server";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
-import { checkDelhiveryServiceability, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { checkDelhiveryServiceability, DelhiveryApiError, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { getUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
 
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+
+function hasUsableRazorpayCredentials() {
+  const keyId = razorpayKeyId?.trim();
+  const keySecret = razorpayKeySecret?.trim();
+
+  if (!keyId || !keySecret) {
+    return false;
+  }
+
+  if (/x{6,}/i.test(keyId) || /x{6,}/i.test(keySecret)) {
+    return false;
+  }
+
+  return /^rzp_(test|live)_/.test(keyId);
+}
 
 type OrderRequest = {
   promoCode?: string;
@@ -27,11 +42,14 @@ type OrderRequest = {
 };
 
 export async function POST(request: Request) {
-  if (!razorpayKeyId || !razorpayKeySecret) {
+  if (!hasUsableRazorpayCredentials()) {
     return NextResponse.json(
       {
         success: false,
-        error: { code: "RAZORPAY_CONFIG_MISSING", message: "Razorpay is not configured on server." },
+        error: {
+          code: "RAZORPAY_CONFIG_MISSING",
+          message: "Razorpay test credentials are missing or still using placeholder values. Set a real RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+        },
       },
       { status: 500 },
     );
@@ -53,22 +71,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const serviceability = await checkDelhiveryServiceability(payload.customer.pinCode);
-    if (!serviceability.serviceable) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "UNSERVICEABLE_PINCODE",
-            message: "Delivery is currently unavailable for this pincode.",
-            details: {
-              pinCode: payload.customer.pinCode,
-              remark: serviceability.remark,
+    try {
+      const serviceability = await checkDelhiveryServiceability(payload.customer.pinCode);
+      if (!serviceability.serviceable) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "UNSERVICEABLE_PINCODE",
+              message: "Delivery is currently unavailable for this pincode.",
+              details: {
+                pinCode: payload.customer.pinCode,
+                remark: serviceability.remark,
+              },
             },
           },
-        },
-        { status: 400 },
-      );
+          { status: 400 },
+        );
+      }
+    } catch (error) {
+      if (error instanceof DelhiveryApiError) {
+        console.warn("Delhivery serviceability lookup failed during Razorpay order creation.", {
+          status: error.status,
+          code: error.code,
+        });
+      } else {
+        console.warn("Unexpected Delhivery serviceability failure during Razorpay order creation.", error);
+      }
     }
   }
 
@@ -104,20 +133,58 @@ export async function POST(request: Request) {
   });
 
   const orderRef = createOrderRef();
-  const order = await razorpay.orders.create({
-    amount: Math.round(total * 100),
-    currency: "INR",
-    receipt: orderRef,
-    notes: {
-      customerName: payload.customer?.fullName ?? "",
-      customerEmail: payload.customer?.email ?? "",
-      customerPhone: payload.customer?.phone ?? "",
-      city: payload.customer?.city ?? "",
-      addressLabel: payload.customer?.addressLabel ?? "",
-      promoCode: promo.code,
-      lineCount: String(snapshot.lines.length),
-    },
-  });
+  let order;
+
+  try {
+    order = await razorpay.orders.create({
+      amount: Math.round(total * 100),
+      currency: "INR",
+      receipt: orderRef,
+      notes: {
+        customerName: payload.customer?.fullName ?? "",
+        customerEmail: payload.customer?.email ?? "",
+        customerPhone: payload.customer?.phone ?? "",
+        city: payload.customer?.city ?? "",
+        addressLabel: payload.customer?.addressLabel ?? "",
+        promoCode: promo.code,
+        lineCount: String(snapshot.lines.length),
+      },
+    });
+  } catch (error) {
+    const razorpayError = error as {
+      statusCode?: number;
+      error?: { code?: string; description?: string };
+    };
+
+    if (razorpayError?.statusCode === 401) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "RAZORPAY_AUTH_FAILED",
+            message: "Razorpay authentication failed. Provide a valid RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET pair for the same test or live mode.",
+            details: {
+              providerCode: razorpayError.error?.code,
+              providerDescription: razorpayError.error?.description,
+            },
+          },
+        },
+        { status: 500 },
+      );
+    }
+
+    console.error("Razorpay order creation failed.", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "RAZORPAY_ORDER_CREATE_FAILED",
+          message: "Unable to create Razorpay order right now.",
+        },
+      },
+      { status: 500 },
+    );
+  }
 
   const db = await getMongoDb();
   const orders = db.collection<AdminOrderDto>("orders");

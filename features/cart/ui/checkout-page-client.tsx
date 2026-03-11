@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CreditCard, MapPin, ShieldCheck, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -434,11 +435,11 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   if (snapshot.lines.length === 0) {
     return (
-      <Card className="border-dashed">
+      <Card className="rounded-4xl border-dashed border-[#e5c9bb] bg-white/70">
         <CardContent className="p-10 text-center">
-          <h1 className="text-2xl font-bold">Checkout is empty</h1>
+          <h1 className="font-display text-3xl font-semibold">Checkout is empty</h1>
           <p className="mt-2 text-sm text-muted-foreground">Add products to cart before placing your order.</p>
-          <Button asChild className="mt-4">
+          <Button asChild className="mt-5">
             <Link href="/store">Continue shopping</Link>
           </Button>
         </CardContent>
@@ -448,22 +449,22 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-2xl border border-border bg-card p-5 text-center sm:p-7">
-        <Badge variant="secondary">Secure checkout</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Checkout</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Choose Razorpay or Cash on Delivery and place your multi-vendor gift order.</p>
+      <header className="surface-mesh soft-shadow rounded-4xl border border-white/70 p-6 text-center sm:p-8 lg:p-10">
+        <Badge variant="secondary" className="border-0 bg-white/80 text-slate-800">Secure checkout</Badge>
+        <h1 className="font-display mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">Checkout with a cleaner form, calmer summary, and stronger payment clarity</h1>
+        <p className="mx-auto mt-3 max-w-3xl text-sm text-muted-foreground sm:text-base">Choose online payment or Cash on Delivery and place your multi-vendor gift order in the upgraded purchase flow.</p>
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.9fr)] lg:gap-10">
         <section>
-          <Card>
+          <Card className="glass-panel rounded-4xl border-white/60">
             <CardHeader>
-              <CardTitle>Delivery details</CardTitle>
+              <CardTitle className="font-display text-3xl">Delivery details</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={onSubmit} className="space-y-4">
                 {addresses.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2 rounded-3xl border border-white/70 bg-white/65 p-4">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="mb-0 block text-xs uppercase tracking-wide text-muted-foreground">Delivery address</Label>
                       {status === "authenticated" ? (
@@ -475,7 +476,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                       ) : null}
                     </div>
                     <select
-                      className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      className="min-h-11 w-full rounded-full border border-input bg-background/90 px-3 py-2 text-sm"
                       value={selectedAddress}
                       onChange={(event) => {
                         const value = event.target.value;
@@ -494,7 +495,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                     </select>
                   </div>
                 ) : status === "authenticated" ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2 rounded-3xl border border-white/70 bg-white/65 p-4">
                     <Label className="mb-0 block text-xs uppercase tracking-wide text-muted-foreground">Delivery address</Label>
                     <Button type="button" variant="outline" size="sm" onClick={openNewAddressModal}>New Address</Button>
                   </div>
@@ -537,7 +538,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                       variant={paymentMethod === "razorpay" ? "default" : "outline"}
                       onClick={() => setPaymentMethod("razorpay")}
                     >
-                      Razorpay
+                      Online Payment
                     </Button>
                     <Button
                       type="button"
@@ -553,20 +554,26 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   {isPaying
                     ? "Processing..."
                     : paymentMethod === "razorpay"
-                      ? `Pay ${formatCurrency(uiTotal)} with Razorpay`
+                      ? `Complete Payment ${formatCurrency(uiTotal)}`
                       : `Place COD order (${formatCurrency(uiTotal)})`}
                 </Button>
                 {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <CheckoutNote icon={MapPin} label="Address aware" text="Saved addresses stay in flow without leaving checkout." />
+                  <CheckoutNote icon={CreditCard} label="Payment choice" text="Razorpay and COD remain clear and visible." />
+                  <CheckoutNote icon={ShieldCheck} label="Secure path" text="The form and summary now feel more trustworthy." />
+                </div>
               </form>
             </CardContent>
           </Card>
         </section>
 
         <aside>
-          <Card>
+          <Card className="rounded-4xl border-white/60 bg-[linear-gradient(180deg,#fffaf5_0%,#fff4ed_100%)] lg:sticky lg:top-24">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
-                <CardTitle>Your order</CardTitle>
+                <CardTitle className="font-display text-3xl">Your order</CardTitle>
                 <Button asChild variant="ghost" size="sm">
                   <Link href="/cart">Edit cart</Link>
                 </Button>
@@ -631,13 +638,18 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   <dd className="text-base font-bold">{formatCurrency(uiTotal)}</dd>
                 </div>
               </dl>
+
+              <div className="mt-5 rounded-3xl border border-white/70 bg-white/75 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-primary" />Premium checkout surface</p>
+                <p className="mt-1 text-sm text-muted-foreground">Summary, code entry, and totals are now easier to scan across desktop and mobile.</p>
+              </div>
             </CardContent>
           </Card>
         </aside>
       </div>
 
       <Dialog open={newAddressOpen} onOpenChange={setNewAddressOpen}>
-        <DialogContent>
+        <DialogContent className="rounded-4xl border-white/60 bg-white">
           <DialogHeader>
             <DialogTitle>{newAddressMode === "edit" ? "Edit address" : "Add new address"}</DialogTitle>
             <DialogDescription>
@@ -668,7 +680,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
       </Dialog>
 
       <Dialog open={deleteAddressOpen} onOpenChange={setDeleteAddressOpen}>
-        <DialogContent>
+        <DialogContent className="rounded-4xl border-white/60 bg-white">
           <DialogHeader>
             <DialogTitle>Delete address?</DialogTitle>
             <DialogDescription>
@@ -696,6 +708,24 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CheckoutNote({
+  icon: Icon,
+  label,
+  text,
+}: {
+  icon: typeof MapPin;
+  label: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-white/70 bg-white/70 p-4">
+      <Icon className="h-4 w-4 text-primary" />
+      <p className="mt-3 text-sm font-semibold">{label}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{text}</p>
     </div>
   );
 }

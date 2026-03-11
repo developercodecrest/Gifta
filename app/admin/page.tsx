@@ -1,8 +1,10 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { roleLabels } from "@/lib/roles";
+import Link from "next/link";
+import { ArrowRight, Building2, PackageSearch, Settings2, Truck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminDashboardScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
+import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
 
 export default async function AdminDashboardPage() {
   const identity = await ensureAdminAccess("dashboard");
@@ -29,24 +31,97 @@ export default async function AdminDashboardPage() {
     ["Users", data.totalUsers],
   ] as const;
 
+  const modules = [
+    {
+      title: "Vendor operations",
+      description: "Onboard sellers, configure catalog taxonomy, and monitor active storefronts.",
+      href: "/admin/vendors",
+      icon: Building2,
+    },
+    {
+      title: "Catalog control",
+      description: "Create store-linked items with pricing, imagery, tags, and offer coverage.",
+      href: "/admin/items",
+      icon: PackageSearch,
+    },
+    {
+      title: "Fulfillment pulse",
+      description: "Track packed, out-for-delivery, and exception orders across the marketplace.",
+      href: "/admin/orders",
+      icon: Truck,
+    },
+    {
+      title: "Platform settings",
+      description: "Validate payment and shipping integrations and review marketplace defaults.",
+      href: "/admin/settings",
+      icon: Settings2,
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-border bg-card p-5">
-        <Badge>Admin</Badge>
-        <h1 className="mt-2 text-2xl font-bold">Marketplace Control Tower</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Viewing as {roleLabels[identity.role]}. Monitor vendor operations and user activity.</p>
-      </header>
+      <AdminHero
+        eyebrow="Command Center"
+        title="Marketplace control tower"
+        description="Track vendor growth, catalog breadth, fulfillment load, and platform access from a single admin surface built for multi-vendor ecommerce operations."
+        actions={
+          <>
+            <Button asChild>
+              <Link href="/admin/vendors/create">Launch store setup</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/items">Open catalog</Link>
+            </Button>
+          </>
+        }
+        stats={[
+          { label: "Active vendors", value: String(data.activeVendors), tone: "warm" },
+          { label: "Pending orders", value: String(data.pendingOrders), tone: "sun" },
+          { label: "Live riders", value: String(data.activeRiders), tone: "mint" },
+          { label: "Signed in scope", value: identity.role, tone: "warm" },
+        ]}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(([label, value]) => (
-          <Card key={label}>
-            <CardContent className="p-5">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-              <p className="mt-2 text-2xl font-bold">{value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <AdminSection title="Marketplace snapshot" description="The numbers below reflect the scoped data available to your current admin role.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {metrics.map(([label, value]) => (
+            <Card key={label} className="border-border/70 bg-background/70">
+              <CardContent className="p-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-foreground">{value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </AdminSection>
+
+      <AdminSection title="Priority modules" description="Jump into the operational areas that matter most for a marketplace team.">
+        <div className="grid gap-4 md:grid-cols-2">
+          {modules.map((module) => {
+            const Icon = module.icon;
+            return (
+              <Card key={module.href} className="border-border/70 bg-background/70 transition-transform duration-200 hover:-translate-y-0.5">
+                <CardHeader className="space-y-4">
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-2">
+                    <CardTitle>{module.title}</CardTitle>
+                    <p className="text-sm leading-6 text-muted-foreground">{module.description}</p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Button asChild variant="outline">
+                    <Link href={module.href}>
+                      Open module <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </AdminSection>
     </div>
   );
 }

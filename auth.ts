@@ -167,29 +167,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account }) {
       if (mongoClient) {
         const provider = account?.provider;
+        let resolvedUserId = user.id;
 
         if (provider === "google" && user.email) {
           // For OAuth, use email as source of truth to avoid creating a second user doc
           // when an OTP/credentials user already exists with the same email.
-          await ensureAuthUserRole(user.email, "user", { forceDefaultRole: true });
+          const ensuredUser = await ensureAuthUserRole(user.email, "user", { forceDefaultRole: true });
+          resolvedUserId = ensuredUser.id;
         } else if (user.id) {
-          await ensureAuthUserById({
+          const ensuredUser = await ensureAuthUserById({
             userId: user.id,
             email: user.email ?? undefined,
             name: user.name ?? undefined,
             defaultRole: "user",
           });
+          resolvedUserId = ensuredUser.id;
         } else if (user.email) {
-          await ensureAuthUserRole(user.email, "user");
+          const ensuredUser = await ensureAuthUserRole(user.email, "user");
+          resolvedUserId = ensuredUser.id;
         }
 
-        if (provider === "google" && user.id) {
+        if (provider === "google" && resolvedUserId) {
           await upsertProfile(
             {
               email: user.email ?? undefined,
               fullName: user.name ?? undefined,
             },
-            user.id,
+            resolvedUserId,
           );
         }
       }

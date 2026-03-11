@@ -34,26 +34,34 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const currentQty = existing?.quantity ?? 0;
 
   return (
-    <Card className="group overflow-hidden shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <Link href={`/store/${product.slug}`} className="relative block aspect-4/3 w-full overflow-hidden">
+    <Card className="group glass-panel overflow-hidden rounded-[1.75rem] border-white/60 shadow-[0_24px_60px_-40px_rgba(67,34,29,0.45)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_30px_80px_-40px_rgba(67,34,29,0.58)]">
+      <Link href={`/store/${product.slug}`} className="relative block aspect-square w-full overflow-hidden bg-[#f8ede5]">
         <Image
           src={product.images[0]}
           alt={product.name}
           fill
-          className="object-cover transition duration-500 group-hover:scale-105"
+          className="object-cover transition duration-700 group-hover:scale-110"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
-        <div className="absolute left-2 top-2 flex flex-wrap gap-1">
+        <div className="absolute inset-x-0 top-0 h-24 bg-linear-to-b from-black/30 to-transparent" />
+        <div className="absolute left-3 top-3 flex flex-wrap gap-1">
           {product.featured && <Badge className="text-[10px]">Featured</Badge>}
-          {discount > 0 ? <Badge variant="warning" className="text-[10px]">{discount}% OFF</Badge> : null}
+          {discount > 0 ? <Badge variant="warning" className="border-0 bg-white/90 text-[10px] text-[#7b3d15]">{discount}% OFF</Badge> : null}
+        </div>
+        <div className="absolute bottom-3 left-3 rounded-full bg-white/88 px-3 py-1 text-[11px] font-semibold text-slate-800 backdrop-blur">
+          {product.category}
         </div>
       </Link>
 
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-3 p-4 pt-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{product.category}</p>
-            <Link href={`/store/${product.slug}`} className="mt-1 block text-base font-semibold leading-snug text-foreground transition hover:text-primary">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Star className="h-4 w-4 fill-current text-amber-500" />
+              <span className="font-medium text-foreground">{product.rating}</span>
+              <span>({product.reviews})</span>
+            </div>
+            <Link href={`/store/${product.slug}`} className="mt-2 block text-lg font-semibold leading-snug text-foreground transition hover:text-primary">
               {product.name}
             </Link>
           </div>
@@ -61,7 +69,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             type="button"
             onClick={() => toggle(product.id)}
             className={cn(
-              "min-h-10 min-w-10 p-2",
+              "min-h-10 min-w-10 rounded-full border-white/70 bg-white/92 p-2 text-slate-700 shadow-sm",
               isLiked && "bg-primary text-primary-foreground hover:bg-primary/90",
             )}
             aria-label="Toggle wishlist"
@@ -72,29 +80,23 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Star className="h-4 w-4 fill-current text-amber-500" />
-          <span>{product.rating}</span>
-          <span>({product.reviews})</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold">{formatCurrency(price)}</span>
+        <div className="flex items-end gap-2">
+          <span className="text-2xl font-bold tracking-tight">{formatCurrency(price)}</span>
           {originalPrice && (
-            <span className="text-sm text-muted line-through">{formatCurrency(originalPrice)}</span>
+            <span className="pb-0.5 text-sm text-muted-foreground line-through">{formatCurrency(originalPrice)}</span>
           )}
         </div>
 
         {"bestOffer" in product && product.bestOffer ? (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p className="flex items-center gap-1"><Store className="h-3.5 w-3.5" /> Best offer by {product.bestOffer.store?.name ?? "Vendor"}</p>
+          <div className="rounded-2xl bg-[#fff3ea] p-3 text-xs text-[#6f4f43]">
+            <p className="flex items-center gap-1 font-medium text-[#3c2a25]"><Store className="h-3.5 w-3.5" /> Best offer by {product.bestOffer.store?.name ?? "Vendor"}</p>
             <p>{product.offerCount} vendor offer{product.offerCount === 1 ? "" : "s"}</p>
           </div>
         ) : null}
 
         {existing ? (
           <div className="space-y-2">
-            <div className="inline-flex min-h-10 w-full items-center justify-between rounded-md border border-border bg-card">
+            <div className="inline-flex min-h-11 w-full items-center justify-between rounded-full border border-border/70 bg-background/90 px-1">
               <Button variant="ghost" size="icon" onClick={() => updateQty(product.id, currentQty - 1, minQty, maxQty)} disabled={currentQty <= minQty}>
                 <Minus className="h-4 w-4" />
               </Button>
@@ -118,7 +120,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
               )
             }
             disabled={outOfStock}
-            className="w-full"
+            className="h-11 w-full"
           >
             <ShoppingCart className="h-4 w-4" />
             {outOfStock ? "Out of stock" : "Add to cart"}

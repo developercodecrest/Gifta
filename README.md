@@ -48,7 +48,7 @@ DELHIVERY_MODE=test
 DELHIVERY_API_TOKEN_TEST=delhivery_test_token
 DELHIVERY_API_TOKEN_LIVE=delhivery_live_token
 DELHIVERY_TEST_BASE_URL=https://staging-express.delhivery.com
-DELHIVERY_LIVE_BASE_URL=https://track.delhivery.com
+DELHIVERY_LIVE_BASE_URL=https://staging-express.delhivery.com
 DELHIVERY_PINCODE_PATH=/c/api/pin-codes/json/
 DELHIVERY_SHIPMENT_CREATE_PATH=/api/cmu/create.json
 DELHIVERY_PICKUP_REQUEST_PATH=/fm/request/new/
@@ -72,6 +72,7 @@ Razorpay notes:
 Delhivery notes:
 
 - Use `DELHIVERY_MODE=test` for development and `DELHIVERY_MODE=live` for production.
+- The codebase is currently pinned to `https://staging-express.delhivery.com` for both modes as a temporary project-wide override.
 - Serviceability endpoint used by checkout: `GET /api/shipping/delhivery/serviceability?pinCode=...`
 - Tracking endpoint for user apps: `GET /api/shipping/delhivery/track?orderRef=...`
 - Shipping webhook endpoint: `POST /api/shipping/delhivery/webhook`

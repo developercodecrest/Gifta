@@ -24,7 +24,7 @@ export function AddToCartInline({
 
   if (existing) {
     return (
-      <div className="inline-flex min-h-10 items-center rounded-md border border-border bg-card">
+      <div className="inline-flex min-h-11 items-center rounded-full border border-border/70 bg-background/90 px-1 shadow-sm">
         <Button variant="ghost" size="icon" onClick={() => updateQty(productId, currentQty - 1, minQty, maxQty)} disabled={currentQty <= minQty}>
           <Minus className="h-4 w-4" />
         </Button>
@@ -41,7 +41,7 @@ export function AddToCartInline({
       type="button"
       onClick={() => addItem(productId, minQty, offerId, minQty, maxQty)}
       disabled={outOfStock}
-      className="w-full sm:w-auto"
+      className="h-11 w-full sm:w-auto"
     >
       <ShoppingBag className="h-4 w-4" />
       {outOfStock ? "Out of stock" : "Add to cart"}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Filter } from "lucide-react";
+import { Filter, Search, Sparkles, Star, Store, Truck } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { categories, getProducts, SortOption } from "@/lib/catalog";
 import { listStores, searchItems } from "@/lib/server/ecommerce-service";
 
@@ -23,6 +22,13 @@ type SearchParams = {
   stock?: string;
   page?: string;
 };
+
+const quickFilterLinks = [
+  { label: "Same day", href: "/search?tag=same-day", icon: Truck },
+  { label: "Premium", href: "/search?tag=luxury", icon: Sparkles },
+  { label: "Top rated", href: "/search?sort=rating", icon: Star },
+  { label: "By vendor", href: "/search?q=store", icon: Store },
+];
 
 export default function SearchPage({
   searchParams,
@@ -91,120 +97,160 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
   });
 
   return (
-    <div className="space-y-7 sm:space-y-8">
-      <header className="rounded-4xl border border-border bg-card p-6 sm:p-8">
-        <Badge variant="secondary" className="mb-3">Search</Badge>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Find gifts, categories, and stores</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Search by item name, category, tags, or store name and compare offers from multiple vendors.
-        </p>
+    <div className="space-y-7 sm:space-y-8 py-5 sm:py-6 lg:py-8">
+      <header className="surface-mesh soft-shadow rounded-[2rem] border border-white/70 p-6 sm:p-8 lg:p-10">
+        <Badge variant="secondary" className="border-0 bg-white/80 text-slate-800">Search</Badge>
+        <div className="mt-4 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="font-display text-4xl font-semibold leading-tight sm:text-5xl">Gift search with more visual polish, faster scanning, and wider product space</h1>
+            <p className="mt-3 max-w-3xl text-sm text-muted-foreground sm:text-base">
+              Discover gifts, categories, and vendors with a cleaner layout, stronger filter hierarchy, and more breathing room for product cards.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {quickFilterLinks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link key={item.label} href={item.href} className="rounded-[1.3rem] border border-white/70 bg-white/85 px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5">
+                  <span className="flex items-center gap-2"><Icon className="h-4 w-4 text-primary" /> {item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </header>
 
-      <Card className="rounded-4xl border-border bg-card/80">
-        <CardHeader className="pb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Refine search</p>
-          <CardTitle className="flex items-center gap-2 text-lg"><Filter className="h-4 w-4" />Filters</CardTitle>
-          <Separator />
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-3 md:grid-cols-6" action="/search" method="get">
-            <div className="space-y-1 md:col-span-2">
-              <Label htmlFor="search-q">Search query</Label>
-              <Input
-                id="search-q"
-                defaultValue={query}
-                name="q"
-                placeholder="Search gifts, stores, tags, categories..."
-              />
-            </div>
+      <section className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
+        <Card className="glass-panel sticky top-28 rounded-[2rem] border-white/60">
+          <CardHeader className="pb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Refine search</p>
+            <CardTitle className="flex items-center gap-2 text-xl"><Filter className="h-4 w-4" /> Filters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="grid gap-4" action="/search" method="get">
+              <div className="space-y-2">
+                <Label htmlFor="search-q">Search query</Label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input id="search-q" defaultValue={query} name="q" placeholder="Search gifts, vendors, occasions..." className="h-12 rounded-full pl-10" />
+                </div>
+              </div>
 
-            <select name="category" defaultValue={category} className="min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option value="">All categories</option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="space-y-2">
+                  <Label htmlFor="search-category">Category</Label>
+                  <select id="search-category" name="category" defaultValue={category} className="min-h-12 w-full rounded-[1rem] border border-input bg-background/90 px-3 py-2 text-sm">
+                    <option value="">All categories</option>
+                    {categories.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </div>
 
-            <select name="sort" defaultValue={sort} className="min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option value="featured">Featured</option>
-              <option value="price-asc">Price: Low to high</option>
-              <option value="price-desc">Price: High to low</option>
-              <option value="rating">Top rated</option>
-            </select>
+                <div className="space-y-2">
+                  <Label htmlFor="search-sort">Sort</Label>
+                  <select id="search-sort" name="sort" defaultValue={sort} className="min-h-12 w-full rounded-[1rem] border border-input bg-background/90 px-3 py-2 text-sm">
+                    <option value="featured">Featured</option>
+                    <option value="price-asc">Price: Low to high</option>
+                    <option value="price-desc">Price: High to low</option>
+                    <option value="rating">Top rated</option>
+                  </select>
+                </div>
+              </div>
 
-            <select name="storeId" defaultValue={storeId} className="min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option value="">All vendors</option>
-              {stores.map((store) => (
-                <option key={store.id} value={store.id}>{store.name}</option>
-              ))}
-            </select>
+              <div className="space-y-2">
+                <Label htmlFor="search-store">Vendor</Label>
+                <select id="search-store" name="storeId" defaultValue={storeId} className="min-h-12 w-full rounded-[1rem] border border-input bg-background/90 px-3 py-2 text-sm">
+                  <option value="">All vendors</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
 
-            <Label className="flex min-h-11 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal">
-              <Checkbox name="stock" value="1" defaultChecked={inStock} />
-              In stock only
-            </Label>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="space-y-2">
+                  <Label htmlFor="search-min-price">Min price</Label>
+                  <Input id="search-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="0" className="h-12 rounded-[1rem]" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-max-price">Max price</Label>
+                  <Input id="search-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="5000" className="h-12 rounded-[1rem]" />
+                </div>
+              </div>
 
-            <div className="space-y-1">
-              <Label htmlFor="search-min-price">Min price</Label>
-              <Input id="search-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="Min price" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="search-max-price">Max price</Label>
-              <Input id="search-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="Max price" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="search-min-rating">Min rating</Label>
-              <Input id="search-min-rating" type="number" min={0} max={5} step={0.1} name="minRating" defaultValue={minRating} placeholder="Min rating" />
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <Label htmlFor="search-tag">Tag</Label>
-              <Input id="search-tag" name="tag" defaultValue={tag} placeholder="Tag (same-day, luxury...)" />
-            </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="space-y-2">
+                  <Label htmlFor="search-min-rating">Min rating</Label>
+                  <Input id="search-min-rating" type="number" min={0} max={5} step={0.1} name="minRating" defaultValue={minRating} placeholder="4.0" className="h-12 rounded-[1rem]" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-tag">Tag</Label>
+                  <Input id="search-tag" name="tag" defaultValue={tag} placeholder="same-day, premium..." className="h-12 rounded-[1rem]" />
+                </div>
+              </div>
 
-            <Button className="md:col-span-6" type="submit">Apply filters</Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Label className="flex min-h-12 items-center gap-2 rounded-[1rem] border border-input bg-background/90 px-4 py-3 text-sm font-normal">
+                <Checkbox name="stock" value="1" defaultChecked={inStock} />
+                In stock only
+              </Label>
 
-      <div className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-        <p className="text-sm text-muted-foreground">
-          Showing {result.items.length} of {result.meta.total} products
-        </p>
-      </div>
-
-      {result.items.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="p-8 text-center">
-            <h2 className="text-lg font-semibold">No products found</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Try changing filters or search keyword.</p>
-            <Button asChild variant="outline" className="mt-4">
-              <Link href="/search">Reset filters</Link>
-            </Button>
+              <div className="flex flex-col gap-3 sm:flex-row xl:flex-col">
+                <Button className="h-12 sm:flex-1 xl:w-full" type="submit">Apply filters</Button>
+                <Button asChild variant="outline" className="h-12 border-[#efc9ba] bg-white/80 sm:flex-1 xl:w-full">
+                  <Link href="/search">Reset</Link>
+                </Button>
+              </div>
+            </form>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
-          {result.items.map((item) => (
-            <ProductCard key={item.id} product={item} />
-          ))}
-        </div>
-      )}
 
-      <Pagination
-        current={result.meta.page}
-        total={result.meta.totalPages}
-        q={query}
-        category={category}
-        tag={tag}
-        minPrice={minPrice}
-        maxPrice={maxPrice}
-        minRating={minRating}
-        storeId={storeId}
-        sort={sort}
-        stock={inStock}
-      />
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 rounded-[1.6rem] border border-white/60 bg-white/75 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Showing {result.items.length} of {result.meta.total} products</p>
+              <p className="mt-1 text-xs text-muted-foreground">More horizontal space keeps cards larger and easier to compare across breakpoints.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{sort.replace("-", " ")}</Badge>
+              {category ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{category}</Badge> : null}
+              {tag ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{tag}</Badge> : null}
+            </div>
+          </div>
+
+          {result.items.length === 0 ? (
+            <Card className="rounded-[2rem] border-dashed border-[#e5c9bb] bg-white/70">
+              <CardContent className="p-10 text-center">
+                <h2 className="font-display text-3xl font-semibold">No products found</h2>
+                <p className="mt-2 text-sm text-muted-foreground">Try adjusting the filters, broadening the price range, or removing a tag.</p>
+                <Button asChild variant="outline" className="mt-5 border-[#efc9ba] bg-white/85">
+                  <Link href="/search">Reset filters</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {result.items.map((item) => (
+                <ProductCard key={item.id} product={item} />
+              ))}
+            </div>
+          )}
+
+          <Pagination
+            current={result.meta.page}
+            total={result.meta.totalPages}
+            q={query}
+            category={category}
+            tag={tag}
+            minPrice={minPrice}
+            maxPrice={maxPrice}
+            minRating={minRating}
+            storeId={storeId}
+            sort={sort}
+            stock={inStock}
+          />
+        </div>
+      </section>
     </div>
   );
 }
@@ -263,6 +309,7 @@ function Pagination({
           asChild
           variant={page === current ? "default" : "outline"}
           size="sm"
+          className={page === current ? "" : "border-[#efc9ba] bg-white/80"}
         >
           <Link href={buildHref(page)}>{page}</Link>
         </Button>

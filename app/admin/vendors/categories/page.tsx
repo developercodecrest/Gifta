@@ -1,7 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import { roleLabels } from "@/lib/roles";
 import { getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
+import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
 import { StoreCategoriesManager } from "./store-categories-manager";
 
 export default async function AdminVendorCategoriesPage() {
@@ -10,15 +9,19 @@ export default async function AdminVendorCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-xl border border-border bg-card p-5">
-        <Badge variant="secondary">Vendors / Categories</Badge>
-        <h1 className="mt-2 text-2xl font-bold">Store Categories</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Each store can maintain its own categories and subcategories. Active role: {roleLabels[identity.role]}.
-        </p>
-      </header>
+      <AdminHero
+        eyebrow="Vendor taxonomy"
+        title="Store-specific category architecture"
+        description="Give each seller its own category and subcategory map so catalog creation stays aligned with the storefront actually selling the item."
+        stats={[
+          { label: "Stores", value: String(vendors.length), tone: "warm" },
+          { label: "Scoped role", value: identity.role, tone: "mint" },
+        ]}
+      />
 
-      <StoreCategoriesManager vendors={vendors} />
+      <AdminSection title="Category manager" description="Maintain vendor-specific category trees and keep item creation aligned to the right storefront structure.">
+        <StoreCategoriesManager vendors={vendors} />
+      </AdminSection>
     </div>
   );
 }

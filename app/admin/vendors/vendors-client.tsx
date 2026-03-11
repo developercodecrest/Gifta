@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Filter, LayoutGrid, List, Pencil, Table2, Trash2, Plus } from "lucide-react";
+import { Eye, LayoutGrid, List, Pencil, Table2, Trash2, Plus } from "lucide-react";
+import { AdminEmptyState } from "@/app/admin/_components/admin-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,16 +29,54 @@ type Props = {
 
 export function VendorsClient({ vendors }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [category, setCategory] = useState("all");
 
-  const sorted = useMemo(
-    () => [...vendors].sort((left, right) => Number(right.active) - Number(left.active) || right.rating - left.rating),
+  const categories = useMemo(
+    () => Array.from(new Set(vendors.map((vendor) => vendor.primaryCategory).filter((value): value is string => Boolean(value)))).sort(),
     [vendors],
   );
 
+  const sorted = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return [...vendors]
+      .filter((vendor) => {
+        if (status === "active" && !vendor.active) return false;
+        if (status === "inactive" && vendor.active) return false;
+        if (category !== "all" && vendor.primaryCategory !== category) return false;
+        if (!query) return true;
+
+        return [vendor.name, vendor.primaryCategory, vendor.primarySubcategory]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((left, right) => Number(right.active) - Number(left.active) || right.rating - left.rating);
+  }, [vendors, search, status, category]);
+
+  const activeCount = sorted.filter((vendor) => vendor.active).length;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-3">
-        <div className="flex items-center gap-2">
+      <div className="grid gap-3 rounded-[1.4rem] border border-border/70 bg-card/85 p-4 lg:grid-cols-[minmax(0,1.3fr)_repeat(2,minmax(0,0.8fr))_auto]">
+        <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search store, category, subcategory" />
+        <select value={status} onChange={(event) => setStatus(event.target.value)} className="min-h-11 rounded-full border border-input bg-background px-4 py-2 text-sm">
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 rounded-full border border-input bg-background px-4 py-2 text-sm">
+          <option value="all">All categories</option>
+          {categories.map((entry) => (
+            <option key={entry} value={entry}>{entry}</option>
+          ))}
+        </select>
+        <div className="flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground">
+          {sorted.length} stores • {activeCount} active
+        </div>
+        <div className="flex items-center justify-end gap-2">
           <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
             <List className="h-4 w-4" /> List
           </Button>
@@ -48,12 +87,11 @@ export function VendorsClient({ vendors }: Props) {
             <Table2 className="h-4 w-4" /> Table
           </Button>
         </div>
-        <Button variant="outline" size="sm">
-          <Filter className="h-4 w-4" /> Filters
-        </Button>
       </div>
 
-      {viewMode === "table" ? (
+      {!sorted.length ? (
+        <AdminEmptyState title="No vendors matched" description="Adjust the search or filters, or create a new store to expand the seller network." />
+      ) : viewMode === "table" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -93,7 +131,7 @@ export function VendorsClient({ vendors }: Props) {
       ) : viewMode === "list" ? (
         <div className="space-y-3">
           {sorted.map((vendor) => (
-            <Card key={vendor.id}>
+            <Card key={vendor.id} className="border-border/70 bg-background/80">
               <CardContent className="flex flex-wrap items-start justify-between gap-3 p-4">
                 <div className="space-y-1.5">
                   <p className="text-base font-semibold">{vendor.name}</p>
@@ -111,7 +149,7 @@ export function VendorsClient({ vendors }: Props) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sorted.map((vendor) => (
-            <Card key={vendor.id} className="border-border/80">
+            <Card key={vendor.id} className="border-border/80 bg-background/80">
               <CardContent className="space-y-3 p-5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
