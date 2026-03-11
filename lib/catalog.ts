@@ -20,9 +20,85 @@ const demoProduct: Product = {
   featured: true,
 };
 
-const catalogProducts = products.some((item) => item.id === demoProduct.id)
-  ? products
-  : [...products, demoProduct];
+const popularCategoryDemoProducts: Product[] = [
+  {
+    id: "demo-category-birthday-bloom-box",
+    storeId: "demo-store-gifta",
+    slug: "birthday-bloom-box",
+    name: "Birthday Bloom Box",
+    description: "Fresh florals, gourmet treats, and a bright note card packed for joyful birthday surprises.",
+    price: 1299,
+    originalPrice: 1599,
+    rating: 4.7,
+    reviews: 164,
+    category: "Birthday",
+    tags: ["birthday", "flowers", "same-day"],
+    images: ["https://images.unsplash.com/photo-1518895949257-7621c3c786d7?auto=format&fit=crop&w=1200&q=80"],
+    inStock: true,
+    minOrderQty: 1,
+    maxOrderQty: 5,
+    featured: true,
+  },
+  {
+    id: "demo-category-anniversary-memory-trunk",
+    storeId: "demo-store-gifta",
+    slug: "anniversary-memory-trunk",
+    name: "Anniversary Memory Trunk",
+    description: "A romantic keepsake trunk with artisan chocolates and a premium card for meaningful moments.",
+    price: 1899,
+    originalPrice: 2299,
+    rating: 4.9,
+    reviews: 208,
+    category: "Anniversary",
+    tags: ["anniversary", "romantic", "premium"],
+    images: ["https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=1200&q=80"],
+    inStock: true,
+    minOrderQty: 1,
+    maxOrderQty: 5,
+    featured: true,
+  },
+  {
+    id: "demo-category-wedding-blessing-hamper",
+    storeId: "demo-store-gifta",
+    slug: "wedding-blessing-hamper",
+    name: "Wedding Blessing Hamper",
+    description: "An elegant wedding hamper with celebratory sweets, decor accents, and blessing cards.",
+    price: 2499,
+    originalPrice: 2999,
+    rating: 4.8,
+    reviews: 141,
+    category: "Wedding",
+    tags: ["wedding", "luxury", "celebration"],
+    images: ["https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=1200&q=80"],
+    inStock: true,
+    minOrderQty: 1,
+    maxOrderQty: 5,
+    featured: true,
+  },
+  {
+    id: "demo-category-festive-saffron-treasure-box",
+    storeId: "demo-store-gifta",
+    slug: "festive-saffron-treasure-box",
+    name: "Festive Saffron Treasure Box",
+    description: "A festive curation of sweets, dry fruits, and saffron-toned keepsakes for seasonal gifting.",
+    price: 1799,
+    originalPrice: 2199,
+    rating: 4.8,
+    reviews: 176,
+    category: "Festive",
+    tags: ["festive", "family", "premium"],
+    images: ["https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1200&q=80"],
+    inStock: true,
+    minOrderQty: 1,
+    maxOrderQty: 5,
+    featured: true,
+  },
+];
+
+const demoProducts = [demoProduct, ...popularCategoryDemoProducts];
+const catalogProducts = demoProducts.reduce<Product[]>((allProducts, demoItem) => {
+  return allProducts.some((item) => item.id === demoItem.id) ? allProducts : [...allProducts, demoItem];
+}, products);
 
 export const categories = [
   "Birthday",
