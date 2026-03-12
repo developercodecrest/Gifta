@@ -191,10 +191,10 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
                   key={item.label}
                   href={item.href}
                   className={[
-                    "rounded-[1.3rem] border px-4 py-3 text-sm font-medium text-slate-900 transition duration-200 hover:-translate-y-0.5",
+                    "rounded-[1.3rem] border px-4 py-3 text-sm font-medium transition duration-200 hover:-translate-y-0.5",
                     isActive
                       ? "border-slate-900/10 bg-slate-900 text-white shadow-[0_18px_36px_-24px_rgba(15,23,42,0.55)]"
-                      : "border-white/70 bg-white/88 shadow-[0_18px_32px_-28px_rgba(113,52,39,0.32)] hover:bg-white",
+                      : "border-white/70 bg-white/88 text-slate-900 shadow-[0_18px_32px_-28px_rgba(113,52,39,0.32)] hover:bg-white",
                   ].join(" ")}
                 >
                   <span className="flex items-center gap-2">
