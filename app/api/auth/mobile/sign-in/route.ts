@@ -1,4 +1,4 @@
-import { badRequest, ok, unauthorized } from "@/lib/api-response";
+import { badRequest, fail, ok, unauthorized } from "@/lib/api-response";
 import { createMobileTokenBundle } from "@/lib/server/mobile-session-service";
 import { verifyOtpAndGetUser } from "@/lib/server/otp-service";
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   });
 
   if (!user) {
-    return unauthorized("Invalid OTP or account does not exist");
+    return fail(401, { code: "OTP_INVALID", message: "Invalid otp. Try again." });
   }
 
   const tokenBundle = await createMobileTokenBundle({
