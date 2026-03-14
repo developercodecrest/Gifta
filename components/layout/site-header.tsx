@@ -72,13 +72,13 @@ export function Header() {
 
   return (
     <header className="relative z-40 border-b border-[#ead9b4] bg-white/94 text-slate-900 shadow-[0_12px_30px_-26px_rgba(58,41,11,0.18)] backdrop-blur-xl">
-      <div className="bg-[linear-gradient(90deg,#fbf0d6_0%,#fff8ea_45%,#f5e3bb_100%)]">
-        <div className="page-gutter flex items-center justify-between gap-3 py-1.5 text-xs text-slate-700">
+      <div className="bg-[#ff0066]">
+        <div className="page-gutter flex items-center justify-between gap-3 py-1.5 text-xs text-white/90">
           <p className="flex items-center gap-2 font-medium">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Flat 10% off on first gifting order above ₹999 with code <span className="font-semibold text-slate-900">GIFTA10</span>
+            <Sparkles className="h-3.5 w-3.5 text-white" />
+            Flat 10% off on first gifting order above ₹999 with code <span className="font-semibold text-white">GIFTA10</span>
           </p>
-          <Badge variant="warning" className="hidden border-0 bg-[#3f2e12] text-[#fff4d6] sm:inline-flex">Festive edits live</Badge>
+          <Badge variant="warning" className="hidden border-0 bg-white/16 text-white sm:inline-flex">Festive edits live</Badge>
         </div>
       </div>
 
@@ -93,9 +93,7 @@ export function Header() {
 
         <div className="flex justify-center">
           <Link href="/" className="inline-flex items-center text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-            <span className="rounded-2xl bg-white/80 px-1 py-0.5 shadow-[0_8px_18px_-16px_rgba(44,23,16,0.28)]">
-              <Image src="/logo.jpeg" alt="Gifta" width={100} height={100} className="h-11 w-auto object-contain sm:h-12" />
-            </span>
+            <Image src="/logo.jpeg" alt="Gifta" width={172} height={172} className="h-14 w-auto object-contain sm:h-16" />
           </Link>
         </div>
 

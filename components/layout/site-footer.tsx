@@ -12,11 +12,12 @@ import { Badge } from "@/components/ui/badge";
 
 const footerColumns = [
   {
-    title: "Shop by occasion",
+    title: "Quick links",
     links: [
-      { label: "Birthday gifts", href: "/search?category=Birthday" },
-      { label: "Anniversary gifts", href: "/search?category=Anniversary" },
-      { label: "Same-day picks", href: "/search?tag=same-day" },
+      { label: "Home", href: "/" },
+      { label: "Shop all gifts", href: "/search" },
+      { label: "Bestsellers", href: "/search?sort=rating" },
+      { label: "Same-day delivery", href: "/search?tag=same-day" },
       { label: "Premium gifting", href: "/search?tag=luxury" },
     ],
   },
@@ -54,8 +55,8 @@ export function Footer() {
       <div className="page-gutter py-8 sm:py-10">
         <div className="mx-auto max-w-400 px-2 sm:px-4">
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-t-[1.35rem] bg-[#efe2bb] px-5 py-4 text-[#8a6820] shadow-[0_14px_34px_-26px_rgba(95,69,20,0.22)] sm:px-8">
-            <Link href="/" className="inline-flex items-center rounded-2xl bg-white/78 p-2 shadow-[0_12px_24px_-20px_rgba(95,69,20,0.28)]">
-              <Image src="/logo.jpeg" alt="Gifta" width={84} height={36} className="h-9 w-auto object-contain" />
+            <Link href="/" className="inline-flex items-center">
+              <Image src="/logo.jpeg" alt="Gifta" width={112} height={48} className="h-11 w-auto object-contain" />
             </Link>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-semibold uppercase tracking-[0.18em] sm:text-sm">
               {trustMarks.map((mark) => (
