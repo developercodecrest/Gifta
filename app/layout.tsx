@@ -4,6 +4,7 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,9 +38,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
       >
         <AuthSessionProvider>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-            <SiteShell>{children}</SiteShell>
-          </ThemeProvider>
+          <TooltipProvider>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+              <SiteShell>{children}</SiteShell>
+            </ThemeProvider>
+          </TooltipProvider>
         </AuthSessionProvider>
       </body>
     </html>

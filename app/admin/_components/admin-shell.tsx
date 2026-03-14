@@ -2,17 +2,37 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, ShieldCheck, Store, Package, Users, ClipboardList, UserCog, Settings, Bike, Sparkles, ChevronRight } from "lucide-react";
+import {
+  Bike,
+  ClipboardList,
+  Lock,
+  Package,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  UserCog,
+  Users,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarSeparator,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { Role } from "@/types/api";
 import { roleLabels, canAccess } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -30,102 +50,91 @@ const navItems = [
 
 export function AdminShell({ children, role }: { children: React.ReactNode; role: Role }) {
   const pathname = usePathname();
-  const links = navItems.filter((item) => canAccess(role, item.key));
-
-  const renderNav = (compact = false) => (
-    <nav className={cn("flex flex-col gap-2", compact && "mt-4")}> 
-      {links.map((item) => {
-        const Icon = item.icon;
-        const isActive = item.href === "/admin" ? pathname === item.href : pathname?.startsWith(item.href);
-
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "group flex items-center justify-between rounded-[1.15rem] border px-3.5 py-3 text-sm transition-all duration-200",
-              isActive
-                ? "border-transparent bg-foreground text-background shadow-[0_18px_38px_-28px_rgba(32,22,31,0.55)]"
-                : "border-border/70 bg-background/70 text-foreground hover:border-primary/35 hover:bg-card",
-            )}
-          >
-            <span className="flex items-center gap-3">
-              <span className={cn("inline-flex h-9 w-9 items-center justify-center rounded-full", isActive ? "bg-background/15" : "bg-primary/10 text-primary")}>
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="font-medium">{item.label}</span>
-            </span>
-            <ChevronRight className={cn("h-4 w-4 transition-transform group-hover:translate-x-0.5", isActive ? "text-background/75" : "text-muted-foreground")} />
-          </Link>
-        );
-      })}
-    </nav>
-  );
+  const links = navItems.map((item) => ({
+    ...item,
+    hasAccess: canAccess(role, item.key),
+  }));
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="hidden lg:block">
-        <div className="sticky top-6 overflow-hidden rounded-4xl border border-border/70 bg-card/85 p-5 shadow-[0_28px_80px_-56px_rgba(116,60,39,0.45)] backdrop-blur-md">
-          <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top,rgba(200,155,42,0.18),transparent_70%)]" />
-          <div className="relative space-y-5">
-            <div className="space-y-3">
-              <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-foreground text-background">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-[#74655c]">Gifta Command</p>
-                <h2 className="mt-2 font-display text-2xl font-semibold tracking-[-0.05em] text-foreground">Marketplace Admin</h2>
-              </div>
-              <Badge className="bg-primary/12 text-primary hover:bg-primary/12">{roleLabels[role]}</Badge>
+    <SidebarProvider>
+      <Sidebar variant="inset" collapsible="offcanvas" className="border-r border-sidebar-border/80">
+        <SidebarHeader className="gap-4 p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-sidebar-border/70 bg-sidebar-accent/30 p-3">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
+              <Sparkles className="h-5 w-5" />
             </div>
-
-            <div className="rounded-[1.35rem] border border-border/70 bg-background/75 p-4">
-              <p className="text-sm font-medium text-foreground">Operations focus</p>
-              <p className="mt-2 text-sm leading-6 text-[#5f5047]">Vendor onboarding, catalog quality, delivery health, and role-governed control in one place.</p>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.24em] text-sidebar-foreground/65">Gifta Admin</p>
+              <p className="truncate text-sm font-semibold text-sidebar-foreground">Marketplace Control</p>
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              {canAccess(role, "vendors") ? (
-                <Button asChild size="sm">
-                  <Link href="/admin/vendors/create">New store</Link>
-                </Button>
-              ) : null}
-              {canAccess(role, "items") ? (
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/admin/items">Catalog</Link>
-                </Button>
-              ) : null}
-            </div>
-
-            {renderNav()}
           </div>
-        </div>
-      </aside>
+          <Badge className="w-fit bg-sidebar-primary/15 text-sidebar-primary hover:bg-sidebar-primary/15">{roleLabels[role]}</Badge>
+        </SidebarHeader>
 
-      <div className="min-w-0 space-y-6">
-        <div className="flex items-center justify-between rounded-[1.4rem] border border-border/60 bg-card/80 px-4 py-3 shadow-[0_18px_50px_-42px_rgba(116,60,39,0.35)] backdrop-blur lg:hidden">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-[#74655c]">Gifta Admin</p>
-            <p className="mt-1 font-semibold text-foreground">{roleLabels[role]}</p>
+        <SidebarSeparator />
+
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Menu</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {links.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = item.href === "/admin" ? pathname === item.href : pathname?.startsWith(item.href);
+
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      {item.hasAccess ? (
+                        <SidebarMenuButton
+                          render={<Link href={item.href} />}
+                          isActive={Boolean(isActive)}
+                          tooltip={item.label}
+                        >
+                          <Icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      ) : (
+                        <>
+                          <SidebarMenuButton disabled className="opacity-70" tooltip={`${item.label} (no access)`}>
+                            <Lock />
+                            <span>{item.label}</span>
+                          </SidebarMenuButton>
+                          <SidebarMenuBadge>Locked</SidebarMenuBadge>
+                        </>
+                      )}
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="gap-2 p-3">
+          {canAccess(role, "vendors") ? (
+            <Button asChild size="sm" className="w-full justify-start">
+              <Link href="/admin/vendors/create">New store</Link>
+            </Button>
+          ) : null}
+          {canAccess(role, "items") ? (
+            <Button asChild size="sm" variant="outline" className="w-full justify-start">
+              <Link href="/admin/items">Open catalog</Link>
+            </Button>
+          ) : null}
+        </SidebarFooter>
+      </Sidebar>
+
+      <SidebarInset className="min-w-0">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="h-9 w-9" />
+            <p className="text-sm font-medium text-foreground">Marketplace Admin</p>
           </div>
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="bg-background/98">
-              <SheetHeader>
-                <SheetTitle>Marketplace Admin</SheetTitle>
-                <SheetDescription>Navigate the control surfaces available for your current role.</SheetDescription>
-              </SheetHeader>
-              {renderNav(true)}
-            </SheetContent>
-          </Sheet>
+          <Badge variant="secondary">{roleLabels[role]}</Badge>
         </div>
 
-        <div className="space-y-6">{children}</div>
-      </div>
-    </div>
+        <div className={cn("space-y-6 px-4 py-5 lg:px-6")}>{children}</div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
