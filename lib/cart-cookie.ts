@@ -34,6 +34,15 @@ export function parseCartCookie(value?: string): CartItem[] {
           productId: candidate.productId,
           quantity,
           offerId: typeof candidate.offerId === "string" ? candidate.offerId : undefined,
+          variantId: typeof candidate.variantId === "string" ? candidate.variantId : undefined,
+          variantOptions:
+            candidate.variantOptions && typeof candidate.variantOptions === "object" && !Array.isArray(candidate.variantOptions)
+              ? Object.fromEntries(
+                  Object.entries(candidate.variantOptions)
+                    .map(([key, value]) => [key.trim(), typeof value === "string" ? value.trim() : ""] as const)
+                    .filter(([key, value]) => Boolean(key) && Boolean(value)),
+                )
+              : undefined,
         };
       });
 
@@ -49,6 +58,8 @@ export function serializeCartCookie(items: CartItem[]): string {
       productId: entry.productId,
       quantity: Math.max(1, Math.floor(entry.quantity)),
       ...(entry.offerId ? { offerId: entry.offerId } : {}),
+      ...(entry.variantId ? { variantId: entry.variantId } : {}),
+      ...(entry.variantOptions ? { variantOptions: entry.variantOptions } : {}),
     }))
     .slice(0, 50);
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, LayoutGrid, List, Pencil, Table2, Trash2, Plus } from "lucide-react";
@@ -99,6 +100,7 @@ export function VendorsClient({ vendors }: Props) {
                 <tr>
                   <th className="px-3 py-2.5">Store</th>
                   <th className="px-3 py-2.5">Category</th>
+                  <th className="px-3 py-2.5">Category mix</th>
                   <th className="px-3 py-2.5">Rating</th>
                   <th className="px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Items</th>
@@ -111,6 +113,14 @@ export function VendorsClient({ vendors }: Props) {
                   <tr key={vendor.id} className="border-t border-border">
                     <td className="px-3 py-2.5 font-medium">{vendor.name}</td>
                     <td className="px-3 py-2.5 text-[#5f5047]">{vendor.primaryCategory ?? "-"}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(vendor.categoryBreakdown ?? []).slice(0, 2).map((entry) => (
+                          <Badge key={`${vendor.id}-${entry.category}`} variant="outline">{entry.category} ({entry.itemCount})</Badge>
+                        ))}
+                        {!vendor.categoryBreakdown?.length ? <span className="text-xs text-[#74655c]">No mapped items</span> : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5">{vendor.rating.toFixed(1)}</td>
                     <td className="px-3 py-2.5">
                       <Badge variant={vendor.active ? "default" : "secondary"}>{vendor.active ? "Active" : "Inactive"}</Badge>
@@ -137,6 +147,13 @@ export function VendorsClient({ vendors }: Props) {
                   <p className="text-base font-semibold">{vendor.name}</p>
                   <p className="text-sm text-[#5f5047]">{vendor.primaryCategory ?? "Uncategorized"}{vendor.primarySubcategory ? ` • ${vendor.primarySubcategory}` : ""}</p>
                   <p className="text-sm text-[#5f5047]">Rating {vendor.rating.toFixed(1)} • Items {vendor.itemCount} • Offers {vendor.offerCount}</p>
+                  {(vendor.categoryBreakdown ?? []).length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {vendor.categoryBreakdown!.slice(0, 3).map((entry) => (
+                        <Badge key={`${vendor.id}-${entry.category}`} variant="outline">{entry.category} ({entry.itemCount})</Badge>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <Badge variant={vendor.active ? "default" : "secondary"}>{vendor.active ? "Active" : "Inactive"}</Badge>
@@ -163,6 +180,13 @@ export function VendorsClient({ vendors }: Props) {
                   <p>Subcategory: {vendor.primarySubcategory ?? "-"}</p>
                   <p>Rating: {vendor.rating.toFixed(1)}</p>
                   <p>Items: {vendor.itemCount} • Offers: {vendor.offerCount}</p>
+                  {(vendor.categoryBreakdown ?? []).length ? (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {vendor.categoryBreakdown!.slice(0, 2).map((entry) => (
+                        <Badge key={`${vendor.id}-${entry.category}`} variant="outline">{entry.category} ({entry.itemCount})</Badge>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="mt-auto"><VendorRowActions vendor={vendor} /></div>
               </CardContent>
@@ -257,6 +281,18 @@ function VendorRowActions({ vendor }: { vendor: VendorSummaryDto }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Button asChild size="sm" variant="outline">
+        <Link href={`/admin/vendors/${vendor.id}/items`} className="inline-flex items-center gap-2 whitespace-nowrap">
+          <Plus className="h-4 w-4" /> Add item
+        </Link>
+      </Button>
+
+      <Button asChild size="sm" variant="outline">
+        <Link href="/admin/vendors/categories" className="inline-flex items-center gap-2 whitespace-nowrap">
+          <Plus className="h-4 w-4" /> Categories
+        </Link>
+      </Button>
+
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
         <DialogTrigger asChild>
           <Button size="sm" variant="outline"><Eye className="h-4 w-4" /> View</Button>

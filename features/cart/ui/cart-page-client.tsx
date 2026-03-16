@@ -13,7 +13,7 @@ import { formatCurrency } from "@/lib/utils";
 
 export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const { status } = useSession();
-  const { items, hydrateFromCookie, removeItem, updateQty, setOffer, clear } = useCartStore();
+  const { items, hydrateFromCookie, removeItem, updateQty, setOffer, setVariant, clear } = useCartStore();
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -21,19 +21,31 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
     }
   }, [hydrateFromCookie, status]);
 
-  const quantityById = new Map(items.map((entry) => [entry.productId, entry.quantity]));
-  const offerById = new Map(items.map((entry) => [entry.productId, entry.offerId]));
+  const keyOf = (productId: string, variantId?: string) => `${productId}::${variantId ?? "default"}`;
+  const quantityById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId), entry.quantity]));
+  const offerById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId), entry.offerId]));
+  const variantById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId), entry.variantId]));
 
   const liveLines = snapshot.lines.map((line) => {
-    const liveQty = quantityById.get(line.product.id) ?? line.quantity;
+    const lineKey = keyOf(line.product.id, line.selectedVariant?.id);
+    const liveQty = quantityById.get(lineKey) ?? line.quantity;
     const selectedOffer =
-      line.offers.find((offer) => offer.id === offerById.get(line.product.id)) ?? line.selectedOffer;
-    const unitPrice = selectedOffer?.price ?? line.product.price;
+      line.offers.find((offer) => offer.id === offerById.get(lineKey)) ?? line.selectedOffer;
+    const selectedVariant =
+      line.product.variants?.find((variant) => variant.id === variantById.get(lineKey)) ?? line.selectedVariant;
+    const unitPrice = selectedVariant?.salePrice ?? selectedOffer?.price ?? line.product.price;
+    const variantLabel = selectedVariant
+      ? Object.entries(selectedVariant.options)
+          .map(([name, value]) => `${name}: ${value}`)
+          .join(" | ")
+      : line.variantLabel;
 
     return {
       ...line,
       quantity: liveQty,
       selectedOffer,
+      selectedVariant,
+      variantLabel,
       lineSubtotal: unitPrice * liveQty,
     };
   });
@@ -100,7 +112,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               const maxQty = line.product.maxOrderQty ?? 10;
 
               return (
-              <Card key={line.product.id} className="glass-panel rounded-4xl border-white/60">
+              <Card key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}`} className="glass-panel rounded-4xl border-white/60">
                 <CardContent className="grid grid-cols-[96px_1fr] gap-3 p-3 sm:grid-cols-[128px_minmax(0,1fr)_auto] sm:gap-5 sm:p-5 sm:items-center">
                   <div className="relative aspect-square overflow-hidden rounded-3xl bg-[#fff2e8]">
                     <Image
@@ -116,11 +128,17 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                     <p className="text-xs uppercase tracking-[0.16em] text-[#74655c]">{line.product.category}</p>
                     <h3 className="text-lg font-semibold leading-snug">{line.product.name}</h3>
 
-                    {line.offers.length > 0 ? (
+                    {line.selectedVariant ? (
+                      <p className="text-sm text-[#5f5047]">Variant: {line.variantLabel}</p>
+                    ) : null}
+
+                    {line.selectedVariant ? (
+                      <p className="text-sm text-[#5f5047]">{formatCurrency(line.selectedVariant.salePrice)} each</p>
+                    ) : line.offers.length > 0 ? (
                       <select
                         className="app-input-surface min-h-11 w-full rounded-full px-3 py-2 text-sm"
                         value={line.selectedOffer?.id ?? ""}
-                        onChange={(event) => setOffer(line.product.id, event.target.value || undefined)}
+                        onChange={(event) => setOffer(line.product.id, event.target.value || undefined, line.selectedVariant?.id)}
                       >
                         {line.offers.map((offer) => (
                           <option key={offer.id} value={offer.id}>
@@ -131,22 +149,44 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                     ) : (
                       <p className="text-sm text-[#5f5047]">{formatCurrency(line.product.price)} each</p>
                     )}
+
+                    {(line.product.variants?.length ?? 0) > 0 ? (
+                      <select
+                        className="app-input-surface min-h-11 w-full rounded-full px-3 py-2 text-sm"
+                        value={line.selectedVariant?.id ?? ""}
+                        onChange={(event) => {
+                          const nextVariant = line.product.variants?.find((variant) => variant.id === event.target.value);
+                          setVariant(line.product.id, nextVariant?.id, nextVariant?.options, line.selectedVariant?.id);
+                        }}
+                      >
+                        {(line.product.variants ?? []).map((variant) => {
+                          const optionLabel = Object.entries(variant.options)
+                            .map(([name, value]) => `${name}: ${value}`)
+                            .join(" | ");
+                          return (
+                            <option key={variant.id} value={variant.id}>
+                              {optionLabel} • {formatCurrency(variant.salePrice)}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : null}
                   </div>
 
                   <div className="col-span-2 flex flex-col space-y-3 sm:col-span-1 sm:items-end">
                     <div className="inline-flex min-h-11 items-center rounded-full border border-border/70 bg-background/90 px-1">
-                      <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity - 1, minQty, maxQty)} disabled={line.quantity <= minQty}>
+                      <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity - 1, minQty, maxQty, line.selectedVariant?.id)} disabled={line.quantity <= minQty}>
                         <Minus className="h-4 w-4" />
                       </Button>
                       <span className="px-3 text-sm">{line.quantity}</span>
-                      <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity + 1, minQty, maxQty)} disabled={line.quantity >= maxQty}>
+                      <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity + 1, minQty, maxQty, line.selectedVariant?.id)} disabled={line.quantity >= maxQty}>
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
                     <p className="text-xs text-[#74655c] sm:text-right">Min {minQty} • Max {maxQty}</p>
                     <p className="text-sm font-semibold text-primary sm:text-right">{formatCurrency(line.lineSubtotal)}</p>
                     <Button
-                      onClick={() => removeItem(line.product.id)}
+                      onClick={() => removeItem(line.product.id, line.selectedVariant?.id)}
                       variant="outline"
                       size="sm"
                       className="gap-1 sm:ml-auto"

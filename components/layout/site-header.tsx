@@ -160,14 +160,14 @@ export function Header() {
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           {status !== "authenticated" ? (
-            <Button asChild size="sm" className="hidden sm:inline-flex">
+            <Button asChild size="sm" className="hidden text-white [&_a]:text-white sm:inline-flex">
               <Link href="/auth/sign-in">Sign in</Link>
             </Button>
           ) : (
             <Button
               type="button"
               size="sm"
-              className="hidden sm:inline-flex"
+              className="hidden text-white sm:inline-flex"
               onClick={() => signOut({ callbackUrl: "/auth/sign-in" })}
             >
               Sign out

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight, Gift, ShieldCheck, Sparkles, Star, Store, Truck } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
 import { TrackRecent } from "@/components/product/track-recent";
-import { AddToCartInline } from "@/features/cart/ui/add-to-cart-inline";
+import { ProductOrderPanel } from "@/features/cart/ui/product-order-panel";
 import { RecentlyViewed } from "@/features/recent/ui/recently-viewed";
 import { WishlistInlineButton } from "@/features/wishlist/ui/wishlist-inline-button";
 import { Badge } from "@/components/ui/badge";
@@ -33,8 +33,14 @@ export default async function ProductPage({
   const related = product?.suggestions ?? getRelatedProducts(currentProduct.id, currentProduct.category, 4);
   const galleryImages = currentProduct.images.filter(Boolean);
   const bestOffer = product?.offers?.[0];
-  const activePrice = bestOffer?.price ?? currentProduct.price;
-  const originalPrice = bestOffer?.originalPrice ?? currentProduct.originalPrice;
+  const hasVariants = (currentProduct.attributes?.length ?? 0) > 0 && (currentProduct.variants?.length ?? 0) > 0;
+  const lowestVariantPrice = hasVariants
+    ? Math.min(...(currentProduct.variants ?? []).map((variant) => variant.salePrice))
+    : undefined;
+  const activePrice = hasVariants ? lowestVariantPrice : (bestOffer?.price ?? currentProduct.price);
+  const originalPrice = hasVariants
+    ? undefined
+    : (bestOffer?.originalPrice ?? currentProduct.originalPrice);
   const tags = Array.from(new Set([currentProduct.category, ...(currentProduct.tags ?? [])])).slice(0, 6);
 
   return (
@@ -92,7 +98,9 @@ export default async function ProductPage({
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
-                <span className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">{formatCurrency(activePrice)}</span>
+                <span className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
+                  {hasVariants ? `From ${formatCurrency(activePrice ?? 0)}` : formatCurrency(activePrice ?? 0)}
+                </span>
                 {originalPrice ? <span className="pb-1 text-base text-[#74655c] line-through">{formatCurrency(originalPrice)}</span> : null}
               </div>
 
@@ -115,13 +123,17 @@ export default async function ProductPage({
                 </div>
               ) : null}
 
-              <div className="grid gap-3 sm:flex sm:flex-wrap">
-                <AddToCartInline
+              <div className="grid gap-3">
+                <ProductOrderPanel
                   productId={currentProduct.id}
                   offerId={bestOffer?.id}
                   minQty={currentProduct.minOrderQty ?? 1}
                   maxQty={currentProduct.maxOrderQty ?? 10}
                   disabled={!currentProduct.inStock}
+                  attributes={currentProduct.attributes}
+                  variants={currentProduct.variants}
+                  fallbackPrice={bestOffer?.price ?? currentProduct.price}
+                  fallbackOriginalPrice={bestOffer?.originalPrice ?? currentProduct.originalPrice}
                 />
                 <WishlistInlineButton productId={currentProduct.id} />
               </div>
@@ -137,7 +149,7 @@ export default async function ProductPage({
         </div>
       </section>
 
-      {product?.offers?.length ? (
+      {product?.offers?.length && !hasVariants ? (
         <section className="space-y-4">
           <div className="flex items-center gap-3">
             <h2 className="font-display text-3xl font-semibold tracking-tight">Vendor offers</h2>

@@ -20,10 +20,16 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const { productIds, toggle } = useWishlistStore();
 
   const isLiked = productIds.includes(product.id);
-  const price = "bestOffer" in product && product.bestOffer?.price ? product.bestOffer.price : product.price;
-  const originalPrice = "bestOffer" in product && product.bestOffer?.originalPrice
+  const hasVariants = (product.attributes?.length ?? 0) > 0 && (product.variants?.length ?? 0) > 0;
+  const variantMinPrice = hasVariants ? Math.min(...(product.variants ?? []).map((variant) => variant.salePrice)) : undefined;
+  const price = hasVariants
+    ? (variantMinPrice ?? product.price)
+    : ("bestOffer" in product && product.bestOffer?.price ? product.bestOffer.price : product.price);
+  const originalPrice = hasVariants
+    ? undefined
+    : ("bestOffer" in product && product.bestOffer?.originalPrice
     ? product.bestOffer.originalPrice
-    : product.originalPrice;
+    : product.originalPrice);
   const discount = originalPrice
     ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : 0;
@@ -81,7 +87,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
         </div>
 
         <div className="flex items-end gap-2">
-          <span className="text-xl font-bold tracking-tight">{formatCurrency(price)}</span>
+          <span className="text-xl font-bold tracking-tight">{hasVariants ? `From ${formatCurrency(price)}` : formatCurrency(price)}</span>
           {originalPrice && (
             <span className="pb-0.5 text-xs text-muted-foreground line-through">{formatCurrency(originalPrice)}</span>
           )}
@@ -95,7 +101,13 @@ export function ProductCard({ product }: { product: ProductCardData }) {
         ) : null}
 
         <div className="mt-auto">
-        {existing ? (
+        {hasVariants ? (
+          <Button asChild type="button" className="h-10 w-full text-sm">
+            <Link href={`/store/${product.slug}`}>
+              Select variants
+            </Link>
+          </Button>
+        ) : existing ? (
           <div className="space-y-2">
             <div className="inline-flex min-h-10 w-full items-center justify-between rounded-full border border-border/70 bg-background/90 px-1">
               <Button variant="ghost" size="icon" onClick={() => updateQty(product.id, currentQty - 1, minQty, maxQty)} disabled={currentQty <= minQty}>

@@ -40,8 +40,8 @@ export default async function AdminDashboardPage() {
     },
     {
       title: "Catalog control",
-      description: "Create store-linked items with pricing, imagery, tags, and offer coverage.",
-      href: "/admin/items",
+      description: "Open a vendor, add items in that vendor context, and keep category mapping scoped to storefront ownership.",
+      href: "/admin/vendors",
       icon: PackageSearch,
     },
     {
@@ -70,7 +70,7 @@ export default async function AdminDashboardPage() {
               <Link href="/admin/vendors/create">Launch store setup</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/admin/items">Open catalog</Link>
+              <Link href="/admin/vendors">Open vendor catalog flow</Link>
             </Button>
           </>
         }
@@ -112,7 +112,7 @@ export default async function AdminDashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <Button asChild variant="outline">
-                    <Link href={module.href}>
+                    <Link href={module.href} className="inline-flex items-center gap-2 whitespace-nowrap">
                       Open module <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>

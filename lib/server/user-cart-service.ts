@@ -20,6 +20,15 @@ function normalizeItems(items: CartItem[]) {
       productId: entry.productId,
       quantity: Math.max(1, Math.floor(entry.quantity || 1)),
       offerId: typeof entry.offerId === "string" ? entry.offerId : undefined,
+      variantId: typeof entry.variantId === "string" ? entry.variantId : undefined,
+      variantOptions:
+        entry.variantOptions && typeof entry.variantOptions === "object"
+          ? Object.fromEntries(
+              Object.entries(entry.variantOptions)
+                .map(([key, value]) => [key.trim(), typeof value === "string" ? value.trim() : ""] as const)
+                .filter(([key, value]) => Boolean(key) && Boolean(value)),
+            )
+          : undefined,
     }));
 }
 
@@ -94,26 +103,32 @@ export async function setUserCart(userId: string, items: CartItem[]): Promise<Ca
 export async function mergeUserCart(userId: string, localItems: CartItem[]): Promise<CartItem[]> {
   const dbItems = await getUserCart(userId);
   const map = new Map<string, CartItem>();
+  const makeKey = (item: CartItem) => `${item.productId}::${item.variantId ?? "default"}`;
 
   for (const item of dbItems) {
-    map.set(item.productId, item);
+    map.set(makeKey(item), item);
   }
 
   for (const item of localItems) {
-    const existing = map.get(item.productId);
+    const key = makeKey(item);
+    const existing = map.get(key);
     if (!existing) {
-      map.set(item.productId, {
+      map.set(key, {
         productId: item.productId,
         quantity: Math.max(1, Math.floor(item.quantity || 1)),
         offerId: item.offerId,
+        variantId: item.variantId,
+        variantOptions: item.variantOptions,
       });
       continue;
     }
 
-    map.set(item.productId, {
+    map.set(key, {
       productId: item.productId,
       quantity: existing.quantity + Math.max(1, Math.floor(item.quantity || 1)),
       offerId: item.offerId ?? existing.offerId,
+      variantId: item.variantId ?? existing.variantId,
+      variantOptions: item.variantOptions ?? existing.variantOptions,
     });
   }
 

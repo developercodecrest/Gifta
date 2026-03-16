@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, LayoutGrid, List, Pencil, Plus, Store, Table2, Trash2, Truck } from "lucide-react";
+import { Eye, LayoutGrid, List, Pencil, Plus, Store, Table2, Trash2, Truck, UploadCloud, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AdminEmptyState, AdminSection } from "@/app/admin/_components/admin-surface";
+import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
 import { VendorSummaryDto } from "@/types/api";
 
 type AdminItemOffer = {
@@ -29,6 +31,21 @@ type AdminItemOffer = {
   inStock: boolean;
   deliveryEtaHours: number;
   store?: { name?: string };
+};
+
+type AdminItemAttribute = {
+  name: string;
+  values: string[];
+};
+
+type AdminItemVariant = {
+  id: string;
+  options: Record<string, string>;
+  salePrice: number;
+  regularPrice?: number;
+  weight?: number;
+  weightUnit?: "g" | "kg";
+  inStock: boolean;
 };
 
 type AdminItem = {
@@ -46,9 +63,27 @@ type AdminItem = {
   bestOffer?: AdminItemOffer;
   offerCount: number;
   offers?: AdminItemOffer[];
+  attributes?: AdminItemAttribute[];
+  variants?: AdminItemVariant[];
 };
 
 type ViewMode = "overview" | "grid" | "table";
+
+type AttributeInputRow = {
+  id: string;
+  name: string;
+  value: string;
+};
+
+type VariantInputRow = {
+  id: string;
+  options: Record<string, string>;
+  salePrice: string;
+  regularPrice: string;
+  weight: string;
+  weightUnit: "g" | "kg";
+  inStock: boolean;
+};
 
 function formatCurrency(value?: number) {
   if (typeof value !== "number") return "--";
@@ -63,20 +98,44 @@ function createSlugPreview(value: string) {
     .replace(/(^-|-$)+/g, "");
 }
 
-export function ItemsClient({ items, vendors }: { items: AdminItem[]; vendors: VendorSummaryDto[] }) {
+function parseImageLines(value: string) {
+  return value.split("\n").map((entry) => entry.trim()).filter(Boolean);
+}
+export function ItemsClient({
+  items,
+  vendors,
+  lockedStoreId,
+}: {
+  items: AdminItem[];
+  vendors: VendorSummaryDto[];
+  lockedStoreId?: string;
+}) {
   const [viewMode, setViewMode] = useState<ViewMode>("overview");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [storeId, setStoreId] = useState("all");
 
-  const categories = useMemo(() => Array.from(new Set(items.map((item) => item.category))).sort(), [items]);
+  const activeStoreId = lockedStoreId ?? storeId;
+  const isVendorLocked = Boolean(lockedStoreId);
+  const lockedVendor = lockedStoreId ? vendors.find((entry) => entry.id === lockedStoreId) : undefined;
+
+  const categories = useMemo(() => {
+    const itemCategories = items.map((item) => item.category).filter(Boolean);
+    if (!lockedVendor) {
+      return Array.from(new Set(itemCategories)).sort();
+    }
+
+    const vendorCategories = lockedVendor.categories.flatMap((entry) => [entry.name, ...entry.subcategories]).filter(Boolean);
+    const source = vendorCategories.length ? vendorCategories : itemCategories;
+    return Array.from(new Set(source)).sort();
+  }, [items, lockedVendor]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return [...items]
       .filter((item) => {
         if (category !== "all" && item.category !== category) return false;
-        if (storeId !== "all" && !(item.offers ?? []).some((offer) => offer.storeId === storeId)) return false;
+        if (activeStoreId !== "all" && !(item.offers ?? []).some((offer) => offer.storeId === activeStoreId)) return false;
         if (!query) return true;
 
         return [item.name, item.category, item.description, ...(item.tags ?? [])]
@@ -85,19 +144,19 @@ export function ItemsClient({ items, vendors }: { items: AdminItem[]; vendors: V
           .includes(query);
       })
       .sort((left, right) => right.offerCount - left.offerCount || left.name.localeCompare(right.name));
-  }, [items, search, category, storeId]);
+  }, [items, search, category, activeStoreId]);
 
   const totalOffers = filtered.reduce((total, item) => total + item.offerCount, 0);
 
   return (
     <div className="space-y-6">
       <AdminSection
-        title="Catalog workspace"
-        description="Search by category or store, inspect offer coverage, and create product records that are linked to a specific vendor offer from the start."
-        actions={<CreateItemDialog vendors={vendors} />}
+        title={isVendorLocked ? `${lockedVendor?.name ?? "Vendor"} catalog` : "Catalog workspace"}
+        description={isVendorLocked ? "Manage items mapped to this vendor only and keep category mapping aligned to vendor taxonomy." : "Search by category or store, inspect offer coverage, and create product records that are linked to a specific vendor offer from the start."}
+        actions={<CreateItemDialog vendors={vendors} lockedStoreId={lockedStoreId} categoryOptions={categories} />}
       >
         <div className="flex flex-col gap-3.5">
-          <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,0.75fr))_auto]">
+          <div className={isVendorLocked ? "grid gap-2.5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_auto]" : "grid gap-2.5 lg:grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,0.75fr))_auto]"}>
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search item name, category, tags" />
             <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 rounded-full border border-input bg-background px-4 py-2 text-sm">
               <option value="all">All categories</option>
@@ -105,12 +164,14 @@ export function ItemsClient({ items, vendors }: { items: AdminItem[]; vendors: V
                 <option key={entry} value={entry}>{entry}</option>
               ))}
             </select>
-            <select value={storeId} onChange={(event) => setStoreId(event.target.value)} className="min-h-11 rounded-full border border-input bg-background px-4 py-2 text-sm">
-              <option value="all">All stores</option>
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-              ))}
-            </select>
+            {!isVendorLocked ? (
+              <select value={storeId} onChange={(event) => setStoreId(event.target.value)} className="min-h-11 rounded-full border border-input bg-background px-4 py-2 text-sm">
+                <option value="all">All stores</option>
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                ))}
+              </select>
+            ) : null}
             <div className="flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm text-[#5f5047]">
               <Store className="h-4 w-4 text-primary" /> {filtered.length} items / {totalOffers} offers
             </div>
@@ -256,12 +317,21 @@ export function ItemsClient({ items, vendors }: { items: AdminItem[]; vendors: V
   );
 }
 
-function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
+function CreateItemDialog({
+  vendors,
+  lockedStoreId,
+  categoryOptions,
+}: {
+  vendors: VendorSummaryDto[];
+  lockedStoreId?: string;
+  categoryOptions: string[];
+}) {
   const router = useRouter();
+  const safeCategoryOptions = categoryOptions.length ? categoryOptions : ["Birthday"];
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState(vendors[0]?.primaryCategory ?? "Birthday");
-  const [storeId, setStoreId] = useState(vendors[0]?.id ?? "");
+  const [category, setCategory] = useState(safeCategoryOptions[0] ?? vendors[0]?.primaryCategory ?? "Birthday");
+  const [storeId, setStoreId] = useState(lockedStoreId ?? vendors[0]?.id ?? "");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("1000");
   const [originalPrice, setOriginalPrice] = useState("1200");
@@ -270,16 +340,61 @@ function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
   const [maxOrderQty, setMaxOrderQty] = useState("10");
   const [tags, setTags] = useState("gift, premium");
   const [images, setImages] = useState("");
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
+  const [attributeRows, setAttributeRows] = useState<AttributeInputRow[]>([{ id: makeLocalId("attr"), name: "", value: "" }]);
+  const [variantRows, setVariantRows] = useState<VariantInputRow[]>([]);
   const [featured, setFeatured] = useState(false);
   const [inStock, setInStock] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const imageList = useMemo(() => parseImageLines(images), [images]);
+
+  const uploadItemImage = async (file: File) => {
+    setError(null);
+    try {
+      const url = await uploadFileToCloudinary(file, {
+        folder: "gifta/items",
+        resourceType: "image",
+        onProgress: setImageUploadProgress,
+      });
+
+      setImages((current) => {
+        const next = [...parseImageLines(current), url];
+        return next.join("\n");
+      });
+      setImageUploadProgress(100);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload image");
+    }
+  };
+  const attributeDefinitions = useMemo(() => getAttributeDefinitions(attributeRows), [attributeRows]);
+
+  const syncVariantRows = () => {
+    setVariantRows((current) =>
+      syncVariantRowsWithAttributes(attributeDefinitions, current, {
+        salePrice: price,
+        regularPrice: originalPrice,
+        weight: "0",
+        weightUnit: "g",
+        inStock,
+      }),
+    );
+  };
 
   const create = async () => {
     setSaving(true);
     setError(null);
 
     try {
+      const syncedVariantRows = syncVariantRowsWithAttributes(attributeDefinitions, variantRows, {
+        salePrice: price,
+        regularPrice: originalPrice,
+        weight: "0",
+        weightUnit: "g",
+        inStock,
+      });
+
       const response = await fetch("/api/admin/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -297,6 +412,8 @@ function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
           images: images.split("\n").map((entry) => entry.trim()).filter(Boolean),
           featured,
           inStock,
+          attributes: attributeDefinitions,
+          variants: toVariantPayload(syncedVariantRows, attributeDefinitions),
         }),
       });
 
@@ -318,7 +435,7 @@ function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button><Plus className="h-4 w-4" /> New item</Button>
+        <Button><Plus className="h-4 w-4" /> Add item</Button>
       </DialogTrigger>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
@@ -329,13 +446,25 @@ function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Item name"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Rose celebration hamper" /></Field>
           <Field label="Slug preview"><div className="min-h-11 rounded-full border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">/{createSlugPreview(name) || "generated-from-name"}</div></Field>
-          <Field label="Category"><Input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Birthday" /></Field>
-          <Field label="Store">
-            <select value={storeId} onChange={(event) => setStoreId(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+          <Field label="Category">
+            <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+              {safeCategoryOptions.map((entry) => (
+                <option key={entry} value={entry}>{entry}</option>
               ))}
             </select>
+          </Field>
+          <Field label="Store">
+            {lockedStoreId ? (
+              <div className="min-h-11 rounded-full border border-input bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                {vendors.find((vendor) => vendor.id === lockedStoreId)?.name ?? lockedStoreId}
+              </div>
+            ) : (
+              <select value={storeId} onChange={(event) => setStoreId(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                ))}
+              </select>
+            )}
           </Field>
           <Field label="Offer price"><Input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="decimal" /></Field>
           <Field label="Original price"><Input value={originalPrice} onChange={(event) => setOriginalPrice(event.target.value)} inputMode="decimal" /></Field>
@@ -343,13 +472,247 @@ function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
           <Field label="Tags (comma separated)"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="gift, premium, same-day" /></Field>
           <Field label="Min order qty"><Input value={minOrderQty} onChange={(event) => setMinOrderQty(event.target.value)} inputMode="numeric" /></Field>
           <Field label="Max order qty"><Input value={maxOrderQty} onChange={(event) => setMaxOrderQty(event.target.value)} inputMode="numeric" /></Field>
-          <div className="space-y-2 md:col-span-2">
-            <Label>Description</Label>
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" placeholder="Describe packaging, contents, and gifting use case." />
+
+          <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-base">Attributes</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAttributeRows((current) => [...current, { id: makeLocalId("attr"), name: "", value: "" }])}
+              >
+                Add attributes
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {attributeRows.map((row) => (
+                <div key={row.id} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <Field label="Name">
+                    <Input
+                      value={row.name}
+                      onChange={(event) =>
+                        setAttributeRows((current) =>
+                          current.map((entry) => (entry.id === row.id ? { ...entry, name: event.target.value } : entry)),
+                        )
+                      }
+                      placeholder="size"
+                    />
+                  </Field>
+                  <Field label="Value">
+                    <Input
+                      value={row.value}
+                      onChange={(event) =>
+                        setAttributeRows((current) =>
+                          current.map((entry) => (entry.id === row.id ? { ...entry, value: event.target.value } : entry)),
+                        )
+                      }
+                      placeholder="10"
+                    />
+                  </Field>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() =>
+                        setAttributeRows((current) => {
+                          if (current.length <= 1) {
+                            return [{ id: makeLocalId("attr"), name: "", value: "" }];
+                          }
+                          return current.filter((entry) => entry.id !== row.id);
+                        })
+                      }
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+
+          <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Label className="text-base">Variations</Label>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void syncVariantRows()}>Sync with attributes</Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setVariantRows((current) => [
+                      ...current,
+                      {
+                        id: makeLocalId("var"),
+                        options: Object.fromEntries(attributeDefinitions.map((attribute) => [attribute.name, attribute.values[0] ?? ""])),
+                        salePrice: price,
+                        regularPrice: originalPrice,
+                        weight: "0",
+                        weightUnit: "g",
+                        inStock,
+                      },
+                    ])
+                  }
+                  disabled={!attributeDefinitions.length}
+                >
+                  Add variations
+                </Button>
+              </div>
+            </div>
+
+            {!attributeDefinitions.length ? <p className="text-sm text-muted-foreground">Add attributes first to build variations.</p> : null}
+
+            <div className="space-y-4">
+              {variantRows.map((variant) => (
+                <div key={variant.id} className="rounded-2xl border border-border/70 bg-background/60 p-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {attributeDefinitions.map((attribute) => (
+                      <Field key={`${variant.id}-${attribute.name}`} label={attribute.name}>
+                        <select
+                          value={variant.options[attribute.name] ?? ""}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) =>
+                                entry.id === variant.id
+                                  ? {
+                                      ...entry,
+                                      options: {
+                                        ...entry.options,
+                                        [attribute.name]: event.target.value,
+                                      },
+                                    }
+                                  : entry,
+                              ),
+                            )
+                          }
+                          className="min-h-11 w-full rounded-[1.25rem] border border-input bg-background px-4 py-2 text-sm"
+                        >
+                          {attribute.values.map((value) => (
+                            <option key={`${variant.id}-${attribute.name}-${value}`} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    ))}
+
+                    <Field label="Weight">
+                      <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-3">
+                        <Input
+                          value={variant.weight}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, weight: event.target.value } : entry)),
+                            )
+                          }
+                          inputMode="decimal"
+                          placeholder="0"
+                        />
+                        <select
+                          value={variant.weightUnit}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) =>
+                                entry.id === variant.id ? { ...entry, weightUnit: event.target.value === "kg" ? "kg" : "g" } : entry,
+                              ),
+                            )
+                          }
+                          className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                        </select>
+                      </div>
+                    </Field>
+
+                    <Field label="Sale price">
+                      <Input
+                        value={variant.salePrice}
+                        onChange={(event) =>
+                          setVariantRows((current) =>
+                            current.map((entry) => (entry.id === variant.id ? { ...entry, salePrice: event.target.value } : entry)),
+                          )
+                        }
+                        inputMode="decimal"
+                      />
+                    </Field>
+
+                    <Field label="Regular price">
+                      <Input
+                        value={variant.regularPrice}
+                        onChange={(event) =>
+                          setVariantRows((current) =>
+                            current.map((entry) => (entry.id === variant.id ? { ...entry, regularPrice: event.target.value } : entry)),
+                          )
+                        }
+                        inputMode="decimal"
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-3 rounded-2xl border border-border bg-background px-3 py-2 text-sm">
+                      <Checkbox
+                        checked={variant.inStock}
+                        onCheckedChange={(checked) =>
+                          setVariantRows((current) =>
+                            current.map((entry) => (entry.id === variant.id ? { ...entry, inStock: Boolean(checked) } : entry)),
+                          )
+                        }
+                      />
+                      Variant in stock
+                    </label>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => setVariantRows((current) => current.filter((entry) => entry.id !== variant.id))}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-2 md:col-span-2">
             <Label>Image URLs (one per line)</Label>
             <textarea value={images} onChange={(event) => setImages(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" placeholder="https://..." />
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/30">
+              <UploadCloud className="h-3.5 w-3.5" /> Upload image
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  void uploadItemImage(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+              <div className="h-full bg-primary transition-all" style={{ width: `${imageUploadProgress}%` }} />
+            </div>
+            {imageList.length ? (
+              <div className="grid gap-2 sm:grid-cols-3">
+                {imageList.map((url) => (
+                  <div key={url} className="relative overflow-hidden rounded-xl border border-border">
+                    <div className="relative h-24 w-full bg-muted/20">
+                      <Image src={url} alt="Item image" fill className="object-cover" sizes="160px" />
+                    </div>
+                    <button
+                      type="button"
+                      className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+                      onClick={() => setImages((current) => parseImageLines(current).filter((entry) => entry !== url).join("\n"))}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
           <label className="flex items-center gap-3 rounded-[1.25rem] border border-border bg-background px-4 py-3 text-sm">
             <Checkbox checked={featured} onCheckedChange={(checked) => setFeatured(Boolean(checked))} /> Feature this item
@@ -357,6 +720,10 @@ function CreateItemDialog({ vendors }: { vendors: VendorSummaryDto[] }) {
           <label className="flex items-center gap-3 rounded-[1.25rem] border border-border bg-background px-4 py-3 text-sm">
             <Checkbox checked={inStock} onCheckedChange={(checked) => setInStock(Boolean(checked))} /> Offer is active and in stock
           </label>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Description</Label>
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" placeholder="Describe packaging, contents, and gifting use case." />
+          </div>
         </div>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -381,6 +748,9 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
   const [description, setDescription] = useState(item.description);
   const [tags, setTags] = useState((item.tags ?? []).join(", "));
   const [images, setImages] = useState((item.images ?? []).join("\n"));
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
+  const [attributeRows, setAttributeRows] = useState<AttributeInputRow[]>(() => toAttributeRows(item.attributes));
+  const [variantRows, setVariantRows] = useState<VariantInputRow[]>(() => toVariantRows(item.variants));
   const [featured, setFeatured] = useState(Boolean(item.featured));
   const [productInStock, setProductInStock] = useState(item.inStock);
   const [minOrderQty, setMinOrderQty] = useState(String(item.minOrderQty ?? 1));
@@ -404,6 +774,40 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const imageList = useMemo(() => parseImageLines(images), [images]);
+
+  const uploadItemImage = async (file: File) => {
+    setError(null);
+    try {
+      const url = await uploadFileToCloudinary(file, {
+        folder: "gifta/items",
+        resourceType: "image",
+        onProgress: setImageUploadProgress,
+      });
+
+      setImages((current) => {
+        const next = [...parseImageLines(current), url];
+        return next.join("\n");
+      });
+      setImageUploadProgress(100);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload image");
+    }
+  };
+  const attributeDefinitions = useMemo(() => getAttributeDefinitions(attributeRows), [attributeRows]);
+
+  const syncVariantRows = () => {
+    setVariantRows((current) =>
+      syncVariantRowsWithAttributes(attributeDefinitions, current, {
+        salePrice: offerPrice,
+        regularPrice: originalPrice,
+        weight: "0",
+        weightUnit: "g",
+        inStock: offerInStock,
+      }),
+    );
+  };
+
   const syncSelectedOffer = (nextStoreId: string) => {
     setOfferStoreId(nextStoreId);
     const nextOffer = offers.find((offer) => offer.storeId === nextStoreId);
@@ -419,6 +823,14 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
     setError(null);
 
     try {
+      const syncedVariantRows = syncVariantRowsWithAttributes(attributeDefinitions, variantRows, {
+        salePrice: offerPrice,
+        regularPrice: originalPrice,
+        weight: "0",
+        weightUnit: "g",
+        inStock: offerInStock,
+      });
+
       const primary = await fetch(`/api/admin/items/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -436,6 +848,8 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
           originalPrice: Number(originalPrice) || 0,
           deliveryEtaHours: Number(deliveryEtaHours) || 24,
           offerInStock,
+          attributes: attributeDefinitions,
+          variants: toVariantPayload(syncedVariantRows, attributeDefinitions),
         }),
       });
       const primaryPayload = (await primary.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
@@ -592,14 +1006,251 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Item name"><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
             <Field label="Category"><Input value={category} onChange={(event) => setCategory(event.target.value)} /></Field>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Description</Label>
-              <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" />
-            </div>
             <Field label="Tags (comma separated)"><Input value={tags} onChange={(event) => setTags(event.target.value)} /></Field>
-            <Field label="Images (one per line)"><textarea value={images} onChange={(event) => setImages(event.target.value)} rows={3} className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" /></Field>
+            <div className="space-y-2">
+              <Label>Images (one per line)</Label>
+              <textarea value={images} onChange={(event) => setImages(event.target.value)} rows={3} className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" />
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/30">
+                <UploadCloud className="h-3.5 w-3.5" /> Upload image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    void uploadItemImage(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full bg-primary transition-all" style={{ width: `${imageUploadProgress}%` }} />
+              </div>
+              {imageList.length ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {imageList.map((url) => (
+                    <div key={url} className="relative overflow-hidden rounded-xl border border-border">
+                      <div className="relative h-24 w-full bg-muted/20">
+                        <Image src={url} alt="Item image" fill className="object-cover" sizes="160px" />
+                      </div>
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+                        onClick={() => setImages((current) => parseImageLines(current).filter((entry) => entry !== url).join("\n"))}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <Field label="Min order qty"><Input value={minOrderQty} onChange={(event) => setMinOrderQty(event.target.value)} inputMode="numeric" /></Field>
             <Field label="Max order qty"><Input value={maxOrderQty} onChange={(event) => setMaxOrderQty(event.target.value)} inputMode="numeric" /></Field>
+
+            <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-base">Attributes</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAttributeRows((current) => [...current, { id: makeLocalId("attr"), name: "", value: "" }])}
+                >
+                  Add attributes
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {attributeRows.map((row) => (
+                  <div key={row.id} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <Field label="Name">
+                      <Input
+                        value={row.name}
+                        onChange={(event) =>
+                          setAttributeRows((current) =>
+                            current.map((entry) => (entry.id === row.id ? { ...entry, name: event.target.value } : entry)),
+                          )
+                        }
+                        placeholder="size"
+                      />
+                    </Field>
+                    <Field label="Value">
+                      <Input
+                        value={row.value}
+                        onChange={(event) =>
+                          setAttributeRows((current) =>
+                            current.map((entry) => (entry.id === row.id ? { ...entry, value: event.target.value } : entry)),
+                          )
+                        }
+                        placeholder="10"
+                      />
+                    </Field>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() =>
+                          setAttributeRows((current) => {
+                            if (current.length <= 1) {
+                              return [{ id: makeLocalId("attr"), name: "", value: "" }];
+                            }
+                            return current.filter((entry) => entry.id !== row.id);
+                          })
+                        }
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Label className="text-base">Variations</Label>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => void syncVariantRows()}>Sync with attributes</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setVariantRows((current) => [
+                        ...current,
+                        {
+                          id: makeLocalId("var"),
+                          options: Object.fromEntries(attributeDefinitions.map((attribute) => [attribute.name, attribute.values[0] ?? ""])),
+                          salePrice: offerPrice,
+                          regularPrice: originalPrice,
+                          weight: "0",
+                          weightUnit: "g",
+                          inStock: offerInStock,
+                        },
+                      ])
+                    }
+                    disabled={!attributeDefinitions.length}
+                  >
+                    Add variations
+                  </Button>
+                </div>
+              </div>
+
+              {!attributeDefinitions.length ? <p className="text-sm text-muted-foreground">Add attributes first to build variations.</p> : null}
+
+              <div className="space-y-4">
+                {variantRows.map((variant) => (
+                  <div key={variant.id} className="rounded-2xl border border-border/70 bg-background/60 p-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {attributeDefinitions.map((attribute) => (
+                        <Field key={`${variant.id}-${attribute.name}`} label={attribute.name}>
+                          <select
+                            value={variant.options[attribute.name] ?? ""}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) =>
+                                  entry.id === variant.id
+                                    ? {
+                                        ...entry,
+                                        options: {
+                                          ...entry.options,
+                                          [attribute.name]: event.target.value,
+                                        },
+                                      }
+                                    : entry,
+                                ),
+                              )
+                            }
+                            className="min-h-11 w-full rounded-[1.25rem] border border-input bg-background px-4 py-2 text-sm"
+                          >
+                            {attribute.values.map((value) => (
+                              <option key={`${variant.id}-${attribute.name}-${value}`} value={value}>{value}</option>
+                            ))}
+                          </select>
+                        </Field>
+                      ))}
+
+                      <Field label="Weight">
+                        <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-3">
+                          <Input
+                            value={variant.weight}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) => (entry.id === variant.id ? { ...entry, weight: event.target.value } : entry)),
+                              )
+                            }
+                            inputMode="decimal"
+                            placeholder="0"
+                          />
+                          <select
+                            value={variant.weightUnit}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) =>
+                                  entry.id === variant.id ? { ...entry, weightUnit: event.target.value === "kg" ? "kg" : "g" } : entry,
+                                ),
+                              )
+                            }
+                            className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="g">g</option>
+                            <option value="kg">kg</option>
+                          </select>
+                        </div>
+                      </Field>
+
+                      <Field label="Sale price">
+                        <Input
+                          value={variant.salePrice}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, salePrice: event.target.value } : entry)),
+                            )
+                          }
+                          inputMode="decimal"
+                        />
+                      </Field>
+
+                      <Field label="Regular price">
+                        <Input
+                          value={variant.regularPrice}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, regularPrice: event.target.value } : entry)),
+                            )
+                          }
+                          inputMode="decimal"
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <label className="flex items-center gap-3 rounded-2xl border border-border bg-background px-3 py-2 text-sm">
+                        <Checkbox
+                          checked={variant.inStock}
+                          onCheckedChange={(checked) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, inStock: Boolean(checked) } : entry)),
+                            )
+                          }
+                        />
+                        Variant in stock
+                      </label>
+
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => setVariantRows((current) => current.filter((entry) => entry.id !== variant.id))}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <Field label="Manage store offer">
               <select value={offerStoreId} onChange={(event) => syncSelectedOffer(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
                 {offers.map((offer) => (
@@ -619,6 +1270,16 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
             <label className="flex items-center gap-3 rounded-[1.25rem] border border-border bg-background px-4 py-3 text-sm md:col-span-2">
               <Checkbox checked={offerInStock} onCheckedChange={(checked) => setOfferInStock(Boolean(checked))} /> Selected store offer is active
             </label>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Description</Label>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={4}
+                className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40"
+                placeholder="Describe packaging, contents, and gifting use case."
+              />
+            </div>
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -697,4 +1358,154 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="mt-2 font-medium text-foreground">{value}</p>
     </div>
   );
+}
+
+function makeLocalId(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function toAttributeRows(attributes: AdminItemAttribute[] | undefined): AttributeInputRow[] {
+  const rows = (attributes ?? []).flatMap((attribute) =>
+    attribute.values.map((value) => ({
+      id: makeLocalId("attr"),
+      name: attribute.name,
+      value,
+    })),
+  );
+
+  return rows.length ? rows : [{ id: makeLocalId("attr"), name: "", value: "" }];
+}
+
+function toVariantRows(variants: AdminItemVariant[] | undefined): VariantInputRow[] {
+  return (variants ?? []).map((variant) => ({
+    id: variant.id,
+    options: variant.options ?? {},
+    salePrice: String(variant.salePrice ?? 0),
+    regularPrice: String(variant.regularPrice ?? ""),
+    weight: String(variant.weight ?? ""),
+    weightUnit: variant.weightUnit === "kg" ? "kg" : "g",
+    inStock: variant.inStock,
+  }));
+}
+
+function getAttributeDefinitions(rows: AttributeInputRow[]): AdminItemAttribute[] {
+  const map = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const name = row.name.trim();
+    const value = row.value.trim();
+    if (!name || !value) {
+      continue;
+    }
+    if (!map.has(name)) {
+      map.set(name, new Set());
+    }
+    map.get(name)?.add(value);
+  }
+
+  return Array.from(map.entries()).map(([name, values]) => ({
+    name,
+    values: Array.from(values),
+  }));
+}
+
+function buildVariantSignature(options: Record<string, string>, attributes: AdminItemAttribute[]) {
+  return attributes.map((attribute) => `${attribute.name}:${options[attribute.name] ?? ""}`).join("|");
+}
+
+function getAttributeCombinations(attributes: AdminItemAttribute[]): Array<Record<string, string>> {
+  if (!attributes.length) {
+    return [];
+  }
+
+  let combinations: Array<Record<string, string>> = [{}];
+  for (const attribute of attributes) {
+    const next: Array<Record<string, string>> = [];
+    for (const existing of combinations) {
+      for (const value of attribute.values) {
+        next.push({ ...existing, [attribute.name]: value });
+      }
+    }
+    combinations = next;
+  }
+  return combinations;
+}
+
+function syncVariantRowsWithAttributes(
+  attributes: AdminItemAttribute[],
+  existing: VariantInputRow[],
+  defaults: { salePrice: string; regularPrice: string; weight: string; weightUnit: "g" | "kg"; inStock: boolean },
+) {
+  if (!attributes.length) {
+    return [] as VariantInputRow[];
+  }
+
+  const existingBySignature = new Map(
+    existing.map((entry) => [buildVariantSignature(entry.options, attributes), entry]),
+  );
+
+  return getAttributeCombinations(attributes).map((options) => {
+    const signature = buildVariantSignature(options, attributes);
+    const previous = existingBySignature.get(signature);
+    return {
+      id: previous?.id ?? makeLocalId("var"),
+      options,
+      salePrice: previous?.salePrice ?? defaults.salePrice,
+      regularPrice: previous?.regularPrice ?? defaults.regularPrice,
+      weight: previous?.weight ?? defaults.weight,
+      weightUnit: previous?.weightUnit ?? defaults.weightUnit,
+      inStock: previous?.inStock ?? defaults.inStock,
+    };
+  });
+}
+
+function toVariantPayload(rows: VariantInputRow[], attributes: AdminItemAttribute[]): AdminItemVariant[] {
+  const signatures = new Set<string>();
+  const output: AdminItemVariant[] = [];
+
+  for (const row of rows) {
+    if (!attributes.length) {
+      continue;
+    }
+
+    const options: Record<string, string> = {};
+    let valid = true;
+    for (const attribute of attributes) {
+      const selected = row.options[attribute.name];
+      if (!selected || !attribute.values.includes(selected)) {
+        valid = false;
+        break;
+      }
+      options[attribute.name] = selected;
+    }
+
+    if (!valid) {
+      continue;
+    }
+
+    const salePrice = Number(row.salePrice);
+    if (!Number.isFinite(salePrice)) {
+      continue;
+    }
+
+    const signature = buildVariantSignature(options, attributes);
+    if (signatures.has(signature)) {
+      continue;
+    }
+    signatures.add(signature);
+
+    const regularPriceNumber = row.regularPrice.trim() ? Number(row.regularPrice) : undefined;
+    const weightNumber = row.weight.trim() ? Number(row.weight) : undefined;
+
+    output.push({
+      id: row.id,
+      options,
+      salePrice: Math.max(0, salePrice),
+      regularPrice: typeof regularPriceNumber === "number" && Number.isFinite(regularPriceNumber) ? Math.max(0, regularPriceNumber) : undefined,
+      weight: typeof weightNumber === "number" && Number.isFinite(weightNumber) ? Math.max(0, weightNumber) : undefined,
+      weightUnit: row.weightUnit,
+      inStock: row.inStock,
+    });
+  }
+
+  return output;
 }

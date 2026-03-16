@@ -10,6 +10,7 @@ const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).optional(),
   email: z.string().email().optional(),
   phone: z.string().trim().min(7).max(20).optional(),
+  profileImage: z.string().trim().url().optional(),
   preferences: z
     .object({
       occasions: z.array(z.enum(categories)).optional(),

@@ -24,7 +24,7 @@ import {
   UserNotificationDto,
   VendorSummaryDto,
 } from "@/types/api";
-import { Product } from "@/types/ecommerce";
+import { Product, ProductAttribute, ProductVariant } from "@/types/ecommerce";
 
 type StoreDoc = StoreDto & {
   details?: Record<string, unknown>;
@@ -75,6 +75,7 @@ type UserDoc = {
   email: string;
   emailVerified?: Date;
   phone?: string;
+  profileImage?: string;
   addresses?: ProfileDto["addresses"];
   preferences?: ProfileDto["preferences"];
   notificationReadIds?: string[];
@@ -104,6 +105,7 @@ function profileDocToDto(doc: UserDoc): ProfileDto {
     fullName,
     email: doc.email,
     phone: doc.phone,
+    profileImage: doc.profileImage,
     addresses: normalizeProfileAddresses(doc.addresses, fullName, doc.phone),
     preferences: {
       occasions: doc.preferences?.occasions ?? ["Birthday", "Anniversary"],
@@ -146,6 +148,100 @@ function normalizeInventoryProduct<T extends ProductDoc>(product: T): T {
   };
 }
 
+function normalizeProductAttributes(attributes: ProductAttribute[] | undefined): ProductAttribute[] {
+  if (!Array.isArray(attributes)) {
+    return [];
+  }
+
+  const names = new Set<string>();
+  const normalized: ProductAttribute[] = [];
+  for (const attribute of attributes) {
+    const name = attribute.name.trim();
+    if (!name || names.has(name)) {
+      continue;
+    }
+    const values = Array.from(new Set((attribute.values ?? []).map((value) => value.trim()).filter(Boolean)));
+    if (!values.length) {
+      continue;
+    }
+    names.add(name);
+    normalized.push({ name, values });
+  }
+
+  return normalized;
+}
+
+function isVariantMappedToAttributes(variant: ProductVariant, attributes: ProductAttribute[]) {
+  const optionEntries = Object.entries(variant.options ?? {});
+  if (!optionEntries.length) {
+    return false;
+  }
+
+  for (const attribute of attributes) {
+    const selectedValue = variant.options[attribute.name];
+    if (!selectedValue || !attribute.values.includes(selectedValue)) {
+      return false;
+    }
+  }
+
+  for (const [name] of optionEntries) {
+    if (!attributes.some((attribute) => attribute.name === name)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function normalizeProductVariants(variants: ProductVariant[] | undefined, attributes: ProductAttribute[]): ProductVariant[] {
+  if (!Array.isArray(variants) || !variants.length || !attributes.length) {
+    return [];
+  }
+
+  const signatures = new Set<string>();
+  const normalized: ProductVariant[] = [];
+  for (const variant of variants) {
+    const id = variant.id.trim();
+    if (!id) {
+      continue;
+    }
+
+    const options: Record<string, string> = {};
+    for (const attribute of attributes) {
+      const value = variant.options?.[attribute.name]?.trim();
+      if (!value || !attribute.values.includes(value)) {
+        continue;
+      }
+      options[attribute.name] = value;
+    }
+
+    if (Object.keys(options).length !== attributes.length) {
+      continue;
+    }
+
+    const signature = attributes
+      .map((attribute) => `${attribute.name}:${options[attribute.name]}`)
+      .join("|");
+
+    if (signatures.has(signature)) {
+      continue;
+    }
+    signatures.add(signature);
+
+    normalized.push({
+      id,
+      options,
+      salePrice: Math.max(0, variant.salePrice),
+      regularPrice: typeof variant.regularPrice === "number" ? Math.max(0, variant.regularPrice) : undefined,
+      weight: typeof variant.weight === "number" ? Math.max(0, variant.weight) : undefined,
+      weightUnit: variant.weightUnit === "kg" ? "kg" : variant.weightUnit === "g" ? "g" : undefined,
+      inStock: variant.inStock ?? true,
+    });
+  }
+
+  return normalized;
+}
+
 function isPurchasableProduct(product: ProductDoc) {
   const normalized = normalizeInventoryProduct(product);
   return normalized.inStock && (normalized.maxOrderQty ?? 10) > 0;
@@ -172,6 +268,9 @@ function toStoreCategoryOptions(details: StoreDoc["details"]): StoreCategoryOpti
     }
 
     const rawSubcategories = (entry as { subcategories?: unknown }).subcategories;
+    const image = typeof (entry as { image?: unknown }).image === "string"
+      ? (entry as { image: string }).image.trim()
+      : "";
     const subcategories = Array.isArray(rawSubcategories)
       ? rawSubcategories
           .filter((value): value is string => typeof value === "string")
@@ -182,6 +281,7 @@ function toStoreCategoryOptions(details: StoreDoc["details"]): StoreCategoryOpti
     normalized.push({
       name: categoryName,
       subcategories: Array.from(new Set(subcategories)),
+      ...(image ? { image } : {}),
     });
   }
 
@@ -340,6 +440,7 @@ export async function upsertProfile(
     fullName?: string;
     email?: string;
     phone?: string;
+    profileImage?: string;
     addresses?: ProfileDto["addresses"];
     preferences?: Partial<ProfileDto["preferences"]>;
   },
@@ -359,6 +460,7 @@ export async function upsertProfile(
     fullName: update.fullName ?? existing?.fullName ?? "Gifta Guest",
     email: update.email ?? existing?.email ?? "guest@gifta.local",
     phone: update.phone ?? existing?.phone,
+    profileImage: update.profileImage ?? existing?.profileImage,
     addresses: normalizeProfileAddresses(
       update.addresses ?? existing?.addresses,
       update.fullName ?? existing?.fullName ?? "Gifta Guest",
@@ -756,11 +858,38 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
     offers.find({ storeId: { $in: scopedStoreIds } }).toArray(),
   ]);
 
+  const productsById = new Map(productDocs.map((product) => [product.id, product]));
+
   return storeDocs
     .map((store) => {
-      const offerCount = offerDocs.filter((entry) => entry.storeId === store.id).length;
-      const productIds = new Set(offerDocs.filter((entry) => entry.storeId === store.id).map((entry) => entry.productId));
+      const storeOffers = offerDocs.filter((entry) => entry.storeId === store.id);
+      const offerCount = storeOffers.length;
+      const productIds = new Set(storeOffers.map((entry) => entry.productId));
       const itemCount = productDocs.filter((product) => productIds.has(product.id)).length;
+      const categoryAccumulator = new Map<string, { itemIds: Set<string>; offerCount: number }>();
+
+      for (const offer of storeOffers) {
+        const product = productsById.get(offer.productId);
+        const category = product?.category?.trim() || "Uncategorized";
+        if (!categoryAccumulator.has(category)) {
+          categoryAccumulator.set(category, { itemIds: new Set<string>(), offerCount: 0 });
+        }
+        const entry = categoryAccumulator.get(category);
+        if (!entry) {
+          continue;
+        }
+        entry.offerCount += 1;
+        entry.itemIds.add(offer.productId);
+      }
+
+      const categoryBreakdown = Array.from(categoryAccumulator.entries())
+        .map(([category, value]) => ({
+          category,
+          itemCount: value.itemIds.size,
+          offerCount: value.offerCount,
+        }))
+        .sort((left, right) => right.itemCount - left.itemCount || left.category.localeCompare(right.category));
+
       const basicInfo = getStoreBasicInfo(store.details);
       const categories = toStoreCategoryOptions(store.details);
       return {
@@ -775,6 +904,7 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
         primaryCategory: basicInfo.category || undefined,
         primarySubcategory: basicInfo.subcategory || undefined,
         categories,
+        categoryBreakdown,
       };
     })
     .sort((left, right) => Number(right.active) - Number(left.active) || right.rating - left.rating);
@@ -1416,6 +1546,7 @@ export async function updateStoreScoped(input: {
     patch["details.catalog.categories"] = input.updates.categories
       .map((entry) => ({
         name: entry.name.trim(),
+        ...(entry.image?.trim() ? { image: entry.image.trim() } : {}),
         subcategories: entry.subcategories
           .map((subcategory) => subcategory.trim())
           .filter((subcategory) => Boolean(subcategory)),
@@ -1458,6 +1589,8 @@ export async function createAdminItemScoped(input: {
     inStock?: boolean;
     minOrderQty?: number;
     maxOrderQty?: number;
+    attributes?: ProductAttribute[];
+    variants?: ProductVariant[];
   };
   scope: AdminScope;
 }) {
@@ -1510,7 +1643,12 @@ export async function createAdminItemScoped(input: {
     maxOrderQty: input.payload.maxOrderQty ?? 10,
     featured: input.payload.featured ?? false,
     storeId,
+    attributes: normalizeProductAttributes(input.payload.attributes),
+    variants: [],
   };
+
+  const normalizedVariants = normalizeProductVariants(input.payload.variants, doc.attributes ?? []);
+  doc.variants = normalizedVariants;
 
   await products.insertOne(normalizeInventoryProduct(doc));
 
@@ -1548,6 +1686,8 @@ export async function updateAdminItemScoped(input: {
     originalPrice?: number;
     deliveryEtaHours?: number;
     offerInStock?: boolean;
+    attributes?: ProductAttribute[];
+    variants?: ProductVariant[];
   };
   scope: AdminScope;
 }) {
@@ -1558,6 +1698,11 @@ export async function updateAdminItemScoped(input: {
     if (!hasOwnership) {
       throw new Error("FORBIDDEN_ITEM_SCOPE");
     }
+  }
+
+  const existingProduct = await products.findOne({ id: input.itemId });
+  if (!existingProduct) {
+    throw new Error("ITEM_NOT_FOUND");
   }
 
   const existingOffers = await offers.find({ productId: input.itemId }).toArray();
@@ -1577,6 +1722,24 @@ export async function updateAdminItemScoped(input: {
   if (typeof input.updates.featured === "boolean") patch.featured = input.updates.featured;
   if (Array.isArray(input.updates.tags)) patch.tags = input.updates.tags;
   if (Array.isArray(input.updates.images) && input.updates.images.length) patch.images = input.updates.images;
+
+  const hasAttributesUpdate = input.updates.attributes !== undefined;
+  const hasVariantsUpdate = input.updates.variants !== undefined;
+  const nextAttributes = hasAttributesUpdate ? normalizeProductAttributes(input.updates.attributes) : (existingProduct.attributes ?? []);
+  if (hasAttributesUpdate) {
+    patch.attributes = nextAttributes;
+    if (!nextAttributes.length) {
+      patch.variants = [];
+    } else if (!hasVariantsUpdate) {
+      const retainedVariants = normalizeProductVariants(existingProduct.variants ?? [], nextAttributes)
+        .filter((variant) => isVariantMappedToAttributes(variant, nextAttributes));
+      patch.variants = retainedVariants;
+    }
+  }
+
+  if (hasVariantsUpdate) {
+    patch.variants = normalizeProductVariants(input.updates.variants, nextAttributes);
+  }
 
   if (Object.keys(patch).length) {
     await products.updateOne({ id: input.itemId }, { $set: patch });

@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
 
 export function ProfileOnboardingGate() {
   const { status } = useSession();
@@ -20,10 +23,12 @@ export function ProfileOnboardingGate() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     phone: "",
+    profileImage: "",
     receiverName: "",
     receiverPhone: "",
     line1: "",
@@ -34,6 +39,21 @@ export function ProfileOnboardingGate() {
   });
 
   const defaultName = useMemo(() => "", []);
+
+  const uploadProfileImage = async (file: File) => {
+    setError(null);
+    try {
+      const url = await uploadFileToCloudinary(file, {
+        folder: "gifta/profiles",
+        resourceType: "image",
+        onProgress: setImageUploadProgress,
+      });
+      setForm((prev) => ({ ...prev, profileImage: url }));
+      setImageUploadProgress(100);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload profile image.");
+    }
+  };
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -52,6 +72,7 @@ export function ProfileOnboardingGate() {
           fullName?: string;
           email?: string;
           phone?: string;
+          profileImage?: string;
           addresses?: Array<{ receiverName?: string; receiverPhone?: string }>;
         };
       };
@@ -84,6 +105,7 @@ export function ProfileOnboardingGate() {
           fullName: fallbackName,
           email: profile.email ?? "",
           phone: profile.phone ?? "",
+          profileImage: profile.profileImage ?? "",
           receiverName: primaryAddress?.receiverName ?? fallbackName,
           receiverPhone: primaryAddress?.receiverPhone ?? profile.phone ?? "",
         }));
@@ -139,6 +161,7 @@ export function ProfileOnboardingGate() {
         fullName?: string;
         email?: string;
         phone?: string;
+        profileImage?: string;
         addresses?: Array<{
           label: string;
           receiverName: string;
@@ -154,6 +177,7 @@ export function ProfileOnboardingGate() {
       if (fullName) payloadBody.fullName = fullName;
       if (email) payloadBody.email = email;
       if (phone) payloadBody.phone = phone;
+      if (form.profileImage.trim()) payloadBody.profileImage = form.profileImage.trim();
       if (hasCompleteAddress) {
         payloadBody.addresses = [
           {
@@ -204,6 +228,37 @@ export function ProfileOnboardingGate() {
         </DialogHeader>
 
         <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Profile image</Label>
+            <div className="flex flex-wrap items-center gap-3">
+              {form.profileImage ? (
+                <div className="relative h-16 w-16 overflow-hidden rounded-full border border-border">
+                  <Image src={form.profileImage} alt="Profile" fill className="object-cover" sizes="64px" />
+                </div>
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-border text-xs text-muted-foreground">
+                  No image
+                </div>
+              )}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/30">
+                <UploadCloud className="h-3.5 w-3.5" /> Upload image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    void uploadProfileImage(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+              <div className="h-full bg-primary transition-all" style={{ width: `${imageUploadProgress}%` }} />
+            </div>
+          </div>
           <Field label="Full name">
             <Input value={form.fullName} onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))} />
           </Field>

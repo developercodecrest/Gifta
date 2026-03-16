@@ -9,7 +9,7 @@ export const roleLabels: Record<Role, string> = {
 };
 
 export const rolePermissions: Record<Role, string[]> = {
-  sadmin: ["dashboard", "vendors", "items", "orders", "users", "roles", "settings"],
+  sadmin: ["dashboard", "vendors", "items", "orders", "riders", "users", "roles", "settings"],
   storeOwner: ["dashboard", "vendors", "items", "orders", "settings"],
   user: [],
 };

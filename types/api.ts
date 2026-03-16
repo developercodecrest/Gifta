@@ -76,6 +76,7 @@ export type ProfileDto = {
   fullName: string;
   email: string;
   phone?: string;
+  profileImage?: string;
   addresses: ProfileAddress[];
   preferences: ProfilePreferences;
   updatedAt: string;
@@ -93,6 +94,13 @@ export type StoreDto = {
 export type StoreCategoryOption = {
   name: string;
   subcategories: string[];
+  image?: string;
+};
+
+export type VendorCategoryAggregate = {
+  category: string;
+  itemCount: number;
+  offerCount: number;
 };
 
 export type RiderDto = {
@@ -212,6 +220,7 @@ export type VendorSummaryDto = StoreDto & {
   primaryCategory?: string;
   primarySubcategory?: string;
   categories: StoreCategoryOption[];
+  categoryBreakdown?: VendorCategoryAggregate[];
 };
 
 export type OfferDto = {

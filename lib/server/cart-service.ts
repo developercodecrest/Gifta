@@ -1,5 +1,5 @@
 import { getMongoDb } from "@/lib/mongodb";
-import { CartItem, Product } from "@/types/ecommerce";
+import { CartItem, Product, ProductVariant } from "@/types/ecommerce";
 import { OfferDto, StoreDto } from "@/types/api";
 
 type OfferDoc = {
@@ -17,6 +17,8 @@ type CartLine = {
   quantity: number;
   offers: OfferDto[];
   selectedOffer?: OfferDto;
+  selectedVariant?: ProductVariant;
+  variantLabel?: string;
   lineSubtotal: number;
 };
 
@@ -116,13 +118,30 @@ export async function buildCartSnapshot(items: CartItem[]): Promise<CartSnapshot
       ? itemOffers.find((entry) => entry.id === item.offerId) ?? itemOffers[0]
       : itemOffers[0];
 
-    const linePrice = selectedOffer?.price ?? product.price;
+    const hasVariantCatalog = (product.attributes?.length ?? 0) > 0 && (product.variants?.length ?? 0) > 0;
+    const selectedVariant = hasVariantCatalog
+      ? product.variants?.find((variant) => variant.id === item.variantId)
+      : undefined;
+
+    // Variant-enabled products must be priced by variant, never by base product/default offer pricing.
+    if (hasVariantCatalog && !selectedVariant) {
+      continue;
+    }
+
+    const linePrice = selectedVariant?.salePrice ?? selectedOffer?.price ?? product.price;
+    const variantLabel = selectedVariant
+      ? Object.entries(selectedVariant.options)
+          .map(([name, value]) => `${name}: ${value}`)
+          .join(" | ")
+      : undefined;
 
     lines.push({
       product,
       quantity: clampedQty,
       offers: itemOffers,
       selectedOffer,
+      selectedVariant,
+      variantLabel,
       lineSubtotal: linePrice * clampedQty,
     });
   }

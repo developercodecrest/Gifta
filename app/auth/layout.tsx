@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
+  if (session?.user) {
+    redirect("/");
+  }
+
   return (
     <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-[1.1fr_1fr]">
       <Card>

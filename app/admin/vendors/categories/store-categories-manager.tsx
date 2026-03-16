@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
 import { VendorSummaryDto } from "@/types/api";
 
 type Props = {
@@ -19,6 +21,7 @@ export function StoreCategoriesManager({ vendors }: Props) {
   const [categories, setCategories] = useState(selectedStore?.categories ?? []);
   const [newCategory, setNewCategory] = useState("");
   const [subDraftByCategory, setSubDraftByCategory] = useState<Record<string, string>>({});
+  const [uploadingByCategory, setUploadingByCategory] = useState<Record<string, number>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -55,6 +58,26 @@ export function StoreCategoriesManager({ vendors }: Props) {
       setError(requestError instanceof Error ? requestError.message : "Unable to save categories");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadCategoryImage = async (categoryName: string, file: File) => {
+    setError(null);
+    try {
+      const url = await uploadFileToCloudinary(file, {
+        folder: `gifta/categories/${selectedStoreId || "global"}`,
+        resourceType: "image",
+        onProgress: (value) => {
+          setUploadingByCategory((prev) => ({ ...prev, [categoryName]: value }));
+        },
+      });
+
+      setCategories((prev) =>
+        prev.map((entry) => (entry.name === categoryName ? { ...entry, image: url } : entry)),
+      );
+      setUploadingByCategory((prev) => ({ ...prev, [categoryName]: 100 }));
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload category image");
     }
   };
 
@@ -109,6 +132,37 @@ export function StoreCategoriesManager({ vendors }: Props) {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    {entry.image ? (
+                      <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-border">
+                        <Image src={entry.image} alt={`${entry.name} image`} fill className="object-cover" sizes="56px" />
+                      </div>
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">
+                        No image
+                      </div>
+                    )}
+
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/30">
+                      <UploadCloud className="h-3.5 w-3.5" /> Upload image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          void uploadCategoryImage(entry.name, file);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${uploadingByCategory[entry.name] ?? 0}%` }} />
+                  </div>
 
                 <p className="mt-1 text-xs text-muted-foreground">{entry.subcategories.join(", ") || "No subcategories"}</p>
 

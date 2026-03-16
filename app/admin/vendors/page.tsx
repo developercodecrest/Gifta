@@ -11,13 +11,14 @@ export default async function AdminVendorsPage() {
   const vendors = await getVendorSummariesScoped(identity).catch(() => []);
   const totalItems = vendors.reduce((total, vendor) => total + vendor.itemCount, 0);
   const totalOffers = vendors.reduce((total, vendor) => total + vendor.offerCount, 0);
+  const mappedCategories = new Set(vendors.flatMap((vendor) => (vendor.categoryBreakdown ?? []).map((entry) => entry.category))).size;
 
   return (
     <div className="space-y-6">
       <AdminHero
         eyebrow="Vendors"
         title="Seller network and storefront operations"
-        description="Oversee seller quality, category mapping, and assortment scale across each storefront."
+        description="Oversee seller quality, category mapping, and assortment scale across each storefront. Add items from each vendor row so item ownership is always mapped by vendor ID."
         actions={
           <>
             <Button asChild variant="outline">
@@ -33,6 +34,7 @@ export default async function AdminVendorsPage() {
           { label: "Active", value: String(vendors.filter((vendor) => vendor.active).length), tone: "mint" },
           { label: "Catalog items", value: String(totalItems), tone: "sun" },
           { label: "Offer links", value: String(totalOffers), tone: "warm" },
+          { label: "Mapped categories", value: String(mappedCategories), tone: "mint" },
         ]}
       />
 

@@ -51,6 +51,7 @@ const timeSlotSchema = z.object({
 const storeCategorySchema = z.object({
   name: z.string().trim().min(1),
   subcategories: z.array(z.string().trim().min(1)).default([]),
+  image: optionalString,
 });
 
 export const createStoreSchema = z.object({

@@ -582,13 +582,15 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
             <CardContent>
               <ul className="divide-y divide-border">
                 {snapshot.lines.map((line) => (
-                  <li key={line.product.id} className="grid grid-cols-[50px_1fr_auto] items-center gap-3 py-3">
+                  <li key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}`} className="grid grid-cols-[50px_1fr_auto] items-center gap-3 py-3">
                     <div className="relative h-12 w-12 overflow-hidden rounded-md border border-border">
                       <Image src={line.product.images[0]} alt={line.product.name} fill className="object-cover" sizes="48px" />
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{line.product.name}</p>
-                      <p className="text-xs text-[#74655c]">{line.selectedOffer?.store?.name ?? "Gifta Marketplace"}</p>
+                      <p className="text-xs text-[#74655c]">
+                        {line.variantLabel ? `Variant: ${line.variantLabel}` : (line.selectedOffer?.store?.name ?? "Gifta Marketplace")}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold">{formatCurrency(line.lineSubtotal)}</p>

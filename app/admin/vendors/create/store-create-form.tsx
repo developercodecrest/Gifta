@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
 
 type UploadField = "logo" | "banner" | "profileImage" | "bankProofImage";
 
@@ -87,7 +88,7 @@ type StoreForm = {
     introVideo: string;
   };
   catalog: {
-    categories: Array<{ name: string; subcategories: string[] }>;
+    categories: Array<{ name: string; image?: string; subcategories: string[] }>;
   };
   marketing: {
     couponsEnabled: boolean;
@@ -277,50 +278,35 @@ export function StoreCreateForm() {
     return form.catalog.categories.find((entry) => entry.name === form.basicInfo.category)?.subcategories ?? [];
   }, [form.catalog.categories, form.basicInfo.category]);
 
-  async function getUploadConfig() {
-    const response = await fetch("/api/admin/stores/upload-config", { method: "GET" });
-    const payload = await response.json();
-    if (!response.ok || !payload.success) {
-      throw new Error(payload?.error?.message ?? "Upload config unavailable");
-    }
-    return payload.data as { cloudName: string; uploadPreset: string };
+  async function uploadToCloudinary(file: File, onProgress: (value: number) => void) {
+    return uploadFileToCloudinary(file, {
+      folder: "gifta/stores",
+      resourceType: "image",
+      onProgress,
+    });
   }
 
-  async function uploadToCloudinary(file: File, onProgress: (value: number) => void) {
-    const { cloudName, uploadPreset } = await getUploadConfig();
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
-
-    const secureUrl = await new Promise<string>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`);
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const percent = Math.round((event.loaded / event.total) * 100);
-        onProgress(percent);
-      };
-
-      xhr.onerror = () => reject(new Error("Media upload failed"));
-      xhr.onload = () => {
-        try {
-          const data = JSON.parse(xhr.responseText) as { secure_url?: string; error?: { message?: string } };
-          if (xhr.status >= 200 && xhr.status < 300 && data.secure_url) {
-            resolve(data.secure_url);
-            return;
-          }
-          reject(new Error(data.error?.message ?? "Media upload failed"));
-        } catch {
-          reject(new Error("Invalid media upload response"));
-        }
-      };
-
-      xhr.send(formData);
+  async function uploadCategoryImage(categoryName: string, file: File) {
+    setError(null);
+    const url = await uploadFileToCloudinary(file, {
+      folder: "gifta/categories",
+      resourceType: "image",
+      onProgress: (value) => {
+        setGalleryProgress(value);
+      },
     });
 
-    onProgress(100);
-    return secureUrl;
+    setForm((prev) => ({
+      ...prev,
+      catalog: {
+        ...prev.catalog,
+        categories: prev.catalog.categories.map((entry) =>
+          entry.name === categoryName
+            ? { ...entry, image: url }
+            : entry,
+        ),
+      },
+    }));
   }
 
   async function uploadSingle(field: UploadField, file: File) {
@@ -427,7 +413,7 @@ export function StoreCreateForm() {
           <p className="text-sm text-muted-foreground">Complete all business sections and submit for verification.</p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/admin/vendors"><ArrowLeft className="h-4 w-4" />Back to vendors</Link>
+          <Link href="/admin/vendors" className="inline-flex items-center gap-2 whitespace-nowrap"><ArrowLeft className="h-4 w-4" />Back to vendors</Link>
         </Button>
       </div>
 
@@ -460,7 +446,7 @@ export function StoreCreateForm() {
                 onClick={() => {
                   const name = newCategoryName.trim();
                   if (!name || form.catalog.categories.some((entry) => entry.name.toLowerCase() === name.toLowerCase())) return;
-                  setForm((prev) => ({ ...prev, catalog: { ...prev.catalog, categories: [...prev.catalog.categories, { name, subcategories: [] }] } }));
+                  setForm((prev) => ({ ...prev, catalog: { ...prev.catalog, categories: [...prev.catalog.categories, { name, image: "", subcategories: [] }] } }));
                   setNewCategoryName("");
                   if (!form.basicInfo.category) {
                     setForm((prev) => ({ ...prev, basicInfo: { ...prev.basicInfo, category: name, subcategory: "" } }));
@@ -498,6 +484,23 @@ export function StoreCreateForm() {
                       </Button>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{entry.subcategories.join(", ") || "No subcategories"}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {entry.image ? <p className="truncate text-xs text-muted-foreground">{entry.image}</p> : <p className="text-xs text-muted-foreground">No category image</p>}
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10">
+                        <UploadCloud className="h-3.5 w-3.5" /> Upload Category Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (!file) return;
+                            void uploadCategoryImage(entry.name, file);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Input
                         value={newSubByCategory[entry.name] ?? ""}
