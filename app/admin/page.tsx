@@ -19,6 +19,9 @@ export default async function AdminDashboardPage() {
     totalRiders: 0,
     activeRiders: 0,
     totalUsers: 0,
+    totalCoupons: 0,
+    activeCoupons: 0,
+    totalCouponRedemptions: 0,
   }));
 
   const metrics = [
@@ -28,6 +31,8 @@ export default async function AdminDashboardPage() {
     ["Live Offers", data.totalOffers],
     ["Orders", data.totalOrders],
     ["Pending Orders", data.pendingOrders],
+    ["Coupons", data.totalCoupons],
+    ["Coupon Redemptions", data.totalCouponRedemptions],
     ["Users", data.totalUsers],
   ] as const;
 
@@ -77,6 +82,7 @@ export default async function AdminDashboardPage() {
         stats={[
           { label: "Active vendors", value: String(data.activeVendors), tone: "warm" },
           { label: "Pending orders", value: String(data.pendingOrders), tone: "sun" },
+          { label: "Active coupons", value: String(data.activeCoupons), tone: "mint" },
           { label: "Live riders", value: String(data.activeRiders), tone: "mint" },
           { label: "Signed in scope", value: identity.role, tone: "warm" },
         ]}

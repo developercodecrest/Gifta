@@ -107,6 +107,36 @@ type ServiceabilityResponse = {
   };
 };
 
+type CouponValidationResponse = {
+  success: true;
+  data: {
+    valid: boolean;
+    code: string;
+    discount: number;
+    message: string;
+  };
+} | {
+  success: false;
+  error: {
+    message: string;
+  };
+};
+
+type DeliveryEstimateResponse = {
+  success: true;
+  data: {
+    estimatedFee: number;
+    source: "delhivery" | "fallback";
+    serviceable: boolean;
+    remark?: string;
+  };
+} | {
+  success: false;
+  error: {
+    message: string;
+  };
+};
+
 export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const router = useRouter();
   const { status } = useSession();
@@ -115,6 +145,10 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "cod">("razorpay");
   const [isPaying, setIsPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [promoMessage, setPromoMessage] = useState("Enter a coupon to validate from admin-managed offers.");
+  const [deliveryFee, setDeliveryFee] = useState(snapshot.shipping);
+  const [deliveryRemark, setDeliveryRemark] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<ProfileAddress[]>([]);
   const [selectedAddress, setSelectedAddress] = useState("");
   const [newAddressOpen, setNewAddressOpen] = useState(false);
@@ -138,6 +172,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
     register,
     handleSubmit,
     setValue,
+    watch,
     getValues,
     formState: { errors },
   } = useForm<CheckoutForm>({
@@ -153,8 +188,91 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
     },
   });
 
-  const localPromo = useMemo(() => getPromoDetails(promoCode, snapshot.subtotal), [promoCode, snapshot.subtotal]);
-  const uiTotal = Math.max(0, snapshot.total - localPromo.discount);
+  const pinCode = watch("pinCode");
+  const uiTotal = useMemo(() => {
+    const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + snapshot.platformFee + deliveryFee;
+    return Math.max(0, totalBeforeDiscount - couponDiscount);
+  }, [couponDiscount, deliveryFee, snapshot.platformFee, snapshot.subtotal, snapshot.tax]);
+
+  useEffect(() => {
+    const code = promoCode.trim();
+    if (!code) {
+      setCouponDiscount(0);
+      setPromoMessage("Enter a coupon to validate from admin-managed offers.");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(code)}&subtotal=${snapshot.subtotal}`, {
+        signal: controller.signal,
+      }).catch(() => null);
+
+      if (!res) {
+        setCouponDiscount(0);
+        setPromoMessage("Unable to validate coupon right now.");
+        return;
+      }
+
+      const payload = (await res.json().catch(() => null)) as CouponValidationResponse | null;
+      if (!res.ok || !payload?.success) {
+        setCouponDiscount(0);
+        setPromoMessage(payload && !payload.success ? payload.error.message : "Unable to validate coupon right now.");
+        return;
+      }
+
+      setCouponDiscount(payload.data.valid ? payload.data.discount : 0);
+      setPromoMessage(payload.data.message);
+    }, 350);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [promoCode, snapshot.subtotal]);
+
+  useEffect(() => {
+    const currentPin = pinCode?.trim();
+    if (!currentPin || currentPin.length < 4) {
+      setDeliveryFee(snapshot.shipping);
+      setDeliveryRemark(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/shipping/delhivery/estimate?pinCode=${encodeURIComponent(currentPin)}&subtotal=${snapshot.subtotal}`, {
+        signal: controller.signal,
+      }).catch(() => null);
+
+      if (!res) {
+        setDeliveryFee(snapshot.shipping);
+        setDeliveryRemark("Delivery estimate unavailable. Default fee applied.");
+        return;
+      }
+
+      const payload = (await res.json().catch(() => null)) as DeliveryEstimateResponse | null;
+      if (!res.ok || !payload?.success) {
+        setDeliveryFee(snapshot.shipping);
+        setDeliveryRemark(payload && !payload.success ? payload.error.message : "Delivery estimate unavailable.");
+        return;
+      }
+
+      if (!payload.data.serviceable) {
+        setDeliveryFee(0);
+        setDeliveryRemark(payload.data.remark ?? "Delivery unavailable for this pincode.");
+        return;
+      }
+
+      setDeliveryFee(payload.data.estimatedFee);
+      setDeliveryRemark(payload.data.remark ?? null);
+    }, 350);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [pinCode, snapshot.shipping, snapshot.subtotal]);
 
   const openNewAddressModal = () => {
     const values = getValues();
@@ -607,9 +725,9 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 <Input
                   value={promoCode}
                   onChange={(event) => setPromoCode(event.target.value)}
-                  placeholder="GIFT10 / WELCOME15 / FREESHIP"
+                  placeholder="Enter coupon code"
                 />
-                <p className="text-xs text-[#74655c]">{localPromo.message}</p>
+                <p className="text-xs text-[#74655c]">{promoMessage}</p>
               </div>
 
               <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
@@ -619,7 +737,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-[#5f5047]">Shipping</dt>
-                  <dd className="font-semibold">{snapshot.shipping === 0 ? "Free" : formatCurrency(snapshot.shipping)}</dd>
+                  <dd className="font-semibold">{deliveryFee === 0 ? "Free" : formatCurrency(deliveryFee)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-[#5f5047]">Tax</dt>
@@ -629,10 +747,10 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   <dt className="text-[#5f5047]">Platform fee</dt>
                   <dd className="font-semibold">{snapshot.platformFee === 0 ? "Free" : formatCurrency(snapshot.platformFee)}</dd>
                 </div>
-                {localPromo.discount > 0 ? (
+                {couponDiscount > 0 ? (
                   <div className="flex justify-between">
                     <dt className="text-[#5f5047]">Discount</dt>
-                    <dd className="font-semibold text-emerald-600">-{formatCurrency(localPromo.discount)}</dd>
+                    <dd className="font-semibold text-emerald-600">-{formatCurrency(couponDiscount)}</dd>
                   </div>
                 ) : null}
                 <div className="flex justify-between border-t border-border pt-2">
@@ -640,6 +758,8 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   <dd className="text-base font-bold">{formatCurrency(uiTotal)}</dd>
                 </div>
               </dl>
+
+              {deliveryRemark ? <p className="mt-3 text-xs text-[#74655c]">Delivery note: {deliveryRemark}</p> : null}
 
               <div className="app-data-panel mt-5 rounded-3xl p-4">
                 <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-primary" />Premium checkout surface</p>
@@ -730,55 +850,6 @@ function CheckoutNote({
       <p className="mt-1 text-sm text-[#5f5047]">{text}</p>
     </div>
   );
-}
-
-function getPromoDetails(rawCode: string | undefined, subtotal: number) {
-  const code = (rawCode ?? "").trim().toUpperCase();
-
-  if (!code) {
-    return {
-      code: "",
-      discount: 0,
-      message: "Promo codes: GIFT10 (10% off), WELCOME15 (15% above ₹3000), FREESHIP (₹199 off).",
-    };
-  }
-
-  if (code === "GIFT10") {
-    return {
-      code,
-      discount: Math.round(subtotal * 0.1),
-      message: "GIFT10 applied successfully.",
-    };
-  }
-
-  if (code === "WELCOME15") {
-    if (subtotal < 3000) {
-      return {
-        code,
-        discount: 0,
-        message: "WELCOME15 requires subtotal above ₹3000.",
-      };
-    }
-    return {
-      code,
-      discount: Math.round(subtotal * 0.15),
-      message: "WELCOME15 applied successfully.",
-    };
-  }
-
-  if (code === "FREESHIP") {
-    return {
-      code,
-      discount: 199,
-      message: "FREESHIP applied successfully.",
-    };
-  }
-
-  return {
-    code,
-    discount: 0,
-    message: "Invalid promo code. Try GIFT10, WELCOME15, or FREESHIP.",
-  };
 }
 
 async function loadRazorpaySdk() {

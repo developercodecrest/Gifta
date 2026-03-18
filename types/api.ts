@@ -23,6 +23,34 @@ export type SortOption = "featured" | "price-asc" | "price-desc" | "rating";
 
 export type Role = "sadmin" | "storeOwner" | "user";
 
+export type CouponDiscountType = "percent" | "flat";
+
+export type CouponDto = {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  discountType: CouponDiscountType;
+  discountValue: number;
+  maxDiscount?: number;
+  minSubtotal?: number;
+  active: boolean;
+  startsAt?: string;
+  endsAt?: string;
+  usageLimit?: number;
+  usedCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CouponValidationResult = {
+  valid: boolean;
+  code: string;
+  discount: number;
+  message: string;
+  coupon?: CouponDto;
+};
+
 export type PaymentMethod = "razorpay" | "cod";
 export type TransactionStatus = "pending" | "success" | "failed" | "refunded" | "cod-pending";
 
@@ -130,6 +158,9 @@ export type AdminOrderDto = {
   transactionId?: string;
   paymentId?: string;
   razorpayOrderId?: string;
+  promoCode?: string;
+  discountAmount?: number;
+  deliveryFee?: number;
   riderId?: string;
   shippingProvider?: ShippingProvider;
   shippingProviderStatus?: string;
@@ -302,4 +333,7 @@ export type AdminDashboardPayload = {
   totalRiders: number;
   activeRiders: number;
   totalUsers: number;
+  totalCoupons: number;
+  activeCoupons: number;
+  totalCouponRedemptions: number;
 };

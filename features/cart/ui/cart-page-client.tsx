@@ -50,27 +50,25 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
     };
   });
 
-  const grouped = new Map<string, { name: string; items: typeof liveLines; shipping: number }>();
+  const grouped = new Map<string, { name: string; items: typeof liveLines }>();
 
   for (const line of liveLines) {
     const key = line.selectedOffer?.storeId ?? "direct";
     const name = line.selectedOffer?.store?.name ?? "Gifta Marketplace";
-    const bucket = grouped.get(key) ?? { name, items: [], shipping: 0 };
+    const bucket = grouped.get(key) ?? { name, items: [] };
     bucket.items.push(line);
     grouped.set(key, bucket);
   }
 
   const vendorRows = Array.from(grouped.entries()).map(([storeId, value]) => {
     const subtotal = value.items.reduce((total, item) => total + item.lineSubtotal, 0);
-    const shipping = subtotal >= 1500 ? 0 : 99;
-    return { storeId, ...value, subtotal, shipping };
+    return { storeId, ...value, subtotal };
   });
 
   const subtotal = liveLines.reduce((total, line) => total + line.lineSubtotal, 0);
-  const shipping = vendorRows.reduce((total, row) => total + row.shipping, 0);
   const tax = Math.round(subtotal * 0.05);
   const platformFee = subtotal > 0 && subtotal < 1000 ? 29 : 0;
-  const total = subtotal + shipping + tax + platformFee;
+  const total = subtotal + tax + platformFee;
 
   const hasItems = liveLines.length > 0;
 
@@ -215,7 +213,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   <div key={vendor.storeId} className="space-y-1 text-sm">
                     <p className="flex items-center gap-2 font-medium"><Store className="h-3.5 w-3.5" />{vendor.name}</p>
                     <p className="text-[#5f5047]">Subtotal {formatCurrency(vendor.subtotal)}</p>
-                    <p className="flex items-center gap-2 text-[#5f5047]"><Truck className="h-3.5 w-3.5" />Shipping {vendor.shipping === 0 ? "Free" : formatCurrency(vendor.shipping)}</p>
+                    <p className="flex items-center gap-2 text-[#5f5047]"><Truck className="h-3.5 w-3.5" />Delivery fee will be calculated at checkout by pincode.</p>
                   </div>
                 ))}
               </div>
@@ -230,7 +228,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               <div className="rounded-3xl border border-white/70 bg-white/75 p-4">
                 <Truck className="h-4 w-4 text-primary" />
                 <p className="mt-3 text-sm font-semibold">Shipping visibility</p>
-                <p className="mt-1 text-sm text-[#5f5047]">Vendor-level freight remains visible.</p>
+                <p className="mt-1 text-sm text-[#5f5047]">Delivery fee is now calculated by pincode at checkout.</p>
               </div>
               <div className="rounded-3xl border border-white/70 bg-white/75 p-4">
                 <ShieldCheck className="h-4 w-4 text-primary" />
@@ -246,7 +244,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               </div>
               <div className="flex justify-between">
                 <dt className="text-[#5f5047]">Shipping</dt>
-                <dd>{shipping === 0 ? "Free" : formatCurrency(shipping)}</dd>
+                <dd>Calculated at checkout</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-[#5f5047]">Tax (5%)</dt>

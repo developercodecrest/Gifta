@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
-import { checkDelhiveryServiceability, DelhiveryApiError, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { checkDelhiveryServiceability, DelhiveryApiError, estimateDelhiveryDeliveryFee, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { validateCouponCode } from "@/lib/server/coupon-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { getUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
@@ -124,8 +125,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const promo = getPromoDetails(payload.promoCode, snapshot.subtotal);
-  const total = Math.max(0, snapshot.total - promo.discount);
+  const couponValidation = await validateCouponCode(payload.promoCode, snapshot.subtotal);
+  const discount = couponValidation.valid ? couponValidation.discount : 0;
+  const deliveryEstimate = payload.customer?.pinCode
+    ? await estimateDelhiveryDeliveryFee(payload.customer.pinCode, snapshot.subtotal)
+    : { estimatedFee: snapshot.shipping, source: "fallback" as const, serviceable: true };
+  const shipping = deliveryEstimate.estimatedFee;
+  const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + snapshot.platformFee + shipping;
+  const total = Math.max(0, totalBeforeDiscount - discount);
 
   const razorpay = new Razorpay({
     key_id: razorpayKeyId,
@@ -146,7 +153,8 @@ export async function POST(request: Request) {
         customerPhone: payload.customer?.phone ?? "",
         city: payload.customer?.city ?? "",
         addressLabel: payload.customer?.addressLabel ?? "",
-        promoCode: promo.code,
+        promoCode: couponValidation.valid ? couponValidation.code : "",
+        deliveryFeeSource: deliveryEstimate.source,
         lineCount: String(snapshot.lines.length),
       },
     });
@@ -225,6 +233,9 @@ export async function POST(request: Request) {
     paymentMethod: "razorpay",
     transactionStatus: "pending",
     razorpayOrderId: order.id,
+    promoCode: couponValidation.valid ? couponValidation.code : undefined,
+    discountAmount: discount,
+    deliveryFee: shipping,
     shippingProvider: "delhivery",
     shippingProviderStatus: "pending-payment",
     shippingPackage: {
@@ -246,51 +257,14 @@ export async function POST(request: Request) {
       keyId: razorpayKeyId,
       breakdown: {
         subtotal: snapshot.subtotal,
-        shipping: snapshot.shipping,
+        shipping,
         tax: snapshot.tax,
         platformFee: snapshot.platformFee,
-        discount: promo.discount,
+        discount,
         total,
       },
     },
   });
-}
-
-function getPromoDetails(rawCode: string | undefined, subtotal: number) {
-  const code = (rawCode ?? "").trim().toUpperCase();
-
-  if (!code) {
-    return {
-      code: "",
-      discount: 0,
-    };
-  }
-
-  if (code === "GIFT10") {
-    return {
-      code,
-      discount: Math.round(subtotal * 0.1),
-    };
-  }
-
-  if (code === "WELCOME15") {
-    return {
-      code,
-      discount: subtotal >= 3000 ? Math.round(subtotal * 0.15) : 0,
-    };
-  }
-
-  if (code === "FREESHIP") {
-    return {
-      code,
-      discount: 199,
-    };
-  }
-
-  return {
-    code,
-    discount: 0,
-  };
 }
 
 function createOrderRef() {

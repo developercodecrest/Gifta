@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { getMongoDb } from "@/lib/mongodb";
+import { incrementCouponUsage } from "@/lib/server/coupon-service";
 import { createShipmentForOrderRef, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
@@ -74,6 +75,10 @@ export async function POST(request: Request) {
         },
       },
     );
+
+    if (existing.promoCode) {
+      await incrementCouponUsage(existing.promoCode).catch(() => undefined);
+    }
 
     const shouldTriggerShipment = process.env.DELHIVERY_TRIGGER_ON_VERIFY === "true";
     if (shouldTriggerShipment && isDelhiveryConfigured() && existing.orderRef) {

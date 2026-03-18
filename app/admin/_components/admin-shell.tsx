@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bike,
+  BadgePercent,
   ClipboardList,
   FolderTree,
   Lock,
@@ -35,16 +36,25 @@ import { Role } from "@/types/api";
 import { roleLabels, canAccess } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+type AdminNavItem = {
+  key: string;
+  href: string;
+  label: string;
+  icon: React.ComponentType<Record<string, unknown>>;
+  nested?: boolean;
+};
+
+const navItems: AdminNavItem[] = [
   { key: "dashboard", href: "/admin", label: "Dashboard", icon: ShieldCheck },
   { key: "vendors", href: "/admin/vendors", label: "Vendors", icon: Store },
   { key: "vendors", href: "/admin/vendors/categories", label: "Categories", icon: FolderTree, nested: true },
   { key: "orders", href: "/admin/orders", label: "Orders", icon: ClipboardList },
+  { key: "coupons", href: "/admin/coupons", label: "Coupons", icon: BadgePercent },
   { key: "riders", href: "/admin/riders", label: "Riders", icon: Bike },
   { key: "users", href: "/admin/users", label: "Users", icon: Users },
   { key: "roles", href: "/admin/roles", label: "Roles", icon: UserCog },
   { key: "settings", href: "/admin/settings", label: "Settings", icon: Settings },
-] as const;
+];
 
 export function AdminShell({ children, role }: { children: React.ReactNode; role: Role }) {
   const pathname = usePathname();

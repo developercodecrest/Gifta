@@ -20,9 +20,9 @@ export function formatCurrency(
     return "N/A"
   }
 
-  const formatter = new Intl.NumberFormat(options?.locale ?? "en-NG", {
+  const formatter = new Intl.NumberFormat(options?.locale ?? "en-IN", {
     style: "currency",
-    currency: options?.currency ?? "NGN",
+    currency: options?.currency ?? "INR",
     minimumFractionDigits: options?.minimumFractionDigits ?? 2,
     maximumFractionDigits: options?.maximumFractionDigits ?? 2,
   })

@@ -26,6 +26,13 @@ type ServiceabilityResult = {
   raw: unknown;
 };
 
+export type DeliveryFeeEstimate = {
+  estimatedFee: number;
+  source: "delhivery" | "fallback";
+  serviceable: boolean;
+  remark?: string;
+};
+
 export class DelhiveryApiError extends Error {
   status: number;
   body: unknown;
@@ -224,6 +231,109 @@ export async function checkDelhiveryServiceability(pinCode: string): Promise<Ser
     remark,
     raw: body,
   };
+}
+
+export async function estimateDelhiveryDeliveryFee(pinCode: string, subtotal: number): Promise<DeliveryFeeEstimate> {
+  const normalizedPin = pinCode.trim();
+  const safeSubtotal = Number.isFinite(subtotal) ? Math.max(0, subtotal) : 0;
+  const fallback = safeSubtotal >= 1500 ? 0 : 99;
+
+  if (!isDelhiveryConfigured()) {
+    return {
+      estimatedFee: fallback,
+      source: "fallback",
+      serviceable: true,
+    };
+  }
+
+  const serviceability = await checkDelhiveryServiceability(normalizedPin);
+  if (!serviceability.serviceable) {
+    return {
+      estimatedFee: 0,
+      source: "fallback",
+      serviceable: false,
+      remark: serviceability.remark,
+    };
+  }
+
+  const config = getDelhiveryConfig();
+  const estimatePath = (process.env.DELHIVERY_CHARGE_ESTIMATE_PATH ?? "").trim();
+  if (!estimatePath) {
+    return {
+      estimatedFee: fallback,
+      source: "fallback",
+      serviceable: true,
+      remark: serviceability.remark,
+    };
+  }
+
+  const estimateUrl = `${config.baseUrl}${estimatePath}`;
+  const response = await fetch(estimateUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${config.token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      destination_pincode: normalizedPin,
+      cod_amount: 0,
+      declared_value: Math.round(safeSubtotal),
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new DelhiveryApiError(`Delhivery estimate failed (${response.status}).`, {
+      status: response.status,
+      body,
+      code: response.status === 401 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_ESTIMATE_FAILED",
+    });
+  }
+
+  const fee = parseDeliveryEstimateFee(body);
+  if (fee === null) {
+    return {
+      estimatedFee: fallback,
+      source: "fallback",
+      serviceable: true,
+      remark: "Unable to parse Delhivery estimate response.",
+    };
+  }
+
+  return {
+    estimatedFee: fee,
+    source: "delhivery",
+    serviceable: true,
+    remark: serviceability.remark,
+  };
+}
+
+function parseDeliveryEstimateFee(payload: unknown): number | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const candidates = ["estimated_fee", "total_amount", "freight_charge", "charges", "charge"];
+
+  for (const key of candidates) {
+    const value = Number((payload as Record<string, unknown>)[key]);
+    if (Number.isFinite(value) && value >= 0) {
+      return Math.round(value);
+    }
+  }
+
+  const data = (payload as Record<string, unknown>).data;
+  if (data && typeof data === "object") {
+    for (const key of candidates) {
+      const value = Number((data as Record<string, unknown>)[key]);
+      if (Number.isFinite(value) && value >= 0) {
+        return Math.round(value);
+      }
+    }
+  }
+
+  return null;
 }
 
 export async function createShipmentForOrderRef(orderRef: string): Promise<FulfillmentResult> {

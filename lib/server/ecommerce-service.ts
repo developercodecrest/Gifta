@@ -916,6 +916,8 @@ export async function getAdminDashboard(): Promise<AdminDashboardPayload> {
 
 export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminDashboardPayload> {
   const { stores, products, offers, orders, riders, users } = await getCollections();
+  const db = await getMongoDb();
+  const coupons = db.collection<{ active?: boolean; usedCount?: number }>("coupons");
 
   if (scope.role === "storeOwner") {
     const scopedStoreIds = await getStoreIdsForScope(scope);
@@ -930,6 +932,9 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
         totalRiders: 0,
         activeRiders: 0,
         totalUsers: 0,
+        totalCoupons: 0,
+        activeCoupons: 0,
+        totalCouponRedemptions: 0,
       };
     }
 
@@ -941,6 +946,7 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
       pendingOrders,
       riderIds,
       productIds,
+      couponDocs,
     ] = await Promise.all([
       stores.countDocuments({ id: { $in: scopedStoreIds } }),
       stores.countDocuments({ id: { $in: scopedStoreIds }, active: true }),
@@ -949,6 +955,7 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
       orders.countDocuments({ storeId: { $in: scopedStoreIds }, status: { $in: ["placed", "packed", "out-for-delivery"] } }),
       orders.distinct("riderId", { storeId: { $in: scopedStoreIds }, riderId: { $exists: true } }),
       offers.distinct("productId", { storeId: { $in: scopedStoreIds } }),
+      coupons.find({}, { projection: { active: 1, usedCount: 1 } }).toArray(),
     ]);
 
     const validRiderIds = riderIds.filter((value): value is string => typeof value === "string" && value.length > 0);
@@ -956,6 +963,10 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
     const activeRiders = validRiderIds.length
       ? await riders.countDocuments({ id: { $in: validRiderIds }, status: { $in: ["available", "on-delivery"] } })
       : 0;
+
+    const totalCoupons = couponDocs.length;
+    const activeCoupons = couponDocs.filter((coupon) => coupon.active).length;
+    const totalCouponRedemptions = couponDocs.reduce((sum, coupon) => sum + (coupon.usedCount ?? 0), 0);
 
     return {
       totalVendors,
@@ -967,6 +978,9 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
       totalRiders,
       activeRiders,
       totalUsers: 0,
+      totalCoupons,
+      activeCoupons,
+      totalCouponRedemptions,
     };
   }
 
@@ -980,6 +994,9 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
     totalRiders,
     activeRiders,
     totalUsers,
+    totalCoupons,
+    activeCoupons,
+    couponDocs,
   ] = await Promise.all([
     stores.countDocuments(),
     stores.countDocuments({ active: true }),
@@ -990,7 +1007,12 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
     riders.countDocuments(),
     riders.countDocuments({ status: { $in: ["available", "on-delivery"] } }),
     users.countDocuments(),
+    coupons.countDocuments(),
+    coupons.countDocuments({ active: true }),
+    coupons.find({}, { projection: { usedCount: 1 } }).toArray(),
   ]);
+
+  const totalCouponRedemptions = couponDocs.reduce((sum, coupon) => sum + (coupon.usedCount ?? 0), 0);
 
   return {
     totalVendors,
@@ -1002,6 +1024,9 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
     totalRiders,
     activeRiders,
     totalUsers,
+    totalCoupons,
+    activeCoupons,
+    totalCouponRedemptions,
   };
 }
 

@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
-import { checkDelhiveryServiceability, createShipmentForOrderRef, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { checkDelhiveryServiceability, createShipmentForOrderRef, estimateDelhiveryDeliveryFee, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { incrementCouponUsage, validateCouponCode } from "@/lib/server/coupon-service";
 import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { getUserCart, setUserCart } from "@/lib/server/user-cart-service";
@@ -96,6 +97,15 @@ export async function POST(request: Request) {
     );
   }
 
+  const couponValidation = await validateCouponCode(payload.promoCode, snapshot.subtotal);
+  const discount = couponValidation.valid ? couponValidation.discount : 0;
+  const deliveryEstimate = payload.customer?.pinCode
+    ? await estimateDelhiveryDeliveryFee(payload.customer.pinCode, snapshot.subtotal)
+    : { estimatedFee: snapshot.shipping, source: "fallback" as const, serviceable: true };
+  const shipping = deliveryEstimate.estimatedFee;
+  const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + snapshot.platformFee + shipping;
+  const finalTotal = Math.max(0, totalBeforeDiscount - discount);
+
   const orderRef = createOrderRef();
   const now = new Date().toISOString();
   const transactionStatus: TransactionStatus = "cod-pending";
@@ -135,6 +145,9 @@ export async function POST(request: Request) {
     status: "placed",
     paymentMethod,
     transactionStatus,
+    promoCode: couponValidation.valid ? couponValidation.code : undefined,
+    discountAmount: discount,
+    deliveryFee: shipping,
     shippingProvider: "delhivery",
     shippingProviderStatus: "pending-shipment",
     shippingPackage: {
@@ -154,6 +167,10 @@ export async function POST(request: Request) {
 
   if (isDelhiveryConfigured()) {
     await createShipmentForOrderRef(orderRef).catch(() => undefined);
+  }
+
+  if (couponValidation.valid) {
+    await incrementCouponUsage(couponValidation.code).catch(() => undefined);
   }
 
   if (userId) {
@@ -185,7 +202,7 @@ export async function POST(request: Request) {
       orderId: orderRef,
       paymentMethod,
       transactionStatus,
-      amount: snapshot.total,
+      amount: finalTotal,
     },
   });
 }
