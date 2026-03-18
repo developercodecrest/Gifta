@@ -237,7 +237,7 @@ export default async function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Choose by occasion</p>
             <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Popular categories</h2>
           </div>
-          <Button asChild variant="outline">
+          <Button  variant="outline">
             <Link href="/search">Browse all categories</Link>
           </Button>
         </div>
@@ -275,7 +275,7 @@ export default async function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Trending now</p>
             <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Bestsellers</h2>
           </div>
-          <Button asChild>
+          <Button >
             <Link href="/search?sort=rating">See top-rated gifts</Link>
           </Button>
         </div>
@@ -293,7 +293,7 @@ export default async function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Top rated</p>
             <h3 className="font-display mt-2 text-3xl font-semibold">Best reviewed gifts</h3>
           </div>
-          <Button asChild>
+          <Button >
             <Link href="/search?sort=rating">View all</Link>
           </Button>
         </div>
@@ -311,7 +311,7 @@ export default async function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ff0066]">Editor&apos;s curation</p>
             <h3 className="font-display mt-2 text-3xl font-semibold text-[#ff0066] sm:text-4xl">Signature picks this week</h3>
           </div>
-          <Button asChild variant="outline" className="border-[#ff80b3] text-[#ff0066] hover:bg-[#fff0f7]">
+          <Button  variant="outline" className="border-[#ff80b3] text-[#ff0066] hover:bg-[#fff0f7]">
             <Link href="/search?tag=luxury">Explore signature gifts</Link>
           </Button>
         </div>
@@ -408,14 +408,14 @@ export default async function Home() {
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <Button
-                asChild
+                
                 size="lg"
                 className="h-12 bg-white px-7 text-[#ff0066] shadow-[0_16px_34px_-20px_rgba(12,6,9,0.65)] hover:bg-[#ffe8f3]"
               >
                 <Link href="/auth/sign-up">Register as a vendor</Link>
               </Button>
               <Button
-                asChild
+                
                 size="lg"
                 variant="outline"
                 className="h-12 border-white/35 bg-white/8 px-6 text-white hover:bg-white/16"
