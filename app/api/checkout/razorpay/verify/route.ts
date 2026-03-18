@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { getMongoDb } from "@/lib/mongodb";
 import { createShipmentForOrderRef, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { setUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
@@ -83,6 +84,30 @@ export async function POST(request: Request) {
     const userId = identity?.userId;
     if (userId) {
       await setUserCart(userId, []);
+    }
+
+    const targetUserId = existing.customerUserId ?? userId;
+    if (targetUserId && existing.orderRef) {
+      await publishOrderSnapshot(targetUserId, existing.orderRef, {
+        status: existing.status,
+        paymentStatus: "success",
+        shippingStatus: "pending-shipment",
+        timeline: [
+          {
+            status: "payment-success",
+            timestamp: new Date().toISOString(),
+            note: "Payment verified successfully.",
+          },
+        ],
+      }).catch(() => undefined);
+
+      await publishUserNotification(targetUserId, {
+        id: `pay-${payload.razorpayPaymentId}`,
+        type: "payment",
+        title: "Payment confirmed",
+        message: `Payment received for order ${existing.orderRef}.`,
+        orderRef: existing.orderRef,
+      }).catch(() => undefined);
     }
 
     return NextResponse.json({

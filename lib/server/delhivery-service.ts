@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
 import { getMongoDb } from "@/lib/mongodb";
 import { AdminOrderDto, PaymentMethod, ShippingAddressSnapshot, ShippingPackageSnapshot, ShippingProvider } from "@/types/api";
 
@@ -458,6 +459,67 @@ export async function applyDelhiveryWebhookUpdate(payload: Record<string, unknow
           status: mappedOrderStatus,
         },
       },
+    );
+  }
+
+  const updatedOrders = await orders
+    .find(query)
+    .project({
+      orderRef: 1,
+      customerUserId: 1,
+      status: 1,
+      shippingProviderStatus: 1,
+      transactionStatus: 1,
+    })
+    .toArray();
+
+  const realtimeTargets = new Map<string, {
+    userId: string;
+    orderRef: string;
+    orderStatus: AdminOrderDto["status"];
+    shippingStatus?: string;
+    paymentStatus?: string;
+  }>();
+
+  for (const entry of updatedOrders) {
+    if (!entry.customerUserId || !entry.orderRef) {
+      continue;
+    }
+
+    const key = `${entry.customerUserId}:${entry.orderRef}`;
+    realtimeTargets.set(key, {
+      userId: entry.customerUserId,
+      orderRef: entry.orderRef,
+      orderStatus: entry.status,
+      shippingStatus: entry.shippingProviderStatus,
+      paymentStatus: entry.transactionStatus,
+    });
+  }
+
+  if (realtimeTargets.size) {
+    await Promise.all(
+      Array.from(realtimeTargets.values()).map(async (entry) => {
+        await publishOrderSnapshot(entry.userId, entry.orderRef, {
+          status: entry.orderStatus,
+          shippingStatus: entry.shippingStatus,
+          paymentStatus: entry.paymentStatus,
+          timeline: [
+            {
+              status,
+              timestamp: new Date().toISOString(),
+              note: description,
+            },
+          ],
+        }).catch(() => undefined);
+
+        await publishUserNotification(entry.userId, {
+          id: `ord-${entry.orderRef}-${status.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+          type: "order-update",
+          title: "Shipping update",
+          message: description || `Order ${entry.orderRef} status changed to ${status}.`,
+          orderRef: entry.orderRef,
+        }).catch(() => undefined);
+      }),
     );
   }
 

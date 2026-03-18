@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { publishCartSnapshot } from "@/lib/server/firebase-realtime";
 import { getMongoDb } from "@/lib/mongodb";
 import { CartItem } from "@/types/ecommerce";
 
@@ -96,6 +97,8 @@ export async function setUserCart(userId: string, items: CartItem[]): Promise<Ca
     },
     { upsert: true },
   );
+
+  await publishCartSnapshot(userId, normalized).catch(() => undefined);
 
   return normalized;
 }
