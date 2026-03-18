@@ -1,9 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { HeroSlider } from "@/components/home/hero-slider";
+import { GiftCategoryHeroSection } from "@/components/home/gift-category-icons";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import { getHomeData } from "@/lib/server/ecommerce-service";
+import QRCode from "qrcode";
 import type { ProductListItemDto } from "@/types/api";
 
 function createDemoProduct(input: {
@@ -224,12 +226,25 @@ export default async function Home() {
     : [...leadProducts, demoBestSeller];
   const ratedProducts = (arrivals.length ? arrivals : featured).slice(0, 4);
   const editorPicks = [...bestSellerProducts, ...ratedProducts].slice(0, 5);
+  const playStoreUrl = "https://play.google.com/store/apps/details?id=com.gifta.app";
+  const playStoreQrSvg = await QRCode.toString(playStoreUrl, {
+    type: "svg",
+    errorCorrectionLevel: "H",
+    margin: 1,
+    width: 220,
+    color: {
+      dark: "#111111",
+      light: "#ffffff",
+    },
+  });
 
   return (
     <div className="space-y-8 pb-10 sm:space-y-10 sm:pb-16">
       <section className="full-bleed overflow-hidden">
         <HeroSlider />
       </section>
+
+      <GiftCategoryHeroSection />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -339,31 +354,35 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-4xl border border-[#ffb3d1] bg-[linear-gradient(145deg,#fff5fa_0%,#ffe8f3_42%,#ffd6e8_100%)] p-5 shadow-[0_36px_74px_-48px_rgba(255,0,102,0.34)] sm:p-7 lg:p-9">
+      <section className="relative overflow-hidden rounded-4xl border border-[#f2c7db] bg-[linear-gradient(145deg,#fff9fc_0%,#fff1f7_48%,#ffe6f1_100%)] p-5 shadow-[0_34px_74px_-54px_rgba(152,39,92,0.36)] sm:p-7 lg:p-9">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-16 -top-14 h-56 w-56 rounded-full bg-[#ff66a3]/30 blur-3xl" />
-          <div className="absolute -right-18 bottom-2 h-52 w-52 rounded-full bg-[#ff3385]/28 blur-3xl" />
+          <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-[#ff8db9]/20 blur-3xl" />
+          <div className="absolute -right-14 bottom-1 h-56 w-56 rounded-full bg-[#ff63a1]/18 blur-3xl" />
         </div>
 
-        <div className="relative space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ff0066]">Loved by customers</p>
-              <h3 className="font-display mt-2 text-3xl font-semibold text-[#ff0066] sm:text-4xl">Testimonials that speak for Gifta</h3>
+        <div className="relative space-y-6">
+          <div className="motion-safe:animate-rise flex flex-wrap items-end justify-between gap-4">
+            <div className="[animation-delay:60ms] fill-mode-[both]">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d31a6b]">Loved by customers</p>
+              <h3 className="font-display mt-2 text-3xl font-semibold text-[#b31258] sm:text-4xl">Trusted by teams who gift at scale</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-[#7f3358] sm:text-base">
+                Real feedback from teams using Gifta for campaigns, milestones, and high-volume celebration moments.
+              </p>
             </div>
-            <span className="rounded-full bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#ff0066] shadow-[0_12px_22px_-18px_rgba(255,0,102,0.36)]">
+            <span className="motion-safe:animate-rise rounded-full border border-[#ffb2d1] bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#c01763] shadow-[0_14px_28px_-22px_rgba(173,26,90,0.42)] [animation-delay:140ms] fill-mode-[both]">
               4.8 / 5 average rating
             </span>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            {testimonials.map((item) => (
+            {testimonials.map((item, cardIndex) => (
               <article
                 key={item.id}
-                className="group rounded-3xl border border-white/70 bg-white/86 p-4 shadow-[0_20px_36px_-28px_rgba(255,0,102,0.32)] backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_44px_-28px_rgba(255,0,102,0.38)] sm:p-5"
+                className="motion-safe:animate-rise group rounded-3xl border border-[#f5d5e4] bg-white/94 p-5 shadow-[0_18px_36px_-28px_rgba(140,24,74,0.42)] transition duration-300 hover:-translate-y-1.5 hover:shadow-[0_30px_48px_-30px_rgba(140,24,74,0.5)] fill-mode-[both]"
+                style={{ animationDelay: `${220 + cardIndex * 120}ms` }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="relative h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-[#ff99c2]">
+                  <div className="relative h-14 w-14 overflow-hidden rounded-2xl border border-[#ff9ec7] bg-[#fff2f8]">
                     <Image
                       src={item.image}
                       alt={item.name}
@@ -373,17 +392,20 @@ export default async function Home() {
                     />
                   </div>
                   <div>
-                    <h4 className="text-base font-semibold text-[#ff0066]">{item.name}</h4>
-                    <p className="text-xs font-medium uppercase tracking-[0.08em] text-[#ff0066]">{item.title}</p>
+                    <h4 className="text-base font-semibold text-[#c01763]">{item.name}</h4>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#ff2f86]">{item.title}</p>
                   </div>
                 </div>
 
-                <p className="mt-4 text-sm leading-7 text-[#7a1f4b]">{item.description}</p>
+                <p className="mt-4 text-sm leading-8 text-[#783250]">{item.description}</p>
 
-                <div className="mt-4 flex items-center gap-1">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <span key={`${item.id}-star-${index}`} className="text-sm text-[#ff0066]">★</span>
-                  ))}
+                <div className="mt-5 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <span key={`${item.id}-star-${index}`} className="text-base text-[#ff1e79]">★</span>
+                    ))}
+                  </div>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#d92274]">Verified</span>
                 </div>
               </article>
             ))}
@@ -391,41 +413,54 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-4xl border border-[#ff80b3] bg-[linear-gradient(125deg,#ff0066_0%,#ff0066_50%,#ff0066_100%)] p-6 text-white shadow-[0_44px_80px_-50px_rgba(255,0,102,0.56)] sm:p-8 lg:p-10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_20%,rgba(255,214,232,0.34),transparent_34%),radial-gradient(circle_at_86%_78%,rgba(255,186,219,0.24),transparent_36%)]" />
+      <section className="relative overflow-hidden rounded-4xl border border-[#ff8dbe] bg-[linear-gradient(128deg,#ff0f73_0%,#ff056e_55%,#ef005f_100%)] p-6 text-white shadow-[0_46px_86px_-50px_rgba(136,16,73,0.68)] sm:p-8 lg:p-10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_20%,rgba(255,225,237,0.25),transparent_35%),radial-gradient(circle_at_90%_78%,rgba(255,196,223,0.22),transparent_40%)]" />
 
-        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-center">
-          <div className="space-y-4">
-            <p className="inline-flex rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white/90">
+        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] lg:items-center">
+          <div className="motion-safe:animate-rise space-y-4 [animation-delay:80ms] fill-mode-[both]">
+            <p className="inline-flex rounded-full border border-white/30 bg-white/12 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-white">
               Partner with Gifta
             </p>
-            <h3 className="font-display text-3xl font-semibold leading-tight sm:text-4xl">
-              Register as a vendor and grow with premium gifting demand
+            <h3 className="font-display text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-[2.6rem]">
+              Join our vendor network and unlock premium demand
             </h3>
-            <p className="max-w-2xl text-sm leading-7 text-white/85 sm:text-base">
-              Join our curated network and receive high-intent orders from customers looking for thoughtful, celebration-ready gifts. We handle discovery and checkout while you focus on quality.
+            <p className="max-w-2xl text-sm leading-7 text-white/90 sm:text-base">
+              Work with a high-intent audience shopping for curated gifts. We bring visibility, trusted checkout, and repeat order flow so your team can focus on product quality.
             </p>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="grid gap-3 pt-1 sm:grid-cols-3 sm:gap-2 lg:max-w-xl">
+              <div className="motion-safe:animate-rise rounded-2xl border border-white/25 bg-white/10 px-4 py-3 [animation-delay:180ms] fill-mode-[both]">
+                <p className="text-lg font-semibold">2.8x</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-white/80">Lead quality uplift</p>
+              </div>
+              <div className="motion-safe:animate-rise rounded-2xl border border-white/25 bg-white/10 px-4 py-3 [animation-delay:260ms] fill-mode-[both]">
+                <p className="text-lg font-semibold">24h</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-white/80">Faster onboarding</p>
+              </div>
+              <div className="motion-safe:animate-rise rounded-2xl border border-white/25 bg-white/10 px-4 py-3 [animation-delay:340ms] fill-mode-[both]">
+                <p className="text-lg font-semibold">Top cities</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-white/80">Ready to scale</p>
+              </div>
+            </div>
+
+            <div className="motion-safe:animate-rise flex flex-wrap items-center gap-3 pt-2 [animation-delay:420ms] fill-mode-[both]">
               <Button
-                
                 size="lg"
-                className="h-12 bg-white px-7 text-[#ff0066] shadow-[0_16px_34px_-20px_rgba(12,6,9,0.65)] hover:bg-[#ffe8f3]"
+                className="h-12 bg-white px-7 text-[#e80067] shadow-[0_16px_34px_-20px_rgba(20,8,14,0.58)] hover:bg-[#ffe8f3]"
               >
                 <Link href="/auth/sign-up">Register as a vendor</Link>
               </Button>
               <Button
-                
                 size="lg"
                 variant="outline"
-                className="h-12 border-white/35 bg-white/8 px-6 text-white hover:bg-white/16"
+                className="h-12 border-white/40 bg-white/10 px-6 text-white hover:bg-white/18"
               >
                 <Link href="/admin/vendors">Learn more</Link>
               </Button>
             </div>
           </div>
 
-          <div className="relative mx-auto w-full max-w-md">
+          <div className="motion-safe:animate-rise relative mx-auto w-full max-w-md [animation-delay:200ms] fill-mode-[both]">
             <svg
               viewBox="0 0 520 360"
               role="img"
@@ -434,34 +469,34 @@ export default async function Home() {
             >
               <defs>
                 <linearGradient id="vendorCard" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#ffd6e8" />
-                  <stop offset="100%" stopColor="#fff1f8" />
+                  <stop offset="0%" stopColor="#ffd8ea" />
+                  <stop offset="100%" stopColor="#fff4f9" />
                 </linearGradient>
                 <linearGradient id="vendorAccent" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ff0066" />
-                  <stop offset="100%" stopColor="#ff0066" />
+                  <stop offset="0%" stopColor="#ff0a72" />
+                  <stop offset="100%" stopColor="#e90066" />
                 </linearGradient>
               </defs>
 
-              <rect x="26" y="30" width="468" height="300" rx="36" fill="url(#vendorCard)" opacity="0.95" />
-              <circle cx="110" cy="95" r="46" fill="#ffd6e8" />
-              <circle cx="428" cy="92" r="34" fill="#ffc2dc" opacity="0.82" />
+              <rect x="26" y="30" width="468" height="300" rx="36" fill="url(#vendorCard)" opacity="0.96" />
+              <circle cx="110" cy="95" r="46" fill="#ffd8ea" />
+              <circle cx="428" cy="92" r="34" fill="#ffc7df" opacity="0.85" />
 
               <rect x="90" y="116" width="340" height="180" rx="22" fill="#ffffff" />
-              <rect x="112" y="138" width="102" height="102" rx="16" fill="#fff0f8" />
+              <rect x="112" y="138" width="102" height="102" rx="16" fill="#fff1f8" />
               <path d="M134 218 L164 176 L184 198 L206 166" stroke="#ff0066" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
 
-              <rect x="232" y="142" width="160" height="16" rx="8" fill="#ff9ec7" />
-              <rect x="232" y="170" width="136" height="14" rx="7" fill="#ffd6e8" />
-              <rect x="232" y="194" width="118" height="14" rx="7" fill="#ffd6e8" />
+              <rect x="232" y="142" width="160" height="16" rx="8" fill="#f69ac3" />
+              <rect x="232" y="170" width="136" height="14" rx="7" fill="#ffd7e9" />
+              <rect x="232" y="194" width="118" height="14" rx="7" fill="#ffd7e9" />
 
               <rect x="232" y="226" width="140" height="40" rx="14" fill="url(#vendorAccent)" />
-              <text x="302" y="251" textAnchor="middle" fill="#fff6fb" fontSize="16" fontWeight="700" fontFamily="Arial, sans-serif">
+              <text x="302" y="251" textAnchor="middle" fill="#fff8fc" fontSize="16" fontWeight="700" fontFamily="Arial, sans-serif">
                 Join Vendors
               </text>
 
-              <path d="M128 76 C145 52 176 50 195 74" stroke="#ff0066" strokeWidth="8" fill="none" strokeLinecap="round" />
-              <path d="M362 72 C377 54 406 52 420 72" stroke="#ff0066" strokeWidth="8" fill="none" strokeLinecap="round" />
+              <path d="M128 76 C145 52 176 50 195 74" stroke="#ff0b73" strokeWidth="8" fill="none" strokeLinecap="round" />
+              <path d="M362 72 C377 54 406 52 420 72" stroke="#ff0b73" strokeWidth="8" fill="none" strokeLinecap="round" />
             </svg>
           </div>
         </div>
@@ -473,50 +508,20 @@ export default async function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ff0066]">Mobile app</p>
             <h3 className="font-display mt-2 text-3xl font-semibold text-[#ff0066] sm:text-4xl">Scan and download Gifta from Play Store</h3>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-[#7a1f4b] sm:text-base">
-              This is a dummy QR preview for app promotion. Scan to open the Play Store app page and access gifting, tracking, and wishlist features on mobile.
+              Scan this live QR code to open the Gifta app page on Play Store and access gifting, tracking, and wishlist features on mobile.
             </p>
             <div className="mt-5 inline-flex rounded-full border border-[#ff99c2] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#ff0066]">
-              Android app • Dummy QR
+              Android app • Live QR
             </div>
           </div>
 
           <div className="mx-auto rounded-3xl border border-[#ffb3d1] bg-white p-4 shadow-[0_20px_42px_-30px_rgba(255,0,102,0.36)] sm:p-5">
-            <svg viewBox="0 0 180 180" role="img" aria-label="Dummy Play Store QR code" className="h-44 w-44">
-              <rect x="0" y="0" width="180" height="180" rx="14" fill="#ffffff" />
-              <rect x="10" y="10" width="50" height="50" fill="#111111" />
-              <rect x="18" y="18" width="34" height="34" fill="#ffffff" />
-              <rect x="24" y="24" width="22" height="22" fill="#111111" />
-              <rect x="120" y="10" width="50" height="50" fill="#111111" />
-              <rect x="128" y="18" width="34" height="34" fill="#ffffff" />
-              <rect x="134" y="24" width="22" height="22" fill="#111111" />
-              <rect x="10" y="120" width="50" height="50" fill="#111111" />
-              <rect x="18" y="128" width="34" height="34" fill="#ffffff" />
-              <rect x="24" y="134" width="22" height="22" fill="#111111" />
-
-              <rect x="74" y="16" width="10" height="10" fill="#111111" />
-              <rect x="90" y="16" width="10" height="10" fill="#111111" />
-              <rect x="74" y="32" width="10" height="10" fill="#111111" />
-              <rect x="90" y="48" width="10" height="10" fill="#111111" />
-              <rect x="74" y="64" width="10" height="10" fill="#111111" />
-              <rect x="90" y="64" width="10" height="10" fill="#111111" />
-
-              <rect x="70" y="86" width="10" height="10" fill="#111111" />
-              <rect x="84" y="86" width="10" height="10" fill="#111111" />
-              <rect x="98" y="86" width="10" height="10" fill="#111111" />
-              <rect x="112" y="86" width="10" height="10" fill="#111111" />
-              <rect x="126" y="86" width="10" height="10" fill="#111111" />
-
-              <rect x="70" y="100" width="10" height="10" fill="#111111" />
-              <rect x="98" y="100" width="10" height="10" fill="#111111" />
-              <rect x="126" y="100" width="10" height="10" fill="#111111" />
-              <rect x="84" y="114" width="10" height="10" fill="#111111" />
-              <rect x="112" y="114" width="10" height="10" fill="#111111" />
-              <rect x="70" y="128" width="10" height="10" fill="#111111" />
-              <rect x="98" y="128" width="10" height="10" fill="#111111" />
-              <rect x="126" y="128" width="10" height="10" fill="#111111" />
-              <rect x="84" y="142" width="10" height="10" fill="#111111" />
-              <rect x="112" y="142" width="10" height="10" fill="#111111" />
-            </svg>
+            <div
+              role="img"
+              aria-label="Live Play Store QR code"
+              className="h-44 w-44 [&_svg]:h-full [&_svg]:w-full [&_svg]:rounded-xl"
+              dangerouslySetInnerHTML={{ __html: playStoreQrSvg }}
+            />
             <p className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-[#ff0066]">Scan for Play Store</p>
           </div>
         </div>
