@@ -10,6 +10,16 @@ import { ensureAuthUserById, ensureAuthUserRole, getAuthUserByEmail, verifyOtpAn
 const hasMongoConfig = Boolean(process.env.MONGODB_URI);
 const mongoClient = hasMongoConfig ? getMongoClient() : undefined;
 const PRODUCTION_APP_ORIGIN = "https://gifta.in";
+const PRODUCTION_WWW_ORIGIN = "https://www.gifta.in";
+
+function toOrigin(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -167,6 +177,7 @@ const providers = [
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...(adapter ? { adapter } : {}),
+  trustHost: true,
   session: {
     strategy: mongoClient ? "database" : "jwt",
   },
@@ -176,23 +187,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   callbacks: {
     async redirect({ url, baseUrl }) {
-      const canonicalOrigin = process.env.NODE_ENV === "production" ? PRODUCTION_APP_ORIGIN : baseUrl;
-      const allowedOrigins = new Set([baseUrl, canonicalOrigin, PRODUCTION_APP_ORIGIN]);
+      const configuredOrigin =
+        toOrigin(process.env.NEXTAUTH_URL) ??
+        toOrigin(process.env.AUTH_URL) ??
+        PRODUCTION_APP_ORIGIN;
+      const baseOrigin = toOrigin(baseUrl) ?? baseUrl;
+      const preferredOrigin =
+        process.env.NODE_ENV === "production" && baseOrigin.includes("vercel.app")
+          ? configuredOrigin
+          : baseOrigin;
+      const allowedOrigins = new Set([baseOrigin, configuredOrigin, PRODUCTION_APP_ORIGIN, PRODUCTION_WWW_ORIGIN]);
 
       if (url.startsWith("/")) {
-        return `${canonicalOrigin}${url}`;
+        return `${preferredOrigin}${url}`;
       }
 
       try {
         const target = new URL(url);
         if (allowedOrigins.has(target.origin)) {
-          return `${canonicalOrigin}${target.pathname}${target.search}${target.hash}`;
+          return `${target.origin}${target.pathname}${target.search}${target.hash}`;
         }
       } catch {
-        // Fall back to canonical origin below
+        // Fall back to preferred origin below
       }
 
-      return canonicalOrigin;
+      return preferredOrigin;
     },
     async signIn({ user, account }) {
       if (mongoClient) {
