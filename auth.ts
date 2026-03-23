@@ -9,6 +9,7 @@ import { ensureAuthUserById, ensureAuthUserRole, verifyOtpAndGetUser } from "@/l
 
 const hasMongoConfig = Boolean(process.env.MONGODB_URI);
 const mongoClient = hasMongoConfig ? getMongoClient() : undefined;
+const PRODUCTION_APP_ORIGIN = "https://gifta.in";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -164,6 +165,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers,
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      const canonicalOrigin = process.env.NODE_ENV === "production" ? PRODUCTION_APP_ORIGIN : baseUrl;
+      const allowedOrigins = new Set([baseUrl, canonicalOrigin, PRODUCTION_APP_ORIGIN]);
+
+      if (url.startsWith("/")) {
+        return `${canonicalOrigin}${url}`;
+      }
+
+      try {
+        const target = new URL(url);
+        if (allowedOrigins.has(target.origin)) {
+          return `${canonicalOrigin}${target.pathname}${target.search}${target.hash}`;
+        }
+      } catch {
+        // Fall back to canonical origin below
+      }
+
+      return canonicalOrigin;
+    },
     async signIn({ user, account }) {
       if (mongoClient) {
         const provider = account?.provider;

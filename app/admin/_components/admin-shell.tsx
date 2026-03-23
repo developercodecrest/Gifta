@@ -47,6 +47,7 @@ type AdminNavItem = {
 const navItems: AdminNavItem[] = [
   { key: "dashboard", href: "/admin", label: "Dashboard", icon: ShieldCheck },
   { key: "vendors", href: "/admin/vendors", label: "Vendors", icon: Store },
+  { key: "vendors", href: "/admin/vendors/onboarding", label: "Onboarding Queue", icon: Store, nested: true },
   { key: "vendors", href: "/admin/vendors/categories", label: "Categories", icon: FolderTree, nested: true },
   { key: "orders", href: "/admin/orders", label: "Orders", icon: ClipboardList },
   { key: "coupons", href: "/admin/coupons", label: "Coupons", icon: BadgePercent },

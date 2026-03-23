@@ -154,3 +154,17 @@ export const createStoreSchema = z.object({
     }),
   }),
 });
+
+export const createVendorOnboardingSchema = createStoreSchema;
+
+export const vendorOnboardingListQuerySchema = z.object({
+  q: z.string().trim().min(1).optional(),
+  status: z.enum(["pending", "approved", "rejected"]).optional(),
+  page: toOptionalNumber.pipe(z.number().int().min(1).default(1)),
+  pageSize: toOptionalNumber.pipe(z.number().int().min(1).max(50).default(10)),
+});
+
+export const vendorOnboardingReviewSchema = z.object({
+  decision: z.enum(["approve", "reject"]),
+  reason: z.string().trim().max(400).optional(),
+});

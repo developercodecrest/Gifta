@@ -363,13 +363,13 @@ export default async function Home() {
         <div className="relative space-y-6">
           <div className="motion-safe:animate-rise flex flex-wrap items-end justify-between gap-4">
             <div className="[animation-delay:60ms] fill-mode-[both]">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d31a6b]">Loved by customers</p>
-              <h3 className="font-display mt-2 text-3xl font-semibold text-[#b31258] sm:text-4xl">Trusted by teams who gift at scale</h3>
-              <p className="mt-2 max-w-2xl text-sm leading-7 text-[#7f3358] sm:text-base">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#000]">Loved by customers</p>
+              <h3 className="font-display mt-2 text-3xl font-semibold text-[#000] sm:text-4xl">Trusted by teams who gift at scale</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-[#000] sm:text-base">
                 Real feedback from teams using Gifta for campaigns, milestones, and high-volume celebration moments.
               </p>
             </div>
-            <span className="motion-safe:animate-rise rounded-full border border-[#ffb2d1] bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#c01763] shadow-[0_14px_28px_-22px_rgba(173,26,90,0.42)] [animation-delay:140ms] fill-mode-[both]">
+            <span className="motion-safe:animate-rise rounded-full border border-[#ffb2d1] bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#000] shadow-[0_14px_28px_-22px_rgba(173,26,90,0.42)] [animation-delay:140ms] fill-mode-[both]">
               4.8 / 5 average rating
             </span>
           </div>
@@ -392,20 +392,20 @@ export default async function Home() {
                     />
                   </div>
                   <div>
-                    <h4 className="text-base font-semibold text-[#c01763]">{item.name}</h4>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#ff2f86]">{item.title}</p>
+                    <h4 className="text-base font-semibold text-[#000]">{item.name}</h4>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#000]">{item.title}</p>
                   </div>
                 </div>
 
-                <p className="mt-4 text-sm leading-8 text-[#783250]">{item.description}</p>
+                <p className="mt-4 text-sm leading-8 text-[#000]">{item.description}</p>
 
                 <div className="mt-5 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     {Array.from({ length: 5 }).map((_, index) => (
-                      <span key={`${item.id}-star-${index}`} className="text-base text-[#ff1e79]">★</span>
+                      <span key={`${item.id}-star-${index}`} className="text-base text-[#000]">★</span>
                     ))}
                   </div>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#d92274]">Verified</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#000]">Verified</span>
                 </div>
               </article>
             ))}
@@ -448,7 +448,7 @@ export default async function Home() {
                 size="lg"
                 className="h-12 bg-white px-7 text-[#e80067] shadow-[0_16px_34px_-20px_rgba(20,8,14,0.58)] hover:bg-[#ffe8f3]"
               >
-                <Link href="/auth/sign-up">Register as a vendor</Link>
+                <Link href="/vendor-onboarding">Register as a vendor</Link>
               </Button>
               <Button
                 size="lg"
@@ -505,12 +505,12 @@ export default async function Home() {
       <section className="rounded-4xl border border-[#ffc2dd] bg-[linear-gradient(160deg,#fff7fb_0%,#ffeef6_100%)] p-6 shadow-[0_24px_56px_-38px_rgba(255,0,102,0.26)] sm:p-8">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ff0066]">Mobile app</p>
-            <h3 className="font-display mt-2 text-3xl font-semibold text-[#ff0066] sm:text-4xl">Scan and download Gifta from Play Store</h3>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-[#7a1f4b] sm:text-base">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#000]">Mobile app</p>
+            <h3 className="font-display mt-2 text-3xl font-semibold text-[#000] sm:text-4xl">Scan and download Gifta from Play Store</h3>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-[#000] sm:text-base">
               Scan this live QR code to open the Gifta app page on Play Store and access gifting, tracking, and wishlist features on mobile.
             </p>
-            <div className="mt-5 inline-flex rounded-full border border-[#ff99c2] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#ff0066]">
+            <div className="mt-5 inline-flex rounded-full border border-[#ff99c2] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#000]">
               Android app • Live QR
             </div>
           </div>
@@ -522,7 +522,7 @@ export default async function Home() {
               className="h-44 w-44 [&_svg]:h-full [&_svg]:w-full [&_svg]:rounded-xl"
               dangerouslySetInnerHTML={{ __html: playStoreQrSvg }}
             />
-            <p className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-[#ff0066]">Scan for Play Store</p>
+            <p className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-[#000]">Scan for Play Store</p>
           </div>
         </div>
       </section>

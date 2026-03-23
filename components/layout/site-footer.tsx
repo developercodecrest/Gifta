@@ -51,10 +51,10 @@ const officeDetails = [
 
 export function Footer() {
   return (
-    <footer className="mt-18 border-t border-[#e6d4aa] bg-[linear-gradient(180deg,#f6ecd1_0%,#eedfb5_20%,#2e2112_20%,#1b130b_100%)] text-[#f9edd3]">
+    <footer className="mt-18 border-t border-[#ffb8d4] bg-[linear-gradient(180deg,#ffe7f3_0%,#ffd6ea_20%,#2e2112_20%,#1b130b_100%)] text-[#f9edd3]">
       <div className="page-gutter py-8 sm:py-10">
         <div className="mx-auto max-w-400 px-2 sm:px-4">
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-t-[1.35rem] bg-[#efe2bb] px-5 py-4 text-[#8a6820] shadow-[0_14px_34px_-26px_rgba(95,69,20,0.22)] sm:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-t-[1.35rem] bg-[#e80067] px-5 py-4 text-white shadow-[0_14px_34px_-26px_rgba(232,0,103,0.45)] sm:px-8">
             <Link href="/" className="inline-flex items-center">
               <Image src="/logo.jpeg" alt="Gifta" width={112} height={48} className="h-11 w-auto object-contain" />
             </Link>

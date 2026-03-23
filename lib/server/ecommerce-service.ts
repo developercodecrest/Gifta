@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { products as seedProducts } from "@/data/products";
 import { categories } from "@/lib/catalog";
 import { getMongoDb } from "@/lib/mongodb";
+import { ensureAuthUserRole } from "@/lib/server/otp-service";
 import {
   AdminDashboardPayload,
   AdminOrderDto,
@@ -22,6 +23,9 @@ import {
   UserOrderDetailsDto,
   UserOrderDto,
   UserNotificationDto,
+  VendorOnboardingPayload,
+  VendorOnboardingStatus,
+  VendorOnboardingSubmissionDto,
   VendorSummaryDto,
 } from "@/types/api";
 import { Product, ProductAttribute, ProductVariant } from "@/types/ecommerce";
@@ -85,6 +89,28 @@ type UserDoc = {
 
 type RiderDoc = RiderDto;
 type OrderDoc = AdminOrderDto;
+
+type VendorOnboardingSubmissionDoc = {
+  _id?: ObjectId;
+  id: string;
+  email: string;
+  userId?: string;
+  status: VendorOnboardingStatus;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+  approvedStoreId?: string;
+  businessName: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  category?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  payload: VendorOnboardingPayload;
+  updatedAt: string;
+};
 
 type AdminScope = {
   role: Role;
@@ -308,6 +334,7 @@ async function getCollections() {
     comments: db.collection<CommentDoc>("comments"),
     riders: db.collection<RiderDoc>("riders"),
     orders: db.collection<OrderDoc>("orders"),
+    vendorOnboardingSubmissions: db.collection<VendorOnboardingSubmissionDoc>("vendor_onboarding_submissions"),
   };
 }
 
@@ -612,6 +639,7 @@ export async function createStoreForAdmin(
       name: string;
       slug?: string;
     };
+    ownerUserId?: string;
     meta?: {
       status?: string;
       isVerified?: boolean;
@@ -638,7 +666,8 @@ export async function createStoreForAdmin(
   }
 
   const id = `store-${new ObjectId().toHexString().slice(-10)}`;
-  const ownerUserId = scope.role === "storeOwner" ? scope.userId : undefined;
+  const ownerUserId = payload.ownerUserId?.trim() || (scope.role === "storeOwner" ? scope.userId : undefined);
+  const isActive = (payload.meta?.status ?? "").trim().toLowerCase() === "active";
 
   const doc: StoreDoc = {
     id,
@@ -646,7 +675,7 @@ export async function createStoreForAdmin(
     slug,
     ownerUserId,
     rating: 0,
-    active: false,
+    active: isActive,
     details: payload,
     createdAt: payload.meta?.createdAt ?? now,
     updatedAt: payload.meta?.updatedAt ?? now,
@@ -908,6 +937,227 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
       };
     })
     .sort((left, right) => Number(right.active) - Number(left.active) || right.rating - left.rating);
+}
+
+function mapVendorOnboardingSubmission(doc: VendorOnboardingSubmissionDoc): VendorOnboardingSubmissionDto {
+  return {
+    id: doc.id,
+    email: doc.email,
+    userId: doc.userId,
+    status: doc.status,
+    submittedAt: doc.submittedAt,
+    reviewedAt: doc.reviewedAt,
+    reviewedBy: doc.reviewedBy,
+    rejectionReason: doc.rejectionReason,
+    approvedStoreId: doc.approvedStoreId,
+    businessName: doc.businessName,
+    ownerName: doc.ownerName,
+    ownerPhone: doc.ownerPhone,
+    category: doc.category,
+    city: doc.city,
+    state: doc.state,
+    pincode: doc.pincode,
+    payload: doc.payload,
+    updatedAt: doc.updatedAt,
+  };
+}
+
+export async function createVendorOnboardingSubmission(input: {
+  payload: VendorOnboardingPayload;
+  existingUserId?: string;
+}): Promise<VendorOnboardingSubmissionDto> {
+  const { vendorOnboardingSubmissions } = await getCollections();
+  const now = new Date().toISOString();
+  const email = (input.payload.owner.email ?? "").trim().toLowerCase();
+
+  if (!email) {
+    throw new Error("VENDOR_ONBOARDING_EMAIL_REQUIRED");
+  }
+
+  const summary = {
+    businessName: input.payload.basicInfo.name,
+    ownerName: input.payload.owner.fullName,
+    ownerPhone: input.payload.owner.phone,
+    category: input.payload.basicInfo.category,
+    city: input.payload.location.city,
+    state: input.payload.location.state,
+    pincode: input.payload.location.pincode,
+  };
+
+  const existingPending = await vendorOnboardingSubmissions.findOne(
+    { email, status: "pending" },
+    { sort: { submittedAt: -1 } },
+  );
+
+  if (existingPending) {
+    const nextDoc: VendorOnboardingSubmissionDoc = {
+      ...existingPending,
+      email,
+      userId: input.existingUserId ?? existingPending.userId,
+      status: "pending",
+      reviewedAt: undefined,
+      reviewedBy: undefined,
+      rejectionReason: undefined,
+      approvedStoreId: undefined,
+      ...summary,
+      payload: input.payload,
+      updatedAt: now,
+    };
+
+    await vendorOnboardingSubmissions.updateOne(
+      { id: existingPending.id },
+      {
+        $set: nextDoc,
+      },
+    );
+
+    return mapVendorOnboardingSubmission(nextDoc);
+  }
+
+  const doc: VendorOnboardingSubmissionDoc = {
+    id: `vonb-${new ObjectId().toHexString().slice(-10)}`,
+    email,
+    userId: input.existingUserId,
+    status: "pending",
+    submittedAt: now,
+    ...summary,
+    payload: input.payload,
+    updatedAt: now,
+  };
+
+  await vendorOnboardingSubmissions.insertOne(doc);
+  return mapVendorOnboardingSubmission(doc);
+}
+
+export async function listVendorOnboardingSubmissions(input: {
+  q?: string;
+  status?: VendorOnboardingStatus;
+  page: number;
+  pageSize: number;
+  scope: AdminScope;
+}): Promise<{
+  items: VendorOnboardingSubmissionDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}> {
+  if (input.scope.role !== "sadmin") {
+    throw new Error("FORBIDDEN_SUPER_ADMIN_ONLY");
+  }
+
+  const { vendorOnboardingSubmissions } = await getCollections();
+  const query: Record<string, unknown> = {};
+
+  if (input.status) {
+    query.status = input.status;
+  }
+
+  if (input.q) {
+    const regex = new RegExp(escapeRegex(input.q), "i");
+    query.$or = [
+      { email: regex },
+      { businessName: regex },
+      { ownerName: regex },
+      { ownerPhone: regex },
+      { category: regex },
+      { city: regex },
+      { state: regex },
+      { pincode: regex },
+    ];
+  }
+
+  const page = Math.max(1, Math.floor(input.page));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize)));
+  const skip = (page - 1) * pageSize;
+
+  const [total, docs] = await Promise.all([
+    vendorOnboardingSubmissions.countDocuments(query),
+    vendorOnboardingSubmissions.find(query).sort({ submittedAt: -1 }).skip(skip).limit(pageSize).toArray(),
+  ]);
+
+  return {
+    items: docs.map(mapVendorOnboardingSubmission),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
+export async function reviewVendorOnboardingSubmission(input: {
+  submissionId: string;
+  decision: "approve" | "reject";
+  reason?: string;
+  scope: AdminScope;
+}): Promise<VendorOnboardingSubmissionDto> {
+  if (input.scope.role !== "sadmin") {
+    throw new Error("FORBIDDEN_SUPER_ADMIN_ONLY");
+  }
+
+  const { vendorOnboardingSubmissions } = await getCollections();
+  const existing = await vendorOnboardingSubmissions.findOne({ id: input.submissionId });
+
+  if (!existing) {
+    throw new Error("VENDOR_ONBOARDING_NOT_FOUND");
+  }
+
+  if (existing.status !== "pending") {
+    throw new Error("VENDOR_ONBOARDING_ALREADY_REVIEWED");
+  }
+
+  const now = new Date().toISOString();
+  if (input.decision === "reject") {
+    const nextDoc: VendorOnboardingSubmissionDoc = {
+      ...existing,
+      status: "rejected",
+      reviewedAt: now,
+      reviewedBy: input.scope.userId,
+      rejectionReason: input.reason?.trim() || "Not approved",
+      updatedAt: now,
+    };
+
+    await vendorOnboardingSubmissions.updateOne({ id: existing.id }, { $set: nextDoc });
+    return mapVendorOnboardingSubmission(nextDoc);
+  }
+
+  const ensuredUser = await ensureAuthUserRole({
+    email: existing.email,
+    name: existing.ownerName?.trim() || existing.businessName,
+    role: "storeOwner",
+  });
+
+  const approvedPayload: VendorOnboardingPayload = {
+    ...existing.payload,
+    meta: {
+      ...(existing.payload.meta ?? {}),
+      status: "active",
+      createdAt: existing.payload.meta?.createdAt ?? now,
+      updatedAt: now,
+    },
+  };
+
+  const createdStore = await createStoreForAdmin(
+    {
+      ...approvedPayload,
+      ownerUserId: ensuredUser.id,
+    },
+    { role: "sadmin", userId: input.scope.userId },
+  );
+
+  const nextDoc: VendorOnboardingSubmissionDoc = {
+    ...existing,
+    userId: ensuredUser.id,
+    status: "approved",
+    reviewedAt: now,
+    reviewedBy: input.scope.userId,
+    approvedStoreId: createdStore.id,
+    rejectionReason: undefined,
+    updatedAt: now,
+  };
+
+  await vendorOnboardingSubmissions.updateOne({ id: existing.id }, { $set: nextDoc });
+  return mapVendorOnboardingSubmission(nextDoc);
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardPayload> {

@@ -254,6 +254,132 @@ export type VendorSummaryDto = StoreDto & {
   categoryBreakdown?: VendorCategoryAggregate[];
 };
 
+export type VendorOnboardingStatus = "pending" | "approved" | "rejected";
+
+export type VendorOnboardingPayload = {
+  basicInfo: {
+    name: string;
+    slug?: string;
+    logo?: string;
+    banner?: string;
+    shortDescription?: string;
+    longDescription?: string;
+    category: string;
+    subcategory?: string;
+  };
+  owner: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    alternatePhone?: string;
+    profileImage?: string;
+  };
+  business: {
+    businessType: "individual" | "partnership" | "llp" | "private_limited" | "public_limited" | "other";
+    legalName?: string;
+    gstNumber?: string;
+    panNumber?: string;
+    fssaiLicense?: string;
+    drugLicense?: string;
+    shopActLicense?: string;
+  };
+  location: {
+    addressLine1?: string;
+    addressLine2?: string;
+    landmark?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+    geo?: {
+      latitude?: number | null;
+      longitude?: number | null;
+    };
+  };
+  delivery?: {
+    isPickupAvailable?: boolean;
+    deliveryRadiusKm?: number;
+    deliveryChargeType?: "fixed" | "dynamic" | "range";
+    deliveryCharge?: number;
+    minDeliveryCharge?: number;
+    maxDeliveryCharge?: number;
+    estimatedDeliveryTimeMinutes?: number;
+    timeSlots?: Array<{
+      day: string;
+      start: string;
+      end: string;
+    }>;
+  };
+  payment?: {
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiId?: string;
+    bankProofImage?: string;
+  };
+  productSettings: {
+    defaultTaxRate?: number;
+    measurementUnits?: string[];
+    minOrderValue?: number;
+    returnPolicy?: string;
+    replacementPolicy?: string;
+  };
+  operations: {
+    workingDays?: string[];
+    openingTime?: string;
+    closingTime?: string;
+    holidayMode?: boolean;
+    orderPreparationTimeMinutes?: number;
+  };
+  media: {
+    gallery?: string[];
+    introVideo?: string;
+  };
+  catalog?: {
+    categories?: StoreCategoryOption[];
+  };
+  marketing: {
+    couponsEnabled?: boolean;
+    featured?: boolean;
+    adBudget?: number;
+  };
+  aiInsights: {
+    pricingSuggestionsEnabled?: boolean;
+    inventoryAlertsEnabled?: boolean;
+    salesInsightsEnabled?: boolean;
+    complianceAlertsEnabled?: boolean;
+    productRecommendationsEnabled?: boolean;
+  };
+  meta?: {
+    status?: "pending" | "active" | "inactive" | "rejected";
+    isVerified?: boolean;
+    profileCompletion?: number;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+};
+
+export type VendorOnboardingSubmissionDto = {
+  id: string;
+  email: string;
+  userId?: string;
+  status: VendorOnboardingStatus;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+  approvedStoreId?: string;
+  businessName: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  category?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  payload: VendorOnboardingPayload;
+  updatedAt: string;
+};
+
 export type OfferDto = {
   id: string;
   productId: string;

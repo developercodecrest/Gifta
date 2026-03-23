@@ -9,6 +9,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+function sanitizeCallbackPath(value: string | null): string {
+  if (!value) {
+    return "/";
+  }
+
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.origin === "https://gifta.in" || parsed.origin === window.location.origin) {
+      const candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      return candidate.startsWith("/") ? candidate : "/";
+    }
+  } catch {
+    return "/";
+  }
+
+  return "/";
+}
+
 export default function SignInPage() {
   return (
     <Suspense fallback={<div className="p-2 text-sm text-muted-foreground">Loading sign-in...</div>}>
@@ -20,7 +42,7 @@ export default function SignInPage() {
 function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = useMemo(() => searchParams.get("callbackUrl") ?? "/", [searchParams]);
+  const callbackUrl = useMemo(() => sanitizeCallbackPath(searchParams.get("callbackUrl")), [searchParams]);
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -124,7 +146,7 @@ function SignInContent() {
 
       setIsFinalizingAuth(true);
 
-      router.push(result.url ?? callbackUrl);
+      router.push(sanitizeCallbackPath(result.url) || callbackUrl);
       router.refresh();
     } finally {
       setSigningIn(false);
