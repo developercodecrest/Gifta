@@ -1121,10 +1121,8 @@ export async function reviewVendorOnboardingSubmission(input: {
     return mapVendorOnboardingSubmission(nextDoc);
   }
 
-  const ensuredUser = await ensureAuthUserRole({
-    email: existing.email,
-    name: existing.ownerName?.trim() || existing.businessName,
-    role: "storeOwner",
+  const ensuredUser = await ensureAuthUserRole(existing.email, "storeOwner", {
+    forceDefaultRole: true,
   });
 
   const approvedPayload: VendorOnboardingPayload = {
