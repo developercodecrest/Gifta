@@ -10,7 +10,8 @@ const REFRESH_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 type AuthUserDoc = {
   _id?: ObjectId;
   email: string;
-  name?: string;
+  fullName?: string;
+  phone?: string;
   role?: string;
 };
 
@@ -31,7 +32,8 @@ type MobileSessionDoc = {
 export type MobileSessionUser = {
   id: string;
   email: string;
-  name?: string;
+  fullName?: string;
+  phone?: string;
   role: Role;
 };
 
@@ -93,8 +95,9 @@ async function getUserById(userId: string): Promise<MobileSessionUser | null> {
   return {
     id: user._id?.toString() ?? userId,
     email: user.email,
-    name: user.name,
-    role: parseRole(user.role ?? "user"),
+    fullName: user.fullName,
+    phone: user.phone,
+    role: parseRole(user.role ?? "USER"),
   };
 }
 

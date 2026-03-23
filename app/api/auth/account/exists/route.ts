@@ -1,16 +1,18 @@
 import { badRequest, ok } from "@/lib/api-response";
-import { getAuthUserByEmail } from "@/lib/server/otp-service";
+import { getAuthUserByEmail, getAuthUserByPhone } from "@/lib/server/otp-service";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const email = new URL(request.url).searchParams.get("email")?.trim();
+  const params = new URL(request.url).searchParams;
+  const email = params.get("email")?.trim();
+  const phone = params.get("phone")?.trim();
 
-  if (!email) {
-    return badRequest("Email is required");
+  if (!email && !phone) {
+    return badRequest("Email or phone is required");
   }
 
-  const user = await getAuthUserByEmail(email);
+  const user = email ? await getAuthUserByEmail(email) : await getAuthUserByPhone(phone ?? "");
 
   return ok({
     exists: Boolean(user),

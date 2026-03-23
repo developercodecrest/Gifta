@@ -1,5 +1,6 @@
 import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
+import { parseRole } from "@/lib/roles";
 import { upsertProfile } from "@/lib/server/ecommerce-service";
 import { createMobileTokenBundle } from "@/lib/server/mobile-session-service";
 import { ensureAuthUserRole, getAuthUserByEmail } from "@/lib/server/otp-service";
@@ -50,7 +51,9 @@ export async function POST(request: Request) {
     return unauthorized("Account does not exist. Please sign up first.");
   }
 
-  const user = await ensureAuthUserRole(email, "user");
+  const user = await ensureAuthUserRole(email, "USER", {
+    fullName: payload?.name?.trim() || undefined,
+  });
   await upsertProfile(
     {
       email,
@@ -75,5 +78,13 @@ export async function POST(request: Request) {
     expiresAt: tokenBundle.expiresAt,
     refreshExpiresAt: tokenBundle.refreshExpiresAt,
     userId: tokenBundle.user.id,
+    user: {
+      id: tokenBundle.user.id,
+      email: tokenBundle.user.email,
+      fullname: tokenBundle.user.fullName ?? "",
+      phone: tokenBundle.user.phone ?? "",
+      role: parseRole(tokenBundle.user.role),
+      token: tokenBundle.token,
+    },
   });
 }

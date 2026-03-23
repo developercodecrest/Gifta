@@ -13,14 +13,14 @@ type Props = {
   defaultRole?: string;
 };
 
-const roles = ["user", "storeOwner", "sadmin"] as const;
+const roles = ["USER", "STORE_OWNER", "SADMIN", "RIDER", "AREA_MANAGER"] as const;
 
 export function UserActions({ userId, defaultName, defaultEmail, defaultPhone, defaultRole }: Props) {
   const router = useRouter();
   const [fullName, setFullName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
   const [phone, setPhone] = useState(defaultPhone ?? "");
-  const [role, setRole] = useState((defaultRole ?? "user") as (typeof roles)[number]);
+  const [role, setRole] = useState((defaultRole ?? "USER") as (typeof roles)[number]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

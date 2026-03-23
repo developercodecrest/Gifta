@@ -13,9 +13,11 @@ export type RequestIdentity = {
 
 function resolveHighestRole(...values: Array<string | null | undefined>): Role {
   const parsed = values.map((value) => parseRole(value));
-  if (parsed.includes("sadmin")) return "sadmin";
-  if (parsed.includes("storeOwner")) return "storeOwner";
-  return "user";
+  if (parsed.includes("SADMIN")) return "SADMIN";
+  if (parsed.includes("STORE_OWNER")) return "STORE_OWNER";
+  if (parsed.includes("AREA_MANAGER")) return "AREA_MANAGER";
+  if (parsed.includes("RIDER")) return "RIDER";
+  return "USER";
 }
 
 function getBearerToken(request: Request) {
@@ -43,7 +45,7 @@ export async function resolveRequestIdentity(request: Request): Promise<RequestI
     return {
       userId: resolvedUserId,
       email: liveUser?.email ?? dbUser?.email ?? undefined,
-      role: resolveHighestRole(dbUser?.role, liveUser?.role, "user"),
+      role: resolveHighestRole(dbUser?.role, liveUser?.role, "USER"),
       source: "session",
     };
   }

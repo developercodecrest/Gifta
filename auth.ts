@@ -4,6 +4,8 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { getMongoClient, getMongoDb } from "@/lib/mongodb";
+import { parseRole } from "@/lib/roles";
+import { createMobileTokenBundle, getUserFromAccessToken } from "@/lib/server/mobile-session-service";
 import { upsertProfile } from "@/lib/server/ecommerce-service";
 import { ensureAuthUserById, ensureAuthUserRole, getAuthUserByEmail, verifyOtpAndGetUser } from "@/lib/server/otp-service";
 
@@ -37,6 +39,14 @@ function toOrigin(value: string | undefined) {
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizePhone(value: string | null | undefined) {
+  if (!value) return "";
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
+  return "";
 }
 
 const adapter: Adapter | undefined = mongoClient
@@ -143,16 +153,61 @@ const providers = [
   ...(hasMongoConfig
     ? [
         Credentials({
-          name: "Email OTP",
+          name: "OTP / Token",
           credentials: {
+            id: { label: "id", type: "text" },
             email: { label: "Email", type: "email" },
+            fullname: { label: "fullname", type: "text" },
+            phone: { label: "phone", type: "text" },
             otp: { label: "OTP", type: "text" },
+            token: { label: "token", type: "text" },
+            role: { label: "role", type: "text" },
             intent: { label: "Intent", type: "text" },
           },
           async authorize(credentials) {
+            const id = typeof credentials?.id === "string" ? credentials.id.trim() : "";
             const email = credentials?.email;
+            const fullName = typeof credentials?.fullname === "string" ? credentials.fullname.trim() : "";
+            const phone = normalizePhone(typeof credentials?.phone === "string" ? credentials.phone : "");
             const otp = credentials?.otp;
+            const token = typeof credentials?.token === "string" ? credentials.token.trim() : "";
+            const role = typeof credentials?.role === "string" ? credentials.role.trim() : "";
             const intent = credentials?.intent;
+
+            // aasaan-web style credentials handoff where API already verified OTP and issued token.
+            if (id && token) {
+              const tokenUser = await getUserFromAccessToken(token);
+              if (!tokenUser || tokenUser.id !== id) {
+                authDebugLog("credentials.authorize.rejected_invalid_token", {
+                  userId: id,
+                });
+                return null;
+              }
+
+              const ensured = await ensureAuthUserById({
+                userId: tokenUser.id,
+                email: tokenUser.email,
+                name: fullName || tokenUser.fullName,
+                phone: phone || undefined,
+                defaultRole: parseRole(role || tokenUser.role),
+              });
+
+              authDebugLog("credentials.authorize.success_token", {
+                userId: ensured.id,
+                email: maskEmail(ensured.email),
+                role: ensured.role,
+              });
+
+              return {
+                id: ensured.id,
+                email: ensured.email,
+                name: fullName || ensured.fullName || ensured.name,
+                phone: ensured.phone,
+                role: ensured.role,
+                token,
+                fullname: fullName || ensured.fullName || ensured.name || "",
+              };
+            }
 
             if (typeof email !== "string" || typeof otp !== "string") {
               return null;
@@ -185,6 +240,8 @@ const providers = [
               email: normalizedEmail,
               otp,
               createIfMissing: resolvedIntent === "signup",
+              fullName: fullName || undefined,
+              phone: phone || undefined,
             });
             if (!user) {
               authDebugLog("credentials.authorize.rejected_invalid_otp", {
@@ -199,11 +256,18 @@ const providers = [
               role: user.role,
             });
 
+            const tokenBundle = await createMobileTokenBundle({
+              userId: user.id,
+            });
+
             return {
               id: user.id,
               email: user.email,
-              name: user.name,
+              name: user.fullName ?? user.name,
               role: user.role,
+              phone: user.phone,
+              token: tokenBundle?.token,
+              fullname: user.fullName ?? user.name ?? "",
             };
           },
         }),
@@ -216,13 +280,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   debug: AUTH_DEBUG,
   session: {
-    strategy: mongoClient ? "database" : "jwt",
+    strategy: "jwt",
   },
   pages: {
     signIn: "/auth/sign-in",
   },
   providers,
   callbacks: {
+    async authorized({ auth: authState, request }) {
+      const pathname = request.nextUrl.pathname;
+      const adminPath = pathname.startsWith("/admin") || pathname.startsWith("/dashboard");
+      if (!adminPath) {
+        return true;
+      }
+
+      return Boolean(authState?.user);
+    },
     async redirect({ url, baseUrl }) {
       const configuredOrigin =
         toOrigin(process.env.NEXTAUTH_URL) ??
@@ -274,18 +347,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (provider === "google" && user.email) {
           // For OAuth, use email as source of truth to avoid creating a second user doc
           // when an OTP/credentials user already exists with the same email.
-          const ensuredUser = await ensureAuthUserRole(user.email, "user");
+          const ensuredUser = await ensureAuthUserRole(user.email, "USER");
           resolvedUserId = ensuredUser.id;
         } else if (user.id) {
           const ensuredUser = await ensureAuthUserById({
             userId: user.id,
             email: user.email ?? undefined,
             name: user.name ?? undefined,
-            defaultRole: "user",
+            phone: user.phone ?? undefined,
+            defaultRole: "USER",
           });
           resolvedUserId = ensuredUser.id;
         } else if (user.email) {
-          const ensuredUser = await ensureAuthUserRole(user.email, "user");
+          const ensuredUser = await ensureAuthUserRole(user.email, "USER");
           resolvedUserId = ensuredUser.id;
         }
 
@@ -293,7 +367,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await upsertProfile(
             {
               email: user.email ?? undefined,
-              fullName: user.name ?? undefined,
+              fullName: user.fullname ?? user.name ?? undefined,
             },
             resolvedUserId,
           );
@@ -308,25 +382,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, user, token }) {
       if (session.user) {
-        session.user.id = user?.id ?? token.sub ?? "";
-        session.user.email = user?.email ?? session.user.email ?? null;
-        session.user.name = user?.name ?? session.user.name ?? null;
+        session.user.id = user?.id ?? token.id ?? token.sub ?? "";
+        session.user.email = (user?.email ?? token.email ?? session.user.email ?? "") as string;
+        session.user.name = (user?.fullname ?? (token.fullname as string | undefined) ?? user?.name ?? token.name ?? session.user.name ?? null) as string | null;
         session.user.image = user?.image ?? session.user.image ?? null;
+        session.user.phone = (token.phone as string | undefined) ?? user?.phone ?? "";
+        session.user.role = parseRole((token.role as string | undefined) ?? user?.role ?? "USER");
       }
+      session.token = (token.token as string | undefined) ?? session.token;
       authDebugLog("callbacks.session", {
         sessionUserId: session.user?.id,
         tokenSub: token.sub,
+        sessionRole: session.user?.role,
       });
       return session;
     },
     async jwt({ token, user }) {
       if (user?.id) {
         token.sub = user.id;
+        token.id = user.id;
+        token.email = user.email;
+        token.name = user.fullname ?? user.name;
+        token.phone = user.phone;
+        token.role = parseRole(user.role ?? "USER");
+        token.token = user.token;
+        token.fullname = user.fullname ?? user.name ?? "";
       }
-      delete token.email;
-      delete token.name;
-      delete token.picture;
-      delete (token as Record<string, unknown>).role;
       return token;
     },
   },
