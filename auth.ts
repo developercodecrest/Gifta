@@ -11,6 +11,20 @@ const hasMongoConfig = Boolean(process.env.MONGODB_URI);
 const mongoClient = hasMongoConfig ? getMongoClient() : undefined;
 const PRODUCTION_APP_ORIGIN = "https://gifta.in";
 const PRODUCTION_WWW_ORIGIN = "https://www.gifta.in";
+const AUTH_DEBUG = process.env.AUTH_DEBUG === "1";
+
+function maskEmail(value: string | null | undefined) {
+  if (!value) return "-";
+  const [name, domain] = value.split("@");
+  if (!name || !domain) return "-";
+  const maskedName = name.length <= 2 ? `${name[0] ?? "*"}*` : `${name.slice(0, 2)}***`;
+  return `${maskedName}@${domain}`;
+}
+
+function authDebugLog(event: string, details: Record<string, unknown>) {
+  if (!AUTH_DEBUG) return;
+  console.info(`[auth-debug] ${event}`, details);
+}
 
 function toOrigin(value: string | undefined) {
   if (!value) return undefined;
@@ -147,9 +161,22 @@ const providers = [
             const normalizedEmail = email.trim().toLowerCase();
             const resolvedIntent = intent === "signup" ? "signup" : "signin";
 
+            authDebugLog("credentials.authorize.start", {
+              email: maskEmail(normalizedEmail),
+              intent: resolvedIntent,
+              hasOtp: Boolean(otp.trim()),
+            });
+
             if (resolvedIntent === "signin") {
               const existingUser = await getAuthUserByEmail(normalizedEmail);
+              authDebugLog("credentials.authorize.lookup", {
+                email: maskEmail(normalizedEmail),
+                exists: Boolean(existingUser),
+              });
               if (!existingUser) {
+                authDebugLog("credentials.authorize.rejected_missing_user", {
+                  email: maskEmail(normalizedEmail),
+                });
                 return null;
               }
             }
@@ -160,8 +187,17 @@ const providers = [
               createIfMissing: resolvedIntent === "signup",
             });
             if (!user) {
+              authDebugLog("credentials.authorize.rejected_invalid_otp", {
+                email: maskEmail(normalizedEmail),
+              });
               return null;
             }
+
+            authDebugLog("credentials.authorize.success", {
+              email: maskEmail(user.email),
+              userId: user.id,
+              role: user.role,
+            });
 
             return {
               id: user.id,
@@ -178,6 +214,7 @@ const providers = [
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...(adapter ? { adapter } : {}),
   trustHost: true,
+  debug: AUTH_DEBUG,
   session: {
     strategy: mongoClient ? "database" : "jwt",
   },
@@ -205,15 +242,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       try {
         const target = new URL(url);
         if (allowedOrigins.has(target.origin)) {
+          authDebugLog("callbacks.redirect.allowed", {
+            targetOrigin: target.origin,
+            path: `${target.pathname}${target.search}`,
+            baseOrigin,
+          });
           return `${target.origin}${target.pathname}${target.search}${target.hash}`;
         }
       } catch {
         // Fall back to preferred origin below
       }
 
+      authDebugLog("callbacks.redirect.fallback", {
+        url,
+        baseOrigin,
+        preferredOrigin,
+      });
+
       return preferredOrigin;
     },
     async signIn({ user, account }) {
+      authDebugLog("callbacks.signIn.start", {
+        provider: account?.provider ?? "unknown",
+        userId: user.id,
+        email: maskEmail(user.email ?? undefined),
+      });
       if (mongoClient) {
         const provider = account?.provider;
         let resolvedUserId = user.id;
@@ -246,6 +299,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           );
         }
       }
+      authDebugLog("callbacks.signIn.success", {
+        provider: account?.provider ?? "unknown",
+        userId: user.id,
+        email: maskEmail(user.email ?? undefined),
+      });
       return true;
     },
     async session({ session, user, token }) {
@@ -255,6 +313,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.name = user?.name ?? session.user.name ?? null;
         session.user.image = user?.image ?? session.user.image ?? null;
       }
+      authDebugLog("callbacks.session", {
+        sessionUserId: session.user?.id,
+        tokenSub: token.sub,
+      });
       return session;
     },
     async jwt({ token, user }) {

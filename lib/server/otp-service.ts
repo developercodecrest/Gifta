@@ -50,6 +50,20 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_MAX_SENDS_PER_HOUR = 3;
 const OTP_WINDOW_MS = 60 * 60 * 1000;
+const AUTH_DEBUG = process.env.AUTH_DEBUG === "1";
+
+function maskEmail(value: string | undefined) {
+  if (!value) return "-";
+  const [name, domain] = value.split("@");
+  if (!name || !domain) return "-";
+  const maskedName = name.length <= 2 ? `${name[0] ?? "*"}*` : `${name.slice(0, 2)}***`;
+  return `${maskedName}@${domain}`;
+}
+
+function otpDebugLog(event: string, details: Record<string, unknown>) {
+  if (!AUTH_DEBUG) return;
+  console.info(`[otp-debug] ${event}`, details);
+}
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -330,8 +344,20 @@ export async function requestOtpForEmail(input: { email: string; ip?: string }) 
   const windowStartedAt = inActiveWindow ? latestByEmail!.windowStartedAt! : now;
   const sentInWindow = inActiveWindow ? Math.max(0, latestByEmail?.sendCount ?? 1) : 0;
 
+  otpDebugLog("request.start", {
+    email: maskEmail(email),
+    hadExistingDoc: Boolean(latestByEmail?._id),
+    inActiveWindow,
+    sentInWindow,
+  });
+
   if (sentInWindow >= OTP_MAX_SENDS_PER_HOUR) {
     const retryAfterMs = Math.max(0, OTP_WINDOW_MS - (now.getTime() - windowStartedAt.getTime()));
+
+    otpDebugLog("request.rate_limited", {
+      email: maskEmail(email),
+      retryAfterMs,
+    });
 
     return {
       ok: false as const,
@@ -378,6 +404,12 @@ export async function requestOtpForEmail(input: { email: string; ip?: string }) 
     });
   }
 
+  otpDebugLog("request.saved", {
+    email: maskEmail(email),
+    mode: latestByEmail?._id ? "update" : "insert",
+    sendsUsed: sentInWindow + 1,
+  });
+
   await otpCodes.createIndex({ email: 1, createdAt: -1 });
   await otpCodes.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
@@ -420,11 +452,24 @@ export async function verifyOtpAndGetUser(input: { email: string; otp: string; c
     },
   );
 
+  otpDebugLog("verify.lookup", {
+    email: maskEmail(email),
+    found: Boolean(latest),
+    createIfMissing,
+  });
+
   if (!latest) {
+    otpDebugLog("verify.rejected_no_active_code", {
+      email: maskEmail(email),
+    });
     return null;
   }
 
   if (latest.attempts >= OTP_MAX_ATTEMPTS) {
+    otpDebugLog("verify.rejected_max_attempts", {
+      email: maskEmail(email),
+      attempts: latest.attempts,
+    });
     return null;
   }
 
@@ -432,19 +477,37 @@ export async function verifyOtpAndGetUser(input: { email: string; otp: string; c
 
   if (incomingHash !== latest.codeHash) {
     await otpCodes.updateOne({ _id: latest._id }, { $inc: { attempts: 1 } });
+    otpDebugLog("verify.rejected_hash_mismatch", {
+      email: maskEmail(email),
+      attemptsBeforeIncrement: latest.attempts,
+    });
     return null;
   }
 
   await otpCodes.updateOne({ _id: latest._id }, { $set: { consumedAt: new Date() } });
+  otpDebugLog("verify.consumed", {
+    email: maskEmail(email),
+  });
 
   if (!createIfMissing) {
     const existing = await getAuthUserByEmail(email);
     if (!existing) {
+      otpDebugLog("verify.rejected_missing_user_signin", {
+        email: maskEmail(email),
+      });
       return null;
     }
 
+    otpDebugLog("verify.success_signin", {
+      email: maskEmail(email),
+      userId: existing._id?.toString() ?? "",
+    });
     return ensureAuthUserRole(email, "user");
   }
+
+  otpDebugLog("verify.success_signup", {
+    email: maskEmail(email),
+  });
 
   return ensureAuthUserRole(email, "user");
 }
