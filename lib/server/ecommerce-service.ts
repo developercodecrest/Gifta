@@ -160,14 +160,15 @@ function normalizeProfileAddresses(addresses: ProfileDto["addresses"] | undefine
   }));
 }
 
-function normalizeInventoryProduct<T extends ProductDoc>(product: T): T {
+function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
+  const { _id: _ignoredId, ...rest } = product as ProductDoc & { _id?: ObjectId };
   const minOrderQty = typeof product.minOrderQty === "number" ? Math.max(1, Math.floor(product.minOrderQty)) : 1;
   const rawMax = typeof product.maxOrderQty === "number" ? Math.max(0, Math.floor(product.maxOrderQty)) : 10;
   const hiddenByQty = rawMax === 0;
   const maxOrderQty = hiddenByQty ? 0 : Math.max(minOrderQty, rawMax);
 
   return {
-    ...product,
+    ...rest,
     minOrderQty,
     maxOrderQty,
     inStock: product.inStock && !hiddenByQty,
@@ -340,7 +341,15 @@ async function getCollections() {
 
 export async function listStores(): Promise<StoreDto[]> {
   const { stores } = await getCollections();
-  return stores.find().sort({ rating: -1, name: 1 }).toArray();
+  const docs = await stores.find().sort({ rating: -1, name: 1 }).toArray();
+  return docs.map((store) => ({
+    id: store.id,
+    name: store.name,
+    slug: store.slug,
+    ownerUserId: store.ownerUserId,
+    rating: store.rating,
+    active: store.active,
+  }));
 }
 
 async function getOffersForProducts(productIds: string[], storeId?: string) {
@@ -363,7 +372,16 @@ async function getOffersForProducts(productIds: string[], storeId?: string) {
   const offerDocs = await offers.find(offerFilter).toArray();
   const storeIds = Array.from(new Set(offerDocs.map((entry) => entry.storeId)));
   const storeDocs = await stores.find({ id: { $in: storeIds } }).toArray();
-  const storesById = toMap(storeDocs);
+  const storesById = toMap(
+    storeDocs.map((store) => ({
+      id: store.id,
+      name: store.name,
+      slug: store.slug,
+      ownerUserId: store.ownerUserId,
+      rating: store.rating,
+      active: store.active,
+    })),
+  );
 
   const offersByProduct = new Map<string, OfferDto[]>();
   for (const offer of offerDocs) {

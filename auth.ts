@@ -5,7 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { getMongoClient, getMongoDb } from "@/lib/mongodb";
 import { upsertProfile } from "@/lib/server/ecommerce-service";
-import { ensureAuthUserById, ensureAuthUserRole, verifyOtpAndGetUser } from "@/lib/server/otp-service";
+import { ensureAuthUserById, ensureAuthUserRole, getAuthUserByEmail, verifyOtpAndGetUser } from "@/lib/server/otp-service";
 
 const hasMongoConfig = Boolean(process.env.MONGODB_URI);
 const mongoClient = hasMongoConfig ? getMongoClient() : undefined;
@@ -134,10 +134,20 @@ const providers = [
               return null;
             }
 
+            const normalizedEmail = email.trim().toLowerCase();
+            const resolvedIntent = intent === "signup" ? "signup" : "signin";
+
+            if (resolvedIntent === "signin") {
+              const existingUser = await getAuthUserByEmail(normalizedEmail);
+              if (!existingUser) {
+                return null;
+              }
+            }
+
             const user = await verifyOtpAndGetUser({
-              email,
+              email: normalizedEmail,
               otp,
-              createIfMissing: intent === "signup",
+              createIfMissing: resolvedIntent === "signup",
             });
             if (!user) {
               return null;

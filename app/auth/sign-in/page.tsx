@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,6 @@ export default function SignInPage() {
 }
 
 function SignInContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = useMemo(() => sanitizeCallbackPath(searchParams.get("callbackUrl")), [searchParams]);
 
@@ -119,22 +118,15 @@ function SignInContent() {
       const existsPayload = (await existsRes.json()) as { success?: boolean; data?: { exists?: boolean } };
       const accountExists = Boolean(existsRes.ok && existsPayload.success && existsPayload.data?.exists);
 
-      let intent: "signin" | "signup" = "signin";
-
       if (!accountExists) {
-        const shouldRegister = window.confirm("No account found for this email. Do you want to register now?");
-        if (!shouldRegister) {
-          setError("Please register first or use another email.");
-          setSigningIn(false);
-          return;
-        }
-        intent = "signup";
+        setError("No account found for this email. Please sign up first.");
+        return;
       }
 
       const result = await signIn("credentials", {
         email,
         otp,
-        intent,
+        intent: "signin",
         redirect: false,
         callbackUrl,
       });
@@ -145,9 +137,8 @@ function SignInContent() {
       }
 
       setIsFinalizingAuth(true);
-
-      router.push(sanitizeCallbackPath(result.url) || callbackUrl);
-      router.refresh();
+      const nextPath = sanitizeCallbackPath(result.url) || callbackUrl;
+      window.location.assign(nextPath);
     } finally {
       setSigningIn(false);
     }

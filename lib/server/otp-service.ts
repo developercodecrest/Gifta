@@ -14,6 +14,8 @@ type OtpCodeDoc = {
   consumedAt?: Date;
   attempts: number;
   ip?: string;
+  sendCount?: number;
+  windowStartedAt?: Date;
 };
 
 type AuthUserDoc = {
@@ -315,25 +317,21 @@ export async function requestOtpForEmail(input: { email: string; ip?: string }) 
   const email = normalizeEmail(input.email);
   const { otpCodes } = await getCollections();
   const now = new Date();
-  const windowStart = new Date(now.getTime() - OTP_WINDOW_MS);
+  const latestByEmail = await otpCodes.findOne(
+    { email },
+    { sort: { createdAt: -1 } },
+  );
 
-  const sentInWindow = await otpCodes.countDocuments({
-    email,
-    createdAt: { $gte: windowStart },
-  });
+  const inActiveWindow = Boolean(
+    latestByEmail?.windowStartedAt &&
+      now.getTime() - latestByEmail.windowStartedAt.getTime() < OTP_WINDOW_MS,
+  );
+
+  const windowStartedAt = inActiveWindow ? latestByEmail!.windowStartedAt! : now;
+  const sentInWindow = inActiveWindow ? Math.max(0, latestByEmail?.sendCount ?? 1) : 0;
 
   if (sentInWindow >= OTP_MAX_SENDS_PER_HOUR) {
-    const firstInWindow = await otpCodes.findOne(
-      {
-        email,
-        createdAt: { $gte: windowStart },
-      },
-      { sort: { createdAt: 1 } },
-    );
-
-    const retryAfterMs = firstInWindow
-      ? Math.max(0, OTP_WINDOW_MS - (now.getTime() - firstInWindow.createdAt.getTime()))
-      : OTP_WINDOW_MS;
+    const retryAfterMs = Math.max(0, OTP_WINDOW_MS - (now.getTime() - windowStartedAt.getTime()));
 
     return {
       ok: false as const,
@@ -348,14 +346,37 @@ export async function requestOtpForEmail(input: { email: string; ip?: string }) 
   const codeHash = buildCodeHash(email, otpCode);
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
 
-  await otpCodes.insertOne({
-    email,
-    codeHash,
-    createdAt: now,
-    expiresAt,
-    attempts: 0,
-    ip: input.ip,
-  });
+  if (latestByEmail?._id) {
+    await otpCodes.updateOne(
+      { _id: latestByEmail._id },
+      {
+        $set: {
+          email,
+          codeHash,
+          createdAt: now,
+          expiresAt,
+          attempts: 0,
+          ip: input.ip,
+          sendCount: sentInWindow + 1,
+          windowStartedAt,
+        },
+        $unset: {
+          consumedAt: "",
+        },
+      },
+    );
+  } else {
+    await otpCodes.insertOne({
+      email,
+      codeHash,
+      createdAt: now,
+      expiresAt,
+      attempts: 0,
+      ip: input.ip,
+      sendCount: 1,
+      windowStartedAt,
+    });
+  }
 
   await otpCodes.createIndex({ email: 1, createdAt: -1 });
   await otpCodes.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });

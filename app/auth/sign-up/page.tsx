@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Mail, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,6 @@ export default function SignUpPage() {
 }
 
 function SignUpContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = useMemo(() => sanitizeCallbackPath(searchParams.get("callbackUrl")), [searchParams]);
 
@@ -115,9 +114,8 @@ function SignUpContent() {
       }
 
       setIsFinalizingAuth(true);
-
-      router.push(sanitizeCallbackPath(result.url) || callbackUrl);
-      router.refresh();
+      const nextPath = sanitizeCallbackPath(result.url) || callbackUrl;
+      window.location.assign(nextPath);
     } finally {
       setSigningUp(false);
     }
