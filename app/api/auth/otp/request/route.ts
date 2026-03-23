@@ -19,12 +19,15 @@ export async function POST(request: Request) {
 
     if (!result.ok) {
       if (result.code === "OTP_RATE_LIMIT") {
+        const retryAfterMs = "retryAfterMs" in result ? result.retryAfterMs : undefined;
+        const sendsLeft = "sendsLeft" in result ? result.sendsLeft : undefined;
+
         return fail(429, {
           code: result.code,
           message: result.message,
           details: {
-            retryAfterMs: result.retryAfterMs,
-            sendsLeft: result.sendsLeft,
+            retryAfterMs,
+            sendsLeft,
           },
         });
       }

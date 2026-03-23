@@ -92,7 +92,7 @@ export type ShippingEvent = {
 export type ProfileAddress = {
   label: string;
   receiverName: string;
-  receiverPhone: string;
+  receiverPhone?: string;
   receiverPhones?: string[];
   line1: string;
   city: string;
