@@ -1,5 +1,5 @@
 import { badRequest, fail, ok, serverError } from "@/lib/api-response";
-import { requestOtpForEmail } from "@/lib/server/otp-service";
+import { requestOtpForEmail, requestOtpForPhone } from "@/lib/server/otp-service";
 
 export const runtime = "nodejs";
 
@@ -7,22 +7,35 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const email = typeof body?.email === "string" ? body.email.trim() : "";
-    if (!email) {
-      return badRequest("Email is required.");
+    const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
+    if (!email && !phone) {
+      return badRequest("Email or phone is required.");
     }
 
     const ip = request.headers.get("x-forwarded-for") ?? undefined;
-    const result = await requestOtpForEmail({ email, ip });
+    const result = email
+      ? await requestOtpForEmail({ email, ip })
+      : await requestOtpForPhone({ phone, ip });
 
     if (!result.ok) {
       if (result.code === "OTP_RATE_LIMIT") {
+        const retryAfterMs = "retryAfterMs" in result ? result.retryAfterMs : undefined;
+        const sendsLeft = "sendsLeft" in result ? result.sendsLeft : undefined;
+
         return fail(429, {
           code: result.code,
           message: result.message,
           details: {
-            retryAfterMs: result.retryAfterMs,
-            sendsLeft: result.sendsLeft,
+            retryAfterMs,
+            sendsLeft,
           },
+        });
+      }
+
+      if (result.code === "USER_NOT_FOUND") {
+        return fail(404, {
+          code: result.code,
+          message: result.message,
         });
       }
 

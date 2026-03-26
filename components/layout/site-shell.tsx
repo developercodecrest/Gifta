@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import { LoginPopup } from "@/components/auth/login-popup";
-import { ProfileOnboardingGate } from "@/components/auth/profile-onboarding-gate";
 import { CartSyncGate } from "@/components/cart/cart-sync-gate";
 import { Footer } from "@/components/layout/site-footer";
 import { Header } from "@/components/layout/site-header";
@@ -20,7 +19,6 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
       <CartSyncGate />
-      <ProfileOnboardingGate />
       {isAdminRoute ? null : <Header />}
       <main id="main-content" className="page-gutter w-full">
         {children}

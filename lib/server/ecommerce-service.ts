@@ -73,7 +73,6 @@ type CommentDoc = {
 
 type UserDoc = {
   _id?: ObjectId;
-  name?: string;
   role?: string;
   fullName?: string;
   email: string;
@@ -125,7 +124,7 @@ function toObjectId(value: string) {
 
 function profileDocToDto(doc: UserDoc): ProfileDto {
   const userId = doc._id?.toString() ?? "";
-  const fullName = doc.fullName ?? doc.name ?? "Gifta User";
+  const fullName = doc.fullName ?? "Gifta User";
   return {
     userId,
     fullName,
@@ -147,21 +146,63 @@ function toMap<T extends { id: string }>(list: T[]) {
   return new Map(list.map((entry) => [entry.id, entry]));
 }
 
+function normalizePhoneList(values: Array<unknown> | undefined, fallbackPhone?: string) {
+  const normalized = Array.from(
+    new Set(
+      (values ?? [])
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => Boolean(entry)),
+    ),
+  );
+
+  if (!normalized.length && fallbackPhone?.trim()) {
+    return [fallbackPhone.trim()];
+  }
+
+  return normalized;
+}
+
+function resolveReceiverPhones(address: ProfileDto["addresses"][number], fallbackPhone?: string) {
+  const existing = normalizePhoneList(address.receiverPhones, fallbackPhone);
+  if (existing.length) {
+    return existing;
+  }
+
+  if (typeof address.receiverPhone === "string" && address.receiverPhone.trim()) {
+    const parsed = address.receiverPhone
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => Boolean(entry));
+    const normalizedParsed = normalizePhoneList(parsed, fallbackPhone);
+    if (normalizedParsed.length) {
+      return normalizedParsed;
+    }
+  }
+
+  return normalizePhoneList([], fallbackPhone);
+}
+
 function normalizeProfileAddresses(addresses: ProfileDto["addresses"] | undefined, fallbackName: string, fallbackPhone?: string) {
-  return (addresses ?? []).map((address) => ({
-    label: address.label,
-    receiverName: (address as ProfileDto["addresses"][number]).receiverName ?? fallbackName,
-    receiverPhone: (address as ProfileDto["addresses"][number]).receiverPhone ?? fallbackPhone ?? "",
-    line1: address.line1,
-    city: address.city,
-    state: address.state,
-    pinCode: address.pinCode,
-    country: address.country,
-  }));
+  return (addresses ?? []).map((address) => {
+    const receiverPhones = resolveReceiverPhones(address as ProfileDto["addresses"][number], fallbackPhone);
+    return {
+      label: address.label,
+      receiverName: (address as ProfileDto["addresses"][number]).receiverName ?? fallbackName,
+      receiverPhone: receiverPhones[0] ?? fallbackPhone ?? "",
+      receiverPhones,
+      line1: address.line1,
+      city: address.city,
+      state: address.state,
+      pinCode: address.pinCode,
+      country: address.country,
+    };
+  });
 }
 
 function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
-  const { _id: _ignoredId, ...rest } = product as ProductDoc & { _id?: ObjectId };
+  const productWithOptionalId = { ...(product as ProductDoc & { _id?: ObjectId }) };
+  delete productWithOptionalId._id;
+  const rest = productWithOptionalId as ProductDoc;
   const minOrderQty = typeof product.minOrderQty === "number" ? Math.max(1, Math.floor(product.minOrderQty)) : 1;
   const rawMax = typeof product.maxOrderQty === "number" ? Math.max(0, Math.floor(product.maxOrderQty)) : 10;
   const hiddenByQty = rawMax === 0;
@@ -500,7 +541,6 @@ export async function upsertProfile(
   const existing = await users.findOne({ _id: objectId });
 
   const nextDoc: Omit<UserDoc, "_id"> = {
-    name: existing?.name,
     role: existing?.role,
     fullName: update.fullName ?? existing?.fullName ?? "Gifta Guest",
     email: update.email ?? existing?.email ?? "guest@gifta.local",
@@ -524,6 +564,9 @@ export async function upsertProfile(
     { _id: objectId },
     {
       $set: nextDoc,
+      $unset: {
+        name: "",
+      },
     },
     { upsert: true },
   );
@@ -684,7 +727,7 @@ export async function createStoreForAdmin(
   }
 
   const id = `store-${new ObjectId().toHexString().slice(-10)}`;
-  const ownerUserId = payload.ownerUserId?.trim() || (scope.role === "storeOwner" ? scope.userId : undefined);
+  const ownerUserId = payload.ownerUserId?.trim() || (scope.role === "STORE_OWNER" ? scope.userId : undefined);
   const isActive = (payload.meta?.status ?? "").trim().toLowerCase() === "active";
 
   const doc: StoreDoc = {
@@ -877,12 +920,12 @@ export async function getSearchSuggestions(query: string, limit = 10) {
 }
 
 export async function getVendorSummaries(): Promise<VendorSummaryDto[]> {
-  return getVendorSummariesScoped({ role: "sadmin", userId: "system" });
+  return getVendorSummariesScoped({ role: "SADMIN", userId: "system" });
 }
 
 async function getStoreIdsForScope(scope: AdminScope) {
   const { stores } = await getCollections();
-  if (scope.role === "sadmin") {
+  if (scope.role === "SADMIN") {
     const allStores = await stores.find({}, { projection: { id: 1 } }).toArray();
     return allStores.map((store) => store.id);
   }
@@ -1060,7 +1103,7 @@ export async function listVendorOnboardingSubmissions(input: {
   pageSize: number;
   totalPages: number;
 }> {
-  if (input.scope.role !== "sadmin") {
+  if (input.scope.role !== "SADMIN") {
     throw new Error("FORBIDDEN_SUPER_ADMIN_ONLY");
   }
 
@@ -1109,7 +1152,7 @@ export async function reviewVendorOnboardingSubmission(input: {
   reason?: string;
   scope: AdminScope;
 }): Promise<VendorOnboardingSubmissionDto> {
-  if (input.scope.role !== "sadmin") {
+  if (input.scope.role !== "SADMIN") {
     throw new Error("FORBIDDEN_SUPER_ADMIN_ONLY");
   }
 
@@ -1139,7 +1182,7 @@ export async function reviewVendorOnboardingSubmission(input: {
     return mapVendorOnboardingSubmission(nextDoc);
   }
 
-  const ensuredUser = await ensureAuthUserRole(existing.email, "storeOwner", {
+  const ensuredUser = await ensureAuthUserRole(existing.email, "STORE_OWNER", {
     forceDefaultRole: true,
   });
 
@@ -1158,7 +1201,7 @@ export async function reviewVendorOnboardingSubmission(input: {
       ...approvedPayload,
       ownerUserId: ensuredUser.id,
     },
-    { role: "sadmin", userId: input.scope.userId },
+    { role: "SADMIN", userId: input.scope.userId },
   );
 
   const nextDoc: VendorOnboardingSubmissionDoc = {
@@ -1177,7 +1220,7 @@ export async function reviewVendorOnboardingSubmission(input: {
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardPayload> {
-  return getAdminDashboardScoped({ role: "sadmin", userId: "system" });
+  return getAdminDashboardScoped({ role: "SADMIN", userId: "system" });
 }
 
 export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminDashboardPayload> {
@@ -1185,7 +1228,7 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
   const db = await getMongoDb();
   const coupons = db.collection<{ active?: boolean; usedCount?: number }>("coupons");
 
-  if (scope.role === "storeOwner") {
+  if (scope.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(scope);
     if (!scopedStoreIds.length) {
       return {
@@ -1297,14 +1340,14 @@ export async function getAdminDashboardScoped(scope: AdminScope): Promise<AdminD
 }
 
 export async function getAdminItems() {
-  return getAdminItemsScoped({ role: "sadmin", userId: "system" });
+  return getAdminItemsScoped({ role: "SADMIN", userId: "system" });
 }
 
 export async function getAdminItemsScoped(scope: AdminScope) {
   const { products } = await getCollections();
   let scopedProductIds: string[] | null = null;
 
-  if (scope.role === "storeOwner") {
+  if (scope.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(scope);
     if (!scopedStoreIds.length) {
       return {
@@ -1373,7 +1416,7 @@ export async function updateItemQuantityLimits(input: {
 }) {
   const { products, offers } = await getCollections();
 
-  if (input.scope?.role === "storeOwner") {
+  if (input.scope?.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(input.scope);
     if (!scopedStoreIds.length) {
       throw new Error("FORBIDDEN_ITEM_SCOPE");
@@ -1408,12 +1451,12 @@ export async function updateItemQuantityLimits(input: {
 }
 
 export async function getAdminOrders() {
-  return getAdminOrdersScoped({ role: "sadmin", userId: "system" });
+  return getAdminOrdersScoped({ role: "SADMIN", userId: "system" });
 }
 
 export async function getAdminOrdersScoped(scope: AdminScope) {
   const { orders } = await getCollections();
-  if (scope.role === "sadmin") {
+  if (scope.role === "SADMIN") {
     return orders.find().sort({ createdAt: -1 }).limit(200).toArray();
   }
 
@@ -1715,10 +1758,12 @@ async function ensureNotificationProfile(userId: string, email?: string) {
     {
       $setOnInsert: {
         email: newProfile.email,
-        name: newProfile.fullName,
-        role: "user",
+        role: "USER",
       },
       $set: newProfile,
+      $unset: {
+        name: "",
+      },
     },
     { upsert: true },
   );
@@ -1889,7 +1934,7 @@ export async function createAdminItemScoped(input: {
   const scopedStoreIds = await getStoreIdsForScope(input.scope);
   const requestedStoreId = input.payload.storeId?.trim();
 
-  if (input.scope.role === "storeOwner") {
+  if (input.scope.role === "STORE_OWNER") {
     if (!scopedStoreIds.length) {
       throw new Error("FORBIDDEN_STORE_SCOPE");
     }
@@ -1899,13 +1944,13 @@ export async function createAdminItemScoped(input: {
     }
   }
 
-  const storeId = requestedStoreId || (input.scope.role === "storeOwner" ? scopedStoreIds[0] : undefined);
+  const storeId = requestedStoreId || (input.scope.role === "STORE_OWNER" ? scopedStoreIds[0] : undefined);
 
   if (!storeId) {
     throw new Error("STORE_REQUIRED_FOR_ITEM_CREATE");
   }
 
-  if (input.scope.role === "sadmin" && scopedStoreIds.length && !scopedStoreIds.includes(storeId)) {
+  if (input.scope.role === "SADMIN" && scopedStoreIds.length && !scopedStoreIds.includes(storeId)) {
     throw new Error("FORBIDDEN_STORE_SCOPE");
   }
 
@@ -1983,7 +2028,7 @@ export async function updateAdminItemScoped(input: {
   scope: AdminScope;
 }) {
   const { products, offers } = await getCollections();
-  if (input.scope.role === "storeOwner") {
+  if (input.scope.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(input.scope);
     const hasOwnership = await offers.findOne({ storeId: { $in: scopedStoreIds }, productId: input.itemId });
     if (!hasOwnership) {
@@ -2054,7 +2099,7 @@ export async function updateAdminItemScoped(input: {
       throw new Error("OFFER_NOT_FOUND");
     }
 
-    if (input.scope.role === "storeOwner") {
+    if (input.scope.role === "STORE_OWNER") {
       const scopedStoreIds = await getStoreIdsForScope(input.scope);
       if (!scopedStoreIds.includes(selectedOfferStoreId)) {
         throw new Error("FORBIDDEN_ITEM_SCOPE");
@@ -2128,7 +2173,7 @@ export async function deleteAdminItemOfferScoped(input: {
 
 export async function deleteAdminItemScoped(input: { itemId: string; scope: AdminScope }) {
   const { products, offers, orders, reviews, comments } = await getCollections();
-  if (input.scope.role === "storeOwner") {
+  if (input.scope.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(input.scope);
     const hasOwnership = await offers.findOne({ storeId: { $in: scopedStoreIds }, productId: input.itemId });
     if (!hasOwnership) {
@@ -2158,7 +2203,7 @@ export async function updateAdminOrderScoped(input: {
     throw new Error("ORDER_NOT_FOUND");
   }
 
-  if (input.scope.role === "storeOwner") {
+  if (input.scope.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(input.scope);
     if (!scopedStoreIds.includes(existing.storeId)) {
       throw new Error("FORBIDDEN_ORDER_SCOPE");
@@ -2179,7 +2224,7 @@ export async function deleteAdminOrderScoped(input: { orderId: string; scope: Ad
     return { deleted: true };
   }
 
-  if (input.scope.role === "storeOwner") {
+  if (input.scope.role === "STORE_OWNER") {
     const scopedStoreIds = await getStoreIdsForScope(input.scope);
     if (!scopedStoreIds.includes(existing.storeId)) {
       throw new Error("FORBIDDEN_ORDER_SCOPE");
@@ -2205,13 +2250,12 @@ export async function updateAdminUser(input: {
   };
   if (typeof input.updates.fullName === "string") {
     patch.fullName = input.updates.fullName.trim();
-    patch.name = input.updates.fullName.trim();
   }
   if (typeof input.updates.phone === "string") patch.phone = input.updates.phone.trim();
   if (typeof input.updates.email === "string") patch.email = input.updates.email.trim().toLowerCase();
   if (input.updates.role) patch.role = input.updates.role;
 
-  await users.updateOne({ _id: objectId }, { $set: patch });
+  await users.updateOne({ _id: objectId }, { $set: patch, $unset: { name: "" } });
   return users.findOne({ _id: objectId });
 }
 
@@ -2234,11 +2278,11 @@ export async function getAdminRiders() {
 export async function seedDemoData() {
   const { users, products, stores, offers, reviews, comments, riders, orders } = await getCollections();
 
-  const userSeeds: Array<{ email: string; name: string; role: Role; phone?: string }> = [
-    { email: "demo@gifta.local", name: "Gifta Demo User", role: "user", phone: "+91-9000000000" },
-    { email: "owner1@gifta.local", name: "Nyra Owner", role: "storeOwner", phone: "+91-9000100001" },
-    { email: "owner2@gifta.local", name: "Aurora Owner", role: "storeOwner", phone: "+91-9000100002" },
-    { email: "owner3@gifta.local", name: "Bliss Owner", role: "storeOwner", phone: "+91-9000100003" },
+  const userSeeds: Array<{ email: string; fullName: string; role: Role; phone?: string }> = [
+    { email: "demo@gifta.local", fullName: "Gifta Demo User", role: "USER", phone: "+91-9000000000" },
+    { email: "owner1@gifta.local", fullName: "Nyra Owner", role: "STORE_OWNER", phone: "+91-9000100001" },
+    { email: "owner2@gifta.local", fullName: "Aurora Owner", role: "STORE_OWNER", phone: "+91-9000100002" },
+    { email: "owner3@gifta.local", fullName: "Bliss Owner", role: "STORE_OWNER", phone: "+91-9000100003" },
   ];
 
   const riderDocs: RiderDoc[] = [
@@ -2258,17 +2302,16 @@ export async function seedDemoData() {
 
   const userInsertDocs: Array<Omit<UserDoc, "_id">> = userSeeds.map((userSeed) => ({
     email: userSeed.email,
-    name: userSeed.name,
-    fullName: userSeed.name,
+    fullName: userSeed.fullName,
     role: userSeed.role,
     phone: userSeed.phone,
     emailVerified: new Date(),
     updatedAt: new Date().toISOString(),
-    addresses: userSeed.role === "user"
+    addresses: userSeed.role === "USER"
       ? [
           {
             label: "Home",
-            receiverName: userSeed.name,
+            receiverName: userSeed.fullName,
             receiverPhone: userSeed.phone ?? "",
             line1: "42 Celebration Avenue",
             city: "Bengaluru",
@@ -2279,7 +2322,7 @@ export async function seedDemoData() {
         ]
       : [],
     preferences:
-      userSeed.role === "user"
+      userSeed.role === "USER"
         ? {
             occasions: ["Birthday", "Anniversary", "Festive"] as ProfileDto["preferences"]["occasions"],
             budgetMin: 1000,

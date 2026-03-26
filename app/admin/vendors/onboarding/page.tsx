@@ -8,7 +8,7 @@ import { VendorOnboardingClient } from "./onboarding-client";
 export default async function AdminVendorOnboardingPage() {
   const identity = await ensureAdminAccess("vendors");
 
-  if (identity.role !== "sadmin") {
+  if (identity.role !== "SADMIN") {
     return (
       <div className="space-y-6">
         <AdminHero
@@ -52,7 +52,7 @@ export default async function AdminVendorOnboardingPage() {
       <AdminHero
         eyebrow="Vendor Onboarding"
         title="Review and approve vendor applications"
-        description="Every submission lands here as pending. Approving creates an active store and upgrades the vendor email account role to storeOwner."
+        description="Every submission lands here as pending. Approving creates an active store and upgrades the vendor email account role to STORE_OWNER."
         stats={[
           { label: "Total", value: String(queue.total), tone: "warm" },
           { label: "Pending", value: String(pendingCount), tone: "sun" },

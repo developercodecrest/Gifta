@@ -33,7 +33,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Role } from "@/types/api";
-import { roleLabels, canAccess } from "@/lib/roles";
+import { roleLabels, canAccess, parseRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 type AdminNavItem = {
@@ -59,6 +59,7 @@ const navItems: AdminNavItem[] = [
 
 export function AdminShell({ children, role }: { children: React.ReactNode; role: Role }) {
   const pathname = usePathname();
+  const canonicalRole = parseRole(role);
   const links = navItems.map((item) => ({
     ...item,
     hasAccess: canAccess(role, item.key),
@@ -81,7 +82,7 @@ export function AdminShell({ children, role }: { children: React.ReactNode; role
               <p className="truncate text-sm font-semibold text-slate-900">Control Center</p>
             </div>
           </div>
-          <Badge className="w-fit bg-[#cd9933]/15 text-[#9e7526] hover:bg-[#cd9933]/15">{roleLabels[role]}</Badge>
+          <Badge className="w-fit bg-[#cd9933]/15 text-[#9e7526] hover:bg-[#cd9933]/15">{roleLabels[canonicalRole]}</Badge>
         </SidebarHeader>
 
         <SidebarSeparator />
@@ -136,7 +137,7 @@ export function AdminShell({ children, role }: { children: React.ReactNode; role
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-[0.2em] text-slate-500">Secure Mode</span>
-            <Badge className="bg-[#cd9933] text-white hover:bg-[#cd9933]">{roleLabels[role]}</Badge>
+            <Badge className="bg-[#cd9933] text-white hover:bg-[#cd9933]">{roleLabels[canonicalRole]}</Badge>
           </div>
         </div>
 

@@ -16,6 +16,21 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
+type MobileSignInPayload = {
+  success?: boolean;
+  data?: {
+    user?: {
+      id: string;
+      email: string;
+      fullname?: string;
+      phone?: string;
+      role?: string;
+      token?: string;
+    };
+  };
+  error?: { message?: string };
+};
+
 export function LoginPopup() {
   const router = useRouter();
   const { status } = useSession();
@@ -102,10 +117,30 @@ export function LoginPopup() {
         intent = "signup";
       }
 
+      const response = await fetch("/api/auth/mobile/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          otp,
+          intent,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as MobileSignInPayload;
+      const authUser = payload.data?.user;
+      if (!response.ok || !payload.success || !authUser?.id || !authUser?.token) {
+        setError(payload.error?.message ?? "Invalid or expired OTP.");
+        return;
+      }
+
       const result = await signIn("credentials", {
-        email,
-        otp,
-        intent,
+        id: authUser.id,
+        email: authUser.email,
+        fullname: authUser.fullname ?? "",
+        phone: authUser.phone ?? "",
+        role: authUser.role ?? "USER",
+        token: authUser.token,
         redirect: false,
         callbackUrl: pathname || "/",
       });

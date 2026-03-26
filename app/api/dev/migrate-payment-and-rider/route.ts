@@ -65,7 +65,7 @@ export async function POST() {
 
     const riderRoleToUser = await users.updateMany(
       { role: "rider" },
-      { $set: { role: "user" } },
+      { $set: { role: "USER" } },
     );
 
     return ok({

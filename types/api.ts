@@ -21,7 +21,15 @@ export type ApiEnvelope<TData, TMeta = Record<string, never>> = ApiSuccess<TData
 
 export type SortOption = "featured" | "price-asc" | "price-desc" | "rating";
 
-export type Role = "sadmin" | "storeOwner" | "user";
+export type Role =
+  | "SADMIN"
+  | "STORE_OWNER"
+  | "USER"
+  | "RIDER"
+  | "AREA_MANAGER"
+  | "sadmin"
+  | "storeOwner"
+  | "user";
 
 export type CouponDiscountType = "percent" | "flat";
 
@@ -84,7 +92,8 @@ export type ShippingEvent = {
 export type ProfileAddress = {
   label: string;
   receiverName: string;
-  receiverPhone: string;
+  receiverPhone?: string;
+  receiverPhones?: string[];
   line1: string;
   city: string;
   state: string;

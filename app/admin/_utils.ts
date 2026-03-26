@@ -8,21 +8,21 @@ import { Role } from "@/types/api";
 export type AdminPageIdentity = {
   userId: string;
   email?: string;
-  role: "sadmin" | "storeOwner";
+  role: "SADMIN" | "STORE_OWNER";
 };
 
 function resolveDbRole(authDbRole?: string | null, mobileDbRole?: string | null): Role {
   const authRole = parseRole(authDbRole);
-  if (authRole === "sadmin" || authRole === "storeOwner") {
+  if (authRole === "SADMIN" || authRole === "STORE_OWNER") {
     return authRole;
   }
 
   const mobileRole = parseRole(mobileDbRole);
-  if (mobileRole === "sadmin" || mobileRole === "storeOwner") {
+  if (mobileRole === "SADMIN" || mobileRole === "STORE_OWNER") {
     return mobileRole;
   }
 
-  return "user";
+  return "USER";
 }
 
 export async function getCurrentRole(): Promise<Role> {
@@ -60,12 +60,12 @@ export async function ensureAdminAccess(section: string): Promise<AdminPageIdent
     redirect("/auth/sign-in");
   }
 
-  if (role !== "sadmin" && role !== "storeOwner") {
-    redirect("/auth/sign-in?callbackUrl=/admin");
+  if (role !== "SADMIN" && role !== "STORE_OWNER") {
+    redirect("/?access=denied");
   }
 
   if (!canAccess(role, section)) {
-    redirect("/auth/sign-in?callbackUrl=/admin");
+    redirect("/admin?access=denied");
   }
 
   return {

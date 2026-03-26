@@ -39,7 +39,7 @@ export default function RootLayout({
       >
         <AuthSessionProvider>
           <TooltipProvider>
-            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+            <ThemeProvider attribute="class" forcedTheme="light" disableTransitionOnChange>
               <SiteShell>{children}</SiteShell>
             </ThemeProvider>
           </TooltipProvider>

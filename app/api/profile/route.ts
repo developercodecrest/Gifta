@@ -21,16 +21,22 @@ const profileUpdateSchema = z.object({
     .optional(),
   addresses: z
     .array(
-      z.object({
-        label: z.string().trim().min(1),
-        receiverName: z.string().trim().min(2),
-        receiverPhone: z.string().trim().min(7).max(20),
-        line1: z.string().trim().min(1),
-        city: z.string().trim().min(1),
-        state: z.string().trim().min(1),
-        pinCode: z.string().trim().min(3),
-        country: z.string().trim().min(2),
-      }),
+      z
+        .object({
+          label: z.string().trim().min(1),
+          receiverName: z.string().trim().min(2),
+          receiverPhone: z.string().trim().min(7).max(200).optional(),
+          receiverPhones: z.array(z.string().trim().min(7).max(20)).optional(),
+          line1: z.string().trim().min(1),
+          city: z.string().trim().min(1),
+          state: z.string().trim().min(1),
+          pinCode: z.string().trim().min(3),
+          country: z.string().trim().min(2),
+        })
+        .refine(
+          (address) => Boolean(address.receiverPhone?.trim()) || Boolean(address.receiverPhones?.length),
+          { message: "At least one receiver phone is required." },
+        ),
     )
     .optional(),
 });

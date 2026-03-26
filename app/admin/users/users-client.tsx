@@ -26,7 +26,7 @@ type AdminUser = {
 };
 
 type ViewMode = "grid" | "list" | "table";
-const roles = ["user", "storeOwner", "sadmin"] as const;
+const roles = ["USER", "STORE_OWNER", "SADMIN", "RIDER", "AREA_MANAGER"] as const;
 
 export function UsersClient({ users }: { users: AdminUser[] }) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -132,7 +132,7 @@ function UserRowActions({ user }: { user: AdminUser }) {
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
   const [phone, setPhone] = useState(user.phone ?? "");
-  const [role, setRole] = useState<(typeof roles)[number]>("user");
+  const [role, setRole] = useState<(typeof roles)[number]>("USER");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

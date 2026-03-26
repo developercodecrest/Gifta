@@ -4,7 +4,7 @@ import { resolveRequestIdentity } from "@/lib/server/request-auth";
 export type AdminIdentity = {
   userId: string;
   email?: string;
-  role: "sadmin" | "storeOwner";
+  role: "SADMIN" | "STORE_OWNER";
 };
 
 export async function authorizeAdminRequest(request: Request, section: string): Promise<AdminIdentity | null> {
@@ -14,7 +14,7 @@ export async function authorizeAdminRequest(request: Request, section: string): 
   }
 
   const role = parseRole(identity.role);
-  if (role !== "sadmin" && role !== "storeOwner") {
+  if (role !== "SADMIN" && role !== "STORE_OWNER") {
     return null;
   }
 

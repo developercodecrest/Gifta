@@ -2,21 +2,17 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   Gift,
   Heart,
-  Moon,
-  Sun,
   ShoppingCart,
   Sparkles,
   Tag,
   Truck,
   UserCircle2,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/features/cart/store";
 import { useWishlistStore } from "@/features/wishlist/store";
@@ -57,14 +53,6 @@ function isActiveLink(pathname: string, href: string) {
 export function Header() {
   const pathname = usePathname();
   const { status } = useSession();
-  const { setTheme, resolvedTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-
-  const isDark = mounted && resolvedTheme === "dark";
   const cartCount = useCartStore((state) =>
     state.items.reduce((total, item) => total + item.quantity, 0),
   );
@@ -149,16 +137,6 @@ export function Header() {
           <IconLink href="/wishlist" label="Wishlist" icon={Heart} count={wishlistCount} />
           <IconLink href="/cart" label="Cart" icon={ShoppingCart} count={cartCount} />
           {status === "authenticated" ? <IconLink href="/account" label="Account" icon={UserCircle2} /> : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="hidden border-transparent bg-white/90 shadow-[0_10px_20px_-18px_rgba(44,23,16,0.25)] sm:inline-flex"
-            aria-label="Toggle theme"
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
           {status !== "authenticated" ? (
             <Button asChild size="sm" className="hidden text-white [&_a]:text-white sm:inline-flex">
               <Link href="/auth/sign-in">Sign in</Link>
