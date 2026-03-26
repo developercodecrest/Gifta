@@ -38,6 +38,8 @@ type OnboardingState = {
   orderPreparationTimeMinutes: string;
 };
 
+const vendorCategories = ["Retailer", "Wholesaler", "Manufacturer", "Trader", "Importer"];
+
 const initialState: OnboardingState = {
   businessName: "",
   ownerName: "",
@@ -50,7 +52,7 @@ const initialState: OnboardingState = {
   panNumber: "",
   fssaiLicense: "",
   shopActLicense: "",
-  category: categories[0] ?? "",
+  category: vendorCategories[0] ?? "",
   subcategory: "",
   shortDescription: "",
   addressLine1: "",
@@ -247,7 +249,7 @@ export default function VendorOnboardingPage() {
                 <option value="other">Other</option>
               </select>
               <select className="h-11 rounded-md border border-input bg-background px-3 text-sm" value={state.category} onChange={(event) => updateField("category", event.target.value)}>
-                {categories.map((entry) => (
+                {vendorCategories.map((entry) => (
                   <option key={entry} value={entry}>{entry}</option>
                 ))}
               </select>
@@ -268,15 +270,6 @@ export default function VendorOnboardingPage() {
               <Input placeholder="Pincode" value={state.pincode} onChange={(event) => updateField("pincode", event.target.value)} />
               <Input placeholder="Country" value={state.country} onChange={(event) => updateField("country", event.target.value)} />
               <Input placeholder="Short description" value={state.shortDescription} onChange={(event) => updateField("shortDescription", event.target.value)} />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input type="number" min="0" placeholder="Delivery radius (km)" value={state.deliveryRadiusKm} onChange={(event) => updateField("deliveryRadiusKm", event.target.value)} />
-              <Input type="number" min="0" placeholder="Delivery charge" value={state.deliveryCharge} onChange={(event) => updateField("deliveryCharge", event.target.value)} />
-              <Input type="number" min="0" placeholder="Minimum order value" value={state.minOrderValue} onChange={(event) => updateField("minOrderValue", event.target.value)} />
-              <Input type="number" min="0" placeholder="Order preparation time (minutes)" value={state.orderPreparationTimeMinutes} onChange={(event) => updateField("orderPreparationTimeMinutes", event.target.value)} />
-              <Input type="time" value={state.openingTime} onChange={(event) => updateField("openingTime", event.target.value)} />
-              <Input type="time" value={state.closingTime} onChange={(event) => updateField("closingTime", event.target.value)} />
             </div>
 
             {error ? <p className="text-sm text-red-600">{error}</p> : null}

@@ -113,6 +113,7 @@ type StoreForm = {
 
 const ALL_UNITS = ["kg", "gram", "piece", "liter", "ml", "dozen", "pack", "box", "set", "meter"];
 const ALL_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const VENDOR_CATEGORIES = ["Retailer", "Wholesaler", "Manufacturer", "Trader", "Importer"];
 
 const initialForm: StoreForm = {
   basicInfo: {
@@ -273,7 +274,7 @@ export function StoreCreateForm() {
     return Math.round((done / required.length) * 100);
   }, [form]);
 
-  const categoryOptions = useMemo(() => form.catalog.categories.map((entry) => entry.name), [form.catalog.categories]);
+  const categoryOptions = useMemo(() => VENDOR_CATEGORIES, []);
   const subcategoryOptions = useMemo(() => {
     return form.catalog.categories.find((entry) => entry.name === form.basicInfo.category)?.subcategories ?? [];
   }, [form.catalog.categories, form.basicInfo.category]);
