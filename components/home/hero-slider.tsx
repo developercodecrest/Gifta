@@ -153,9 +153,9 @@ export function HeroSlider() {
             <Sparkles className="h-3.5 w-3.5 text-[#ffc38f]" />
             {active.eyebrow}
           </span>
-          <h1 className="font-display text-4xl leading-[0.98] text-white sm:text-5xl lg:text-6xl">
+          {/* <h1 className="font-display text-4xl leading-[0.98] text-white sm:text-5xl lg:text-6xl">
             {active.title}
-          </h1>
+          </h1> */}
           <p className="max-w-2xl text-base font-medium text-white/82 sm:text-lg lg:text-xl">
             {active.subtitle}
           </p>

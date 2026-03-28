@@ -5,6 +5,7 @@ import { GiftCategoryHeroSection } from "@/components/home/gift-category-icons";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import { getHomeData } from "@/lib/server/ecommerce-service";
+import { Play } from "lucide-react";
 import QRCode from "qrcode";
 import type { ProductListItemDto } from "@/types/api";
 
@@ -461,43 +462,14 @@ export default async function Home() {
           </div>
 
           <div className="motion-safe:animate-rise relative mx-auto w-full max-w-md [animation-delay:200ms] fill-mode-[both]">
-            <svg
-              viewBox="0 0 520 360"
-              role="img"
-              aria-label="Vendor growth illustration"
-              className="h-auto w-full drop-shadow-[0_28px_42px_rgba(0,0,0,0.24)]"
-            >
-              <defs>
-                <linearGradient id="vendorCard" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#ffd8ea" />
-                  <stop offset="100%" stopColor="#fff4f9" />
-                </linearGradient>
-                <linearGradient id="vendorAccent" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ff0a72" />
-                  <stop offset="100%" stopColor="#e90066" />
-                </linearGradient>
-              </defs>
-
-              <rect x="26" y="30" width="468" height="300" rx="36" fill="url(#vendorCard)" opacity="0.96" />
-              <circle cx="110" cy="95" r="46" fill="#ffd8ea" />
-              <circle cx="428" cy="92" r="34" fill="#ffc7df" opacity="0.85" />
-
-              <rect x="90" y="116" width="340" height="180" rx="22" fill="#ffffff" />
-              <rect x="112" y="138" width="102" height="102" rx="16" fill="#fff1f8" />
-              <path d="M134 218 L164 176 L184 198 L206 166" stroke="#ff0066" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-
-              <rect x="232" y="142" width="160" height="16" rx="8" fill="#f69ac3" />
-              <rect x="232" y="170" width="136" height="14" rx="7" fill="#ffd7e9" />
-              <rect x="232" y="194" width="118" height="14" rx="7" fill="#ffd7e9" />
-
-              <rect x="232" y="226" width="140" height="40" rx="14" fill="url(#vendorAccent)" />
-              <text x="302" y="251" textAnchor="middle" fill="#fff8fc" fontSize="16" fontWeight="700" fontFamily="Arial, sans-serif">
-                Join Vendors
-              </text>
-
-              <path d="M128 76 C145 52 176 50 195 74" stroke="#ff0b73" strokeWidth="8" fill="none" strokeLinecap="round" />
-              <path d="M362 72 C377 54 406 52 420 72" stroke="#ff0b73" strokeWidth="8" fill="none" strokeLinecap="round" />
-            </svg>
+            <Image
+              src="/image1.png"
+              alt="Gifta vendor storefront illustration"
+              width={864}
+              height={768}
+              className="h-auto w-full drop-shadow-[0_28px_42px_rgba(0,0,0,0.24)] rounded-xl"
+              priority
+            />
           </div>
         </div>
       </section>
@@ -515,14 +487,27 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="mx-auto rounded-3xl border border-[#ffb3d1] bg-white p-4 shadow-[0_20px_42px_-30px_rgba(255,0,102,0.36)] sm:p-5">
-            <div
-              role="img"
-              aria-label="Live Play Store QR code"
-              className="h-44 w-44 [&_svg]:h-full [&_svg]:w-full [&_svg]:rounded-xl"
-              dangerouslySetInnerHTML={{ __html: playStoreQrSvg }}
-            />
-            <p className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-[#000]">Scan for Play Store</p>
+          <div className="mx-auto flex w-full max-w-md items-center justify-center gap-3 sm:gap-4">
+            <div className="flex h-44 w-44 shrink-0 flex-col items-center justify-center rounded-3xl border border-[#ffb3d1] bg-white p-4 shadow-[0_20px_42px_-30px_rgba(255,0,102,0.36)]">
+              <div className="flex h-36 w-36 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#fff7fb_0%,#ffe8f4_100%)]">
+                <Play
+                  role="img"
+                  aria-label="Play Store icon"
+                  className="h-24 w-24 fill-[#ff0066] text-[#ff0066]"
+                  strokeWidth={1.6}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-[#ffb3d1] bg-white p-4 shadow-[0_20px_42px_-30px_rgba(255,0,102,0.36)] sm:p-5">
+              <div
+                role="img"
+                aria-label="Live Play Store QR code"
+                className="h-44 w-44 [&_svg]:h-full [&_svg]:w-full [&_svg]:rounded-xl"
+                dangerouslySetInnerHTML={{ __html: playStoreQrSvg }}
+              />
+              <p className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.12em] text-[#000]">Scan for Play Store</p>
+            </div>
           </div>
         </div>
       </section>

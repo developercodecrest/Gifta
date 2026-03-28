@@ -8,6 +8,12 @@ type CartSnapshot = {
   updatedAt: string;
 };
 
+type WishlistSnapshot = {
+  productIds: string[];
+  itemCount: number;
+  updatedAt: string;
+};
+
 type OrderSnapshot = {
   orderRef: string;
   status: string;
@@ -51,6 +57,38 @@ export async function publishCartSnapshot(userId: string, items: CartItem[]) {
     return true;
   } catch (error) {
     console.warn("publishCartSnapshot failed", {
+      userId,
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+    return false;
+  }
+}
+
+export async function publishWishlistSnapshot(userId: string, productIds: string[]) {
+  const db = getFirebaseAdminDatabase();
+  if (!db) {
+    return false;
+  }
+
+  const dedupedIds = Array.from(
+    new Set(
+      productIds
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => Boolean(entry)),
+    ),
+  );
+
+  const payload: WishlistSnapshot = {
+    productIds: dedupedIds,
+    itemCount: dedupedIds.length,
+    updatedAt: nowIso(),
+  };
+
+  try {
+    await db.ref(`user-wishlists/${userId}`).set(payload);
+    return true;
+  } catch (error) {
+    console.warn("publishWishlistSnapshot failed", {
       userId,
       message: error instanceof Error ? error.message : "unknown error",
     });
