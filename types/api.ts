@@ -1,4 +1,4 @@
-import { Category, Product } from "@/types/ecommerce";
+import { CartItemCustomization, Category, Product } from "@/types/ecommerce";
 
 export type ApiErrorPayload = {
   code: string;
@@ -182,6 +182,8 @@ export type AdminOrderDto = {
   pickupAddress?: ShippingAddressSnapshot;
   shippingPackage?: ShippingPackageSnapshot;
   shippingEvents?: ShippingEvent[];
+  customization?: CartItemCustomization;
+  customizationSignature?: string;
   createdAt: string;
 };
 
@@ -210,6 +212,8 @@ export type UserOrderItemDto = {
   storeName?: string;
   quantity: number;
   totalAmount: number;
+  customization?: CartItemCustomization;
+  customizationSignature?: string;
   status: AdminOrderDto["status"];
   riderId?: string;
   riderName?: string;

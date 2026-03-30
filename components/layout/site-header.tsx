@@ -30,7 +30,7 @@ import {
 
 const navItems = [
   { href: "/", label: "Home" },
-  { href: "/search", label: "Search" },
+  { href: "/products", label: "Products" },
   { href: "/orders", label: "Orders" },
   { href: "/wishlist", label: "Wishlist" },
   { href: "/cart", label: "Cart" },
@@ -38,11 +38,11 @@ const navItems = [
 ];
 
 const featureLinks = [
-  { href: "/search?tag=same-day", label: "Same Day" },
-  { href: "/search?tag=personalized", label: "Personalized" },
-  { href: "/search?category=Birthday", label: "Birthday" },
-  { href: "/search?category=Anniversary", label: "Anniversary" },
-  { href: "/search?tag=luxury", label: "Premium" },
+  { href: "/products?tag=same-day", label: "Same Day" },
+  { href: "/products?tag=personalized", label: "Personalized" },
+  { href: "/products?category=Birthday", label: "Birthday" },
+  { href: "/products?category=Anniversary", label: "Anniversary" },
+  { href: "/products?tag=luxury", label: "Premium" },
 ];
 
 function isActiveLink(pathname: string, href: string) {
@@ -128,7 +128,7 @@ export function Header() {
               <Link href="/">Home</Link>
             </Button>
             <Button asChild variant="ghost" size="sm" className="text-slate-700">
-              <Link href="/search">Search</Link>
+              <Link href="/products">Products</Link>
             </Button>
             <Button asChild variant="ghost" size="sm" className="text-slate-700">
               <Link href="/orders">Orders</Link>

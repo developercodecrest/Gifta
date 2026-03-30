@@ -1,8 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { categories as globalCategories } from "@/lib/catalog";
-import { createAdminItemScoped, getAdminItemsScoped, getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
-import { ProductAttribute, ProductVariant, ProductVariantUnit } from "@/types/ecommerce";
+import { createAdminItemScoped, getAdminItemsScoped, getMergedCategoryValuesForStoreScoped } from "@/lib/server/ecommerce-service";
+import { ProductAttribute, ProductMediaItem, ProductVariant, ProductVariantUnit } from "@/types/ecommerce";
 
 export const runtime = "nodejs";
 
@@ -30,12 +29,14 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       storeId?: string;
       name?: string;
+      shortDescription?: string;
       category?: string;
       price?: number;
       originalPrice?: number;
       deliveryEtaHours?: number;
       description?: string;
       images?: string[];
+      media?: unknown;
       tags?: string[];
       featured?: boolean;
       inStock?: boolean;
@@ -49,40 +50,39 @@ export async function POST(request: Request) {
       return badRequest("storeId, name, category and price are required");
     }
 
+    const parsedMedia = parseMediaInput(body.media);
+    if (parsedMedia.error) {
+      return badRequest(parsedMedia.error);
+    }
+
     const parsedAttributeAndVariant = parseAttributesAndVariants(body.attributes, body.variants);
     if (parsedAttributeAndVariant.error) {
       return badRequest(parsedAttributeAndVariant.error);
     }
 
     const requestedCategory = body.category.trim();
-    const scopedVendors = await getVendorSummariesScoped(identity);
-    const vendor = scopedVendors.find((entry) => entry.id === body.storeId);
-
-    if (!vendor) {
-      return unauthorized("Not allowed");
-    }
-
-    const vendorCategorySet = new Set<string>(
-      vendor.categories.flatMap((entry) => [entry.name, ...entry.subcategories]).map((entry) => entry.trim()).filter(Boolean),
-    );
-    const globalCategorySet = new Set<string>(globalCategories.map((entry) => entry.trim()));
-    const allowedCategories = vendorCategorySet.size ? vendorCategorySet : globalCategorySet;
+    const categoryScope = await getMergedCategoryValuesForStoreScoped({
+      storeId: body.storeId,
+      scope: identity,
+    });
+    const allowedCategories = new Set<string>(categoryScope.mergedCategoryValues.map((entry) => entry.trim()).filter(Boolean));
 
     if (!allowedCategories.has(requestedCategory)) {
-      const mode = vendorCategorySet.size ? "vendor" : "global";
-      return badRequest(`Category must match ${mode} category mapping for the selected vendor`);
+      return badRequest("Category must match global or vendor category mapping for the selected vendor");
     }
 
     const created = await createAdminItemScoped({
       payload: {
         storeId: body.storeId,
         name: body.name,
+        shortDescription: body.shortDescription,
         category: requestedCategory,
         price: body.price,
         originalPrice: body.originalPrice,
         deliveryEtaHours: body.deliveryEtaHours,
         description: body.description,
         images: body.images,
+        media: parsedMedia.media,
         tags: body.tags,
         featured: body.featured,
         inStock: body.inStock,
@@ -104,6 +104,48 @@ export async function POST(request: Request) {
     }
     return serverError("Unable to create item", error);
   }
+}
+
+function parseMediaInput(mediaInput: unknown): {
+  media?: ProductMediaItem[];
+  error?: string;
+} {
+  if (mediaInput === undefined) {
+    return { media: undefined };
+  }
+
+  if (!Array.isArray(mediaInput)) {
+    return { error: "media must be an array" };
+  }
+
+  const media: ProductMediaItem[] = [];
+  for (const entry of mediaInput) {
+    if (!entry || typeof entry !== "object") {
+      return { error: "Each media entry must be an object" };
+    }
+
+    const source = entry as {
+      type?: unknown;
+      url?: unknown;
+      thumbnailUrl?: unknown;
+      alt?: unknown;
+    };
+
+    const type = source.type === "video" ? "video" : source.type === "image" ? "image" : "";
+    const url = typeof source.url === "string" ? source.url.trim() : "";
+    if (!type || !url) {
+      return { error: "Each media entry must include type and url" };
+    }
+
+    media.push({
+      type,
+      url,
+      ...(typeof source.thumbnailUrl === "string" && source.thumbnailUrl.trim() ? { thumbnailUrl: source.thumbnailUrl.trim() } : {}),
+      ...(typeof source.alt === "string" && source.alt.trim() ? { alt: source.alt.trim() } : {}),
+    });
+  }
+
+  return { media };
 }
 
 function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unknown): {

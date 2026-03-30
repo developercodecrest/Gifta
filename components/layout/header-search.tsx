@@ -53,7 +53,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
 
       if (currentQ !== trimmed) {
         params.delete("page");
-        router.replace(`/search?${params.toString()}`, { scroll: false });
+        router.replace(`/products?${params.toString()}`, { scroll: false });
       }
     }
 
@@ -103,7 +103,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
     }
 
     params.delete("page");
-    router.replace(`/search?${params.toString()}`, { scroll: false });
+    router.replace(`/products?${params.toString()}`, { scroll: false });
     setOpen(false);
   };
 

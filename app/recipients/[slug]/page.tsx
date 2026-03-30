@@ -46,7 +46,7 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
         <h1 className="text-3xl font-bold">Category not found</h1>
         <p className="text-lg text-muted-foreground">We couldn&apos;t find the category you&apos;re looking for.</p>
         <Button asChild>
-          <Link href="/search">Back to search</Link>
+          <Link href="/products">Back to products</Link>
         </Button>
       </div>
     );
@@ -119,7 +119,7 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
               Check back soon for amazing gifts for {category.name.toLowerCase()}!
             </p>
             <Button asChild variant="outline">
-              <Link href="/search">Explore all gifts</Link>
+              <Link href="/products">Explore all gifts</Link>
             </Button>
           </div>
         )}
@@ -167,7 +167,7 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg" variant="secondary" className="bg-white text-red-600 hover:bg-red-50">
-              <Link href="/search">Search all gifts</Link>
+              <Link href="/products">Search all gifts</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="border-white text-white hover:bg-white/10">
               <Link href="/">Back to home</Link>

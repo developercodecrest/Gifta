@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ChangeEvent, useMemo, useState } from "react";
 import { ArrowLeft, Plus, UploadCloud, X } from "lucide-react";
@@ -239,7 +240,7 @@ function FileUploadField({
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
-            onUpload(file).catch(() => null);
+            void onUpload(file);
             event.currentTarget.value = "";
           }}
         />
@@ -247,7 +248,14 @@ function FileUploadField({
       <div className="h-2 overflow-hidden rounded-full bg-secondary">
         <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
       </div>
-      {value ? <p className="truncate text-xs text-muted-foreground">{value}</p> : null}
+      {value ? (
+        <div className="flex items-center gap-2">
+          <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-border">
+            <Image src={value} alt={`${label} preview`} fill className="object-cover" sizes="56px" />
+          </div>
+          <p className="max-w-xs truncate text-xs text-muted-foreground">{value}</p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -289,76 +297,103 @@ export function StoreCreateForm() {
 
   async function uploadCategoryImage(categoryName: string, file: File) {
     setError(null);
-    const url = await uploadFileToCloudinary(file, {
-      folder: "gifta/categories",
-      resourceType: "image",
-      onProgress: (value) => {
-        setGalleryProgress(value);
-      },
-    });
+    setGalleryProgress(0);
+    try {
+      const url = await uploadFileToCloudinary(file, {
+        folder: "gifta/categories",
+        resourceType: "image",
+        onProgress: (value) => {
+          setGalleryProgress(value);
+        },
+      });
 
-    setForm((prev) => ({
-      ...prev,
-      catalog: {
-        ...prev.catalog,
-        categories: prev.catalog.categories.map((entry) =>
-          entry.name === categoryName
-            ? { ...entry, image: url }
-            : entry,
-        ),
-      },
-    }));
+      setForm((prev) => ({
+        ...prev,
+        catalog: {
+          ...prev.catalog,
+          categories: prev.catalog.categories.map((entry) =>
+            entry.name === categoryName
+              ? { ...entry, image: url }
+              : entry,
+          ),
+        },
+      }));
+      setGalleryProgress(100);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload category image");
+      setGalleryProgress(0);
+    }
   }
 
   async function uploadSingle(field: UploadField, file: File) {
     setError(null);
-    const url = await uploadToCloudinary(file, (value) => {
-      setFieldProgress((prev) => ({ ...prev, [field]: value }));
-    });
+    setFieldProgress((prev) => ({ ...prev, [field]: 0 }));
+    try {
+      const url = await uploadToCloudinary(file, (value) => {
+        setFieldProgress((prev) => ({ ...prev, [field]: value }));
+      });
 
-    if (field === "logo" || field === "banner") {
+      if (field === "logo" || field === "banner") {
+        setForm((prev) => ({
+          ...prev,
+          basicInfo: {
+            ...prev.basicInfo,
+            [field]: url,
+          },
+        }));
+        return;
+      }
+
+      if (field === "profileImage") {
+        setForm((prev) => ({
+          ...prev,
+          owner: {
+            ...prev.owner,
+            profileImage: url,
+          },
+        }));
+        return;
+      }
+
       setForm((prev) => ({
         ...prev,
-        basicInfo: {
-          ...prev.basicInfo,
-          [field]: url,
+        payment: {
+          ...prev.payment,
+          bankProofImage: url,
         },
       }));
-      return;
+    } catch (uploadError) {
+      const fieldLabelByKey: Record<UploadField, string> = {
+        logo: "logo",
+        banner: "banner",
+        profileImage: "owner profile image",
+        bankProofImage: "bank proof image",
+      };
+      const fallback = `Unable to upload ${fieldLabelByKey[field]}`;
+      setError(uploadError instanceof Error ? uploadError.message : fallback);
+      setFieldProgress((prev) => ({ ...prev, [field]: 0 }));
     }
-
-    if (field === "profileImage") {
-      setForm((prev) => ({
-        ...prev,
-        owner: {
-          ...prev.owner,
-          profileImage: url,
-        },
-      }));
-      return;
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      payment: {
-        ...prev.payment,
-        bankProofImage: url,
-      },
-    }));
   }
 
   async function uploadGallery(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     setError(null);
-    const url = await uploadToCloudinary(file, setGalleryProgress);
-    setForm((prev) => ({
-      ...prev,
-      media: {
-        ...prev.media,
-        gallery: [...prev.media.gallery, url],
-      },
-    }));
+    setGalleryProgress(0);
+    try {
+      const url = await uploadToCloudinary(file, setGalleryProgress);
+      setForm((prev) => ({
+        ...prev,
+        media: {
+          ...prev.media,
+          gallery: [...prev.media.gallery, url],
+        },
+      }));
+      setGalleryProgress(100);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload gallery image");
+      setGalleryProgress(0);
+    }
     event.currentTarget.value = "";
   }
 
@@ -486,7 +521,16 @@ export function StoreCreateForm() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{entry.subcategories.join(", ") || "No subcategories"}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {entry.image ? <p className="truncate text-xs text-muted-foreground">{entry.image}</p> : <p className="text-xs text-muted-foreground">No category image</p>}
+                      {entry.image ? (
+                        <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-border">
+                          <Image src={entry.image} alt={`${entry.name} category image`} fill className="object-cover" sizes="56px" />
+                        </div>
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">
+                          No image
+                        </div>
+                      )}
+                      <p className="max-w-xs truncate text-xs text-muted-foreground">{entry.image || "No category image"}</p>
                       <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10">
                         <UploadCloud className="h-3.5 w-3.5" /> Upload Category Image
                         <input
@@ -673,9 +717,14 @@ export function StoreCreateForm() {
             <div className="h-2 overflow-hidden rounded-full bg-secondary">
               <div className="h-full bg-primary transition-all" style={{ width: `${galleryProgress}%` }} />
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {form.media.gallery.map((url) => (
-                <p key={url} className="truncate rounded border border-border px-2 py-1 text-xs text-muted-foreground">{url}</p>
+                <div key={url} className="overflow-hidden rounded-xl border border-border bg-card/60">
+                  <div className="relative h-24 w-full bg-muted/20">
+                    <Image src={url} alt="Store gallery image" fill className="object-cover" sizes="160px" />
+                  </div>
+                  <p className="truncate px-2 py-1 text-xs text-muted-foreground">{url}</p>
+                </div>
               ))}
             </div>
           </div>

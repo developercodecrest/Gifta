@@ -8,23 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 
 const footerColumns = [
   {
     title: "Quick links",
     links: [
       { label: "Home", href: "/" },
-      { label: "Shop all gifts", href: "/search" },
-      { label: "Bestsellers", href: "/search?sort=rating" },
-      { label: "Same-day delivery", href: "/search?tag=same-day" },
-      { label: "Premium gifting", href: "/search?tag=luxury" },
+      { label: "Shop all gifts", href: "/products" },
+      { label: "Bestsellers", href: "/products?sort=rating" },
+      { label: "Same-day delivery", href: "/products?tag=same-day" },
+      { label: "Premium gifting", href: "/products?tag=luxury" },
     ],
   },
   {
     title: "Discover",
     links: [
-      { label: "Search gifts", href: "/search" },
+      { label: "Search gifts", href: "/products" },
       { label: "Wishlist", href: "/wishlist" },
       { label: "Track orders", href: "/orders" },
       { label: "My account", href: "/account" },
@@ -33,10 +32,10 @@ const footerColumns = [
   {
     title: "Why Gifta",
     links: [
-      { label: "Trusted vendors", href: "/search?sort=rating" },
+      { label: "Trusted vendors", href: "/products?sort=rating" },
       { label: "Curated collections", href: "/store" },
-      { label: "Personalized gifts", href: "/search?tag=personalized" },
-      { label: "Fast dispatch", href: "/search?tag=same-day" },
+      { label: "Personalized gifts", href: "/products?tag=personalized" },
+      { label: "Fast dispatch", href: "/products?tag=same-day" },
     ],
   },
 ];
@@ -136,7 +135,7 @@ export function Footer() {
 
                 <div className="flex flex-col items-start gap-6 lg:items-end">
                   <Button asChild className="min-w-36">
-                    <Link href="/search?tag=luxury">Explore premium gifts</Link>
+                    <Link href="/products?tag=luxury">Explore premium gifts</Link>
                   </Button>
                   <div className="flex items-center gap-3">
                     <SocialIcon href="/" label="Twitter" icon={FaXTwitter} />
@@ -157,7 +156,7 @@ export function Footer() {
               <span>•</span>
               <Link href="/terms-and-conditions" className="transition hover:text-white hover:underline">Terms & Conditions</Link>
               <span>•</span>
-              <Link href="/search" className="transition hover:text-white hover:underline">Browse Gifts</Link>
+              <Link href="/products" className="transition hover:text-white hover:underline">Browse Gifts</Link>
               <span>•</span>
               <Link href="/account" className="transition hover:text-white hover:underline">Account</Link>
             </div>

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { CheckoutPageClient } from "@/features/cart/ui/checkout-page-client";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
@@ -9,15 +10,17 @@ export default async function CheckoutPage() {
   const session = await auth();
   const userId = session?.user?.id;
 
-  let cartItems = [];
-
-  if (userId) {
-    cartItems = await getUserCart(userId).catch(() => []);
-  } else {
-    const cookieStore = await cookies();
-    const cartCookie = cookieStore.get(CART_COOKIE_NAME)?.value;
-    cartItems = parseCartCookie(cartCookie);
+  if (!userId) {
+    redirect("/auth/sign-in?callbackUrl=%2Fcart%3FcheckoutReady%3D1");
   }
+
+  const cookieStore = await cookies();
+  const cartCookie = cookieStore.get(CART_COOKIE_NAME)?.value;
+  const cookieCartItems = parseCartCookie(cartCookie);
+
+  let cartItems = [];
+  const userCartItems = await getUserCart(userId).catch(() => []);
+  cartItems = userCartItems.length ? userCartItems : cookieCartItems;
 
   const snapshot = await buildCartSnapshot(cartItems).catch(() => ({
     lines: [],

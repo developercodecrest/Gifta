@@ -1,11 +1,15 @@
-import { getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
+import { getGlobalCategorySettings, getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
+import { GlobalCategoriesManager } from "./global-categories-manager";
 import { StoreCategoriesManager } from "./store-categories-manager";
 
 export default async function AdminVendorCategoriesPage() {
   const identity = await ensureAdminAccess("vendors");
-  const vendors = await getVendorSummariesScoped(identity).catch(() => []);
+  const [vendors, globalSettings] = await Promise.all([
+    getVendorSummariesScoped(identity).catch(() => []),
+    getGlobalCategorySettings().catch(() => ({ categories: [], customizableCategories: [] })),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -19,7 +23,14 @@ export default async function AdminVendorCategoriesPage() {
         ]}
       />
 
-      <AdminSection title="Category manager" description="Maintain vendor-specific category trees and keep item creation aligned to the right storefront structure.">
+      <AdminSection title="Global category manager" description="Manage shared categories and subcategories that are available to every store during item create and edit.">
+        <GlobalCategoriesManager
+          initialCategories={globalSettings.categories}
+          initialCustomizableCategories={globalSettings.customizableCategories}
+        />
+      </AdminSection>
+
+      <AdminSection title="Vendor category manager" description="Maintain vendor-specific category trees and keep item creation aligned to the right storefront structure.">
         <StoreCategoriesManager vendors={vendors} />
       </AdminSection>
     </div>

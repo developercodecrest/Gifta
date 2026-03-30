@@ -28,7 +28,7 @@ import {
   VendorOnboardingSubmissionDto,
   VendorSummaryDto,
 } from "@/types/api";
-import { Product, ProductAttribute, ProductVariant } from "@/types/ecommerce";
+import { Product, ProductAttribute, ProductMediaItem, ProductVariant } from "@/types/ecommerce";
 
 type StoreDoc = StoreDto & {
   details?: Record<string, unknown>;
@@ -111,10 +111,27 @@ type VendorOnboardingSubmissionDoc = {
   updatedAt: string;
 };
 
+type GlobalCategorySettingsDoc = {
+  _id: string;
+  categories: StoreCategoryOption[];
+  customizableCategories?: string[];
+  updatedAt: string;
+  updatedBy: string;
+};
+
+export type GlobalCategorySettingsDto = {
+  categories: StoreCategoryOption[];
+  customizableCategories: string[];
+};
+
 type AdminScope = {
   role: Role;
   userId: string;
 };
+
+const GLOBAL_CATEGORY_SETTINGS_DOC_ID = "global-categories";
+const FALLBACK_PRODUCT_IMAGE = "/products/placeholder.png";
+const DEFAULT_SHORT_DESCRIPTION_MAX_LENGTH = 180;
 
 const DEMO_PROFILE_KEY = "demo";
 
@@ -199,6 +216,126 @@ function normalizeProfileAddresses(addresses: ProfileDto["addresses"] | undefine
   });
 }
 
+function toShortDescription(value: string, maxLength = DEFAULT_SHORT_DESCRIPTION_MAX_LENGTH) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+
+  const slice = trimmed.slice(0, maxLength);
+  const lastSpace = slice.lastIndexOf(" ");
+  const shortened = lastSpace > 80 ? slice.slice(0, lastSpace) : slice;
+  return `${shortened.trim()}...`;
+}
+
+function inferMediaTypeFromUrl(url: string): "image" | "video" {
+  const normalized = url.trim().toLowerCase();
+  if (!normalized) {
+    return "image";
+  }
+
+  if (normalized.includes("/video/upload/")) {
+    return "video";
+  }
+
+  if (/\.(mp4|webm|mov|mkv|m4v)(\?|$)/i.test(normalized)) {
+    return "video";
+  }
+
+  return "image";
+}
+
+function deriveCloudinaryVideoThumbnail(url: string) {
+  if (!url.includes("res.cloudinary.com") || !url.includes("/video/upload/")) {
+    return undefined;
+  }
+
+  const [base, query = ""] = url.split("?");
+  const withFrame = base.replace("/video/upload/", "/video/upload/so_0/");
+  const asImage = /\.[a-z0-9]+$/i.test(withFrame)
+    ? withFrame.replace(/\.[a-z0-9]+$/i, ".jpg")
+    : `${withFrame}.jpg`;
+
+  return query ? `${asImage}?${query}` : asImage;
+}
+
+function toNormalizedProductMedia(inputMedia: ProductMediaItem[] | undefined, inputImages: string[] | undefined) {
+  const normalizedMap = new Map<string, ProductMediaItem>();
+
+  const pushMedia = (item: ProductMediaItem) => {
+    const url = item.url?.trim();
+    if (!url) {
+      return;
+    }
+
+    const type = item.type === "video" ? "video" : "image";
+    const thumbnailUrl = type === "video"
+      ? item.thumbnailUrl?.trim() || deriveCloudinaryVideoThumbnail(url)
+      : undefined;
+
+    const key = `${type}:${url.toLowerCase()}`;
+    normalizedMap.set(key, {
+      type,
+      url,
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      ...(item.alt?.trim() ? { alt: item.alt.trim() } : {}),
+    });
+  };
+
+  for (const mediaItem of inputMedia ?? []) {
+    if (!mediaItem || typeof mediaItem !== "object") {
+      continue;
+    }
+
+    pushMedia({
+      type: mediaItem.type,
+      url: mediaItem.url,
+      thumbnailUrl: mediaItem.thumbnailUrl,
+      alt: mediaItem.alt,
+    });
+  }
+
+  for (const imageUrl of inputImages ?? []) {
+    if (typeof imageUrl !== "string" || !imageUrl.trim()) {
+      continue;
+    }
+
+    const trimmed = imageUrl.trim();
+    const inferredType = inferMediaTypeFromUrl(trimmed);
+    pushMedia({
+      type: inferredType,
+      url: trimmed,
+      ...(inferredType === "video" ? { thumbnailUrl: deriveCloudinaryVideoThumbnail(trimmed) } : {}),
+    });
+  }
+
+  const normalized = Array.from(normalizedMap.values());
+  if (!normalized.length) {
+    return [{ type: "image" as const, url: FALLBACK_PRODUCT_IMAGE }];
+  }
+
+  return normalized;
+}
+
+function toDisplayImagesFromMedia(media: ProductMediaItem[]) {
+  const display = media
+    .map((entry) => {
+      if (entry.type === "image") {
+        return entry.url.trim();
+      }
+
+      const thumbnail = entry.thumbnailUrl?.trim() || deriveCloudinaryVideoThumbnail(entry.url);
+      return thumbnail || "";
+    })
+    .filter(Boolean);
+
+  return display.length ? display : [FALLBACK_PRODUCT_IMAGE];
+}
+
 function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
   const productWithOptionalId = { ...(product as ProductDoc & { _id?: ObjectId }) };
   delete productWithOptionalId._id;
@@ -207,9 +344,21 @@ function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
   const rawMax = typeof product.maxOrderQty === "number" ? Math.max(0, Math.floor(product.maxOrderQty)) : 10;
   const hiddenByQty = rawMax === 0;
   const maxOrderQty = hiddenByQty ? 0 : Math.max(minOrderQty, rawMax);
+  const normalizedMedia = toNormalizedProductMedia(product.media, product.images);
+  const normalizedImages = toDisplayImagesFromMedia(normalizedMedia);
+  const normalizedDescription = typeof product.description === "string" && product.description.trim()
+    ? product.description.trim()
+    : "Handpicked gift item";
+  const normalizedShortDescription = typeof product.shortDescription === "string" && product.shortDescription.trim()
+    ? toShortDescription(product.shortDescription)
+    : toShortDescription(normalizedDescription);
 
   return {
     ...rest,
+    description: normalizedDescription,
+    shortDescription: normalizedShortDescription,
+    media: normalizedMedia,
+    images: normalizedImages,
     minOrderQty,
     maxOrderQty,
     inStock: product.inStock && !hiddenByQty,
@@ -356,6 +505,60 @@ function toStoreCategoryOptions(details: StoreDoc["details"]): StoreCategoryOpti
   return normalized;
 }
 
+function toNormalizedStoreCategoryOptions(entries: StoreCategoryOption[]) {
+  const categoryMap = new Map<string, StoreCategoryOption>();
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const name = entry.name?.trim();
+    if (!name) {
+      continue;
+    }
+
+    const key = name.toLowerCase();
+    const existing = categoryMap.get(key);
+    const nextImage = entry.image?.trim() || "";
+    const nextSubcategories = (entry.subcategories ?? []).map((subcategory) => subcategory.trim()).filter(Boolean);
+
+    if (!existing) {
+      categoryMap.set(key, {
+        name,
+        subcategories: Array.from(new Set(nextSubcategories)),
+        ...(nextImage ? { image: nextImage } : {}),
+      });
+      continue;
+    }
+
+    const mergedSubcategories = Array.from(new Set([...existing.subcategories, ...nextSubcategories]));
+    const mergedImage = existing.image?.trim() || nextImage;
+    categoryMap.set(key, {
+      name: existing.name,
+      subcategories: mergedSubcategories,
+      ...(mergedImage ? { image: mergedImage } : {}),
+    });
+  }
+
+  return Array.from(categoryMap.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function toNormalizedCategoryValueList(entries: string[] | undefined) {
+  if (!Array.isArray(entries)) {
+    return [] as string[];
+  }
+
+  return Array.from(new Set(entries.map((entry) => entry.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function getDefaultGlobalCategoryOptions(): StoreCategoryOption[] {
+  return categories.map((name) => ({
+    name,
+    subcategories: [],
+  }));
+}
+
 function getStoreBasicInfo(details: StoreDoc["details"]) {
   const basicInfo = (details as { basicInfo?: { category?: unknown; subcategory?: unknown } } | undefined)?.basicInfo;
   return {
@@ -377,6 +580,7 @@ async function getCollections() {
     riders: db.collection<RiderDoc>("riders"),
     orders: db.collection<OrderDoc>("orders"),
     vendorOnboardingSubmissions: db.collection<VendorOnboardingSubmissionDoc>("vendor_onboarding_submissions"),
+    globalCategorySettings: db.collection<GlobalCategorySettingsDoc>("global_category_settings"),
   };
 }
 
@@ -604,6 +808,7 @@ export async function searchItems(filters: {
 
     query.$or = [
       { name: regex },
+      { shortDescription: regex },
       { description: regex },
       { tags: regex },
       ...(matchedStoreProductIds.length ? [{ id: { $in: matchedStoreProductIds } }] : []),
@@ -888,7 +1093,7 @@ export async function getSearchSuggestions(query: string, limit = 10) {
 
   const matchedProducts = (await products
     .find({
-      $or: [{ name: regex }, { description: regex }, { tags: regex }],
+      $or: [{ name: regex }, { shortDescription: regex }, { description: regex }, { tags: regex }],
     })
     .limit(Math.min(Math.max(limit, 1), 10))
     .toArray())
@@ -998,6 +1203,94 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
       };
     })
     .sort((left, right) => Number(right.active) - Number(left.active) || right.rating - left.rating);
+}
+
+export async function getGlobalCategoryOptions() {
+  const settings = await getGlobalCategorySettings();
+  return settings.categories;
+}
+
+export async function getGlobalCategorySettings(): Promise<GlobalCategorySettingsDto> {
+  const { globalCategorySettings } = await getCollections();
+  const settings = await globalCategorySettings.findOne({ _id: GLOBAL_CATEGORY_SETTINGS_DOC_ID });
+  const categories = settings?.categories?.length
+    ? toNormalizedStoreCategoryOptions(settings.categories)
+    : getDefaultGlobalCategoryOptions();
+  const fallbackCategories = categories.length ? categories : getDefaultGlobalCategoryOptions();
+  const customizableCategories = toNormalizedCategoryValueList(settings?.customizableCategories);
+
+  return {
+    categories: fallbackCategories,
+    customizableCategories,
+  };
+}
+
+export async function getCustomizableCategoryValues() {
+  const settings = await getGlobalCategorySettings();
+  return settings.customizableCategories;
+}
+
+export async function updateGlobalCategoryOptions(input: {
+  categories: StoreCategoryOption[];
+  customizableCategories?: string[];
+  updatedBy: string;
+}) {
+  const { globalCategorySettings } = await getCollections();
+  const normalized = toNormalizedStoreCategoryOptions(input.categories ?? []);
+  const categoriesToSave = normalized.length ? normalized : getDefaultGlobalCategoryOptions();
+  const customizableCategories = toNormalizedCategoryValueList(input.customizableCategories);
+
+  await globalCategorySettings.updateOne(
+    { _id: GLOBAL_CATEGORY_SETTINGS_DOC_ID },
+    {
+      $set: {
+        categories: categoriesToSave,
+        customizableCategories,
+        updatedAt: new Date().toISOString(),
+        updatedBy: input.updatedBy,
+      },
+    },
+    { upsert: true },
+  );
+
+  return {
+    categories: categoriesToSave,
+    customizableCategories,
+  } satisfies GlobalCategorySettingsDto;
+}
+
+export async function getMergedCategoryValuesForStoreScoped(input: {
+  storeId: string;
+  scope: AdminScope;
+}) {
+  const [globalCategoryOptions, vendors] = await Promise.all([
+    getGlobalCategoryOptions(),
+    getVendorSummariesScoped(input.scope),
+  ]);
+
+  const vendor = vendors.find((entry) => entry.id === input.storeId);
+  if (!vendor) {
+    throw new Error("FORBIDDEN_STORE_SCOPE");
+  }
+
+  const globalValues = globalCategoryOptions
+    .flatMap((entry) => [entry.name, ...entry.subcategories])
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const vendorValues = vendor.categories
+    .flatMap((entry) => [entry.name, ...entry.subcategories])
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const mergedCategoryValues = Array.from(new Set([...globalValues, ...vendorValues]));
+
+  return {
+    vendor,
+    globalCategoryOptions,
+    vendorCategoryOptions: vendor.categories,
+    mergedCategoryValues,
+  };
 }
 
 function mapVendorOnboardingSubmission(doc: VendorOnboardingSubmissionDoc): VendorOnboardingSubmissionDto {
@@ -1879,15 +2172,7 @@ export async function updateStoreScoped(input: {
   if (typeof input.updates.category === "string") patch["details.basicInfo.category"] = input.updates.category.trim();
   if (typeof input.updates.subcategory === "string") patch["details.basicInfo.subcategory"] = input.updates.subcategory.trim();
   if (Array.isArray(input.updates.categories)) {
-    patch["details.catalog.categories"] = input.updates.categories
-      .map((entry) => ({
-        name: entry.name.trim(),
-        ...(entry.image?.trim() ? { image: entry.image.trim() } : {}),
-        subcategories: entry.subcategories
-          .map((subcategory) => subcategory.trim())
-          .filter((subcategory) => Boolean(subcategory)),
-      }))
-      .filter((entry) => Boolean(entry.name));
+    patch["details.catalog.categories"] = toNormalizedStoreCategoryOptions(input.updates.categories);
   }
 
   await stores.updateOne({ id: input.storeId }, { $set: patch });
@@ -1914,12 +2199,14 @@ export async function createAdminItemScoped(input: {
   payload: {
     storeId?: string;
     name: string;
+    shortDescription?: string;
     category: string;
     price: number;
     originalPrice?: number;
     deliveryEtaHours?: number;
     description?: string;
     images?: string[];
+    media?: ProductMediaItem[];
     tags?: string[];
     featured?: boolean;
     inStock?: boolean;
@@ -1962,18 +2249,29 @@ export async function createAdminItemScoped(input: {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "") || id;
 
+  const normalizedDescription = input.payload.description?.trim() || "Handpicked gift item";
+  const normalizedShortDescription = input.payload.shortDescription?.trim()
+    ? toShortDescription(input.payload.shortDescription)
+    : toShortDescription(normalizedDescription);
+  const normalizedMedia = toNormalizedProductMedia(input.payload.media, input.payload.images);
+
   const doc: ProductDoc = {
     id,
     slug,
     name: input.payload.name.trim(),
-    description: input.payload.description?.trim() || "Handpicked gift item",
+    shortDescription: normalizedShortDescription,
+    description: normalizedDescription,
     price: Math.max(0, input.payload.price),
-    originalPrice: Math.max(0, Math.round(input.payload.price * 1.15)),
+    originalPrice:
+      typeof input.payload.originalPrice === "number"
+        ? Math.max(0, input.payload.originalPrice)
+        : Math.max(0, Math.round(input.payload.price * 1.15)),
     rating: 4.5,
     reviews: 0,
     category: (input.payload.category as ProductDoc["category"]) ?? "Birthday",
     tags: input.payload.tags?.length ? input.payload.tags : ["gift"],
-    images: input.payload.images?.length ? input.payload.images : ["/products/placeholder.png"],
+    media: normalizedMedia,
+    images: toDisplayImagesFromMedia(normalizedMedia),
     inStock: input.payload.inStock ?? true,
     minOrderQty: input.payload.minOrderQty ?? 1,
     maxOrderQty: input.payload.maxOrderQty ?? 10,
@@ -2010,6 +2308,7 @@ export async function updateAdminItemScoped(input: {
   itemId: string;
   updates: {
     name?: string;
+    shortDescription?: string;
     description?: string;
     category?: string;
     price?: number;
@@ -2017,6 +2316,7 @@ export async function updateAdminItemScoped(input: {
     featured?: boolean;
     tags?: string[];
     images?: string[];
+    media?: ProductMediaItem[];
     offerStoreId?: string;
     offerPrice?: number;
     originalPrice?: number;
@@ -2040,6 +2340,7 @@ export async function updateAdminItemScoped(input: {
   if (!existingProduct) {
     throw new Error("ITEM_NOT_FOUND");
   }
+  const existingNormalizedMedia = toNormalizedProductMedia(existingProduct.media, existingProduct.images);
 
   const existingOffers = await offers.find({ productId: input.itemId }).toArray();
   const patch: Record<string, unknown> = {};
@@ -2051,13 +2352,32 @@ export async function updateAdminItemScoped(input: {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "");
   }
+  if (typeof input.updates.shortDescription === "string") {
+    patch.shortDescription = toShortDescription(input.updates.shortDescription);
+  }
   if (typeof input.updates.description === "string") patch.description = input.updates.description.trim();
   if (typeof input.updates.category === "string" && input.updates.category.trim()) patch.category = input.updates.category.trim();
   if (typeof input.updates.price === "number") patch.price = Math.max(0, input.updates.price);
   if (typeof input.updates.inStock === "boolean") patch.inStock = input.updates.inStock;
   if (typeof input.updates.featured === "boolean") patch.featured = input.updates.featured;
   if (Array.isArray(input.updates.tags)) patch.tags = input.updates.tags;
-  if (Array.isArray(input.updates.images) && input.updates.images.length) patch.images = input.updates.images;
+
+  if (Array.isArray(input.updates.media)) {
+    const normalizedMedia = toNormalizedProductMedia(input.updates.media, input.updates.images);
+    patch.media = normalizedMedia;
+    patch.images = toDisplayImagesFromMedia(normalizedMedia);
+  } else if (Array.isArray(input.updates.images)) {
+    const normalizedImageMedia = toNormalizedProductMedia(undefined, input.updates.images)
+      .filter((entry) => entry.type === "image");
+    const existingVideoMedia = existingNormalizedMedia.filter((entry) => entry.type === "video");
+    const mergedMedia = toNormalizedProductMedia([...existingVideoMedia, ...normalizedImageMedia], undefined);
+    patch.media = mergedMedia;
+    patch.images = toDisplayImagesFromMedia(mergedMedia);
+  }
+
+  if (typeof input.updates.description === "string" && input.updates.shortDescription === undefined) {
+    patch.shortDescription = toShortDescription(input.updates.description);
+  }
 
   const hasAttributesUpdate = input.updates.attributes !== undefined;
   const hasVariantsUpdate = input.updates.variants !== undefined;

@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { publishCartSnapshot } from "@/lib/server/firebase-realtime";
 import { getMongoDb } from "@/lib/mongodb";
 import { CartItem } from "@/types/ecommerce";
+import { getCartLineIdentity, normalizeCartLine } from "@/lib/cart-customization";
 
 type UserCartDoc = {
   userId: ObjectId;
@@ -16,21 +17,8 @@ function toObjectId(userId: string) {
 
 function normalizeItems(items: CartItem[]) {
   return items
-    .filter((entry) => entry.productId)
-    .map((entry) => ({
-      productId: entry.productId,
-      quantity: Math.max(1, Math.floor(entry.quantity || 1)),
-      offerId: typeof entry.offerId === "string" ? entry.offerId : undefined,
-      variantId: typeof entry.variantId === "string" ? entry.variantId : undefined,
-      variantOptions:
-        entry.variantOptions && typeof entry.variantOptions === "object"
-          ? Object.fromEntries(
-              Object.entries(entry.variantOptions)
-                .map(([key, value]) => [key.trim(), typeof value === "string" ? value.trim() : ""] as const)
-                .filter(([key, value]) => Boolean(key) && Boolean(value)),
-            )
-          : undefined,
-    }));
+    .map((entry) => normalizeCartLine(entry))
+    .filter((entry): entry is CartItem => Boolean(entry));
 }
 
 export async function getUserCart(userId: string): Promise<CartItem[]> {
@@ -106,32 +94,37 @@ export async function setUserCart(userId: string, items: CartItem[]): Promise<Ca
 export async function mergeUserCart(userId: string, localItems: CartItem[]): Promise<CartItem[]> {
   const dbItems = await getUserCart(userId);
   const map = new Map<string, CartItem>();
-  const makeKey = (item: CartItem) => `${item.productId}::${item.variantId ?? "default"}`;
+  const makeKey = (item: CartItem) => getCartLineIdentity(item);
 
   for (const item of dbItems) {
-    map.set(makeKey(item), item);
+    const normalized = normalizeCartLine(item);
+    if (!normalized) {
+      continue;
+    }
+    map.set(makeKey(normalized), normalized);
   }
 
   for (const item of localItems) {
-    const key = makeKey(item);
+    const normalized = normalizeCartLine(item);
+    if (!normalized) {
+      continue;
+    }
+
+    const key = makeKey(normalized);
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, {
-        productId: item.productId,
-        quantity: Math.max(1, Math.floor(item.quantity || 1)),
-        offerId: item.offerId,
-        variantId: item.variantId,
-        variantOptions: item.variantOptions,
-      });
+      map.set(key, normalized);
       continue;
     }
 
     map.set(key, {
-      productId: item.productId,
-      quantity: existing.quantity + Math.max(1, Math.floor(item.quantity || 1)),
-      offerId: item.offerId ?? existing.offerId,
-      variantId: item.variantId ?? existing.variantId,
-      variantOptions: item.variantOptions ?? existing.variantOptions,
+      ...existing,
+      quantity: existing.quantity + normalized.quantity,
+      offerId: normalized.offerId ?? existing.offerId,
+      variantId: normalized.variantId ?? existing.variantId,
+      variantOptions: normalized.variantOptions ?? existing.variantOptions,
+      customization: normalized.customization ?? existing.customization,
+      customizationSignature: normalized.customizationSignature ?? existing.customizationSignature,
     });
   }
 

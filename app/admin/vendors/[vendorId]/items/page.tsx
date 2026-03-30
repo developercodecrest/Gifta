@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
 import { ensureAdminAccess } from "@/app/admin/_utils";
-import { getAdminItemsScoped, getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
+import { getAdminItemsScoped, getGlobalCategoryOptions, getVendorSummariesScoped } from "@/lib/server/ecommerce-service";
 import { ItemsClient } from "@/app/admin/items/items-client";
 
 export default async function AdminVendorItemsPage({ params }: { params: Promise<{ vendorId: string }> }) {
@@ -22,9 +22,10 @@ export default async function AdminVendorItemsPage({ params }: { params: Promise
     },
   };
 
-  const [allItems, vendors] = await Promise.all([
+  const [allItems, vendors, globalCategories] = await Promise.all([
     getAdminItemsScoped(identity).catch(() => emptyItems),
     getVendorSummariesScoped(identity).catch(() => []),
+    getGlobalCategoryOptions().catch(() => []),
   ]);
 
   const vendor = vendors.find((entry) => entry.id === vendorId);
@@ -51,7 +52,7 @@ export default async function AdminVendorItemsPage({ params }: { params: Promise
       <AdminHero
         eyebrow="Vendor items"
         title={`${vendor.name} catalog workspace`}
-        description="Create and manage items mapped to this vendor only. Category validation follows vendor categories first, with global fallback when vendor categories are not configured."
+        description="Create and manage items mapped to this vendor only. Category validation accepts the merged global taxonomy and this vendor's categories."
         actions={
           <>
             <Link href="/admin/vendors" className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-[#cd9933] bg-[#cd9933] px-2.5 py-1.5 text-sm font-medium text-white hover:bg-[#b8872d]">
@@ -84,7 +85,7 @@ export default async function AdminVendorItemsPage({ params }: { params: Promise
         </div>
       </AdminSection>
 
-      <ItemsClient items={items} vendors={[vendor]} lockedStoreId={vendor.id} />
+      <ItemsClient items={items} vendors={[vendor]} globalCategories={globalCategories} lockedStoreId={vendor.id} />
     </div>
   );
 }

@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { Filter, Search, Sparkles, Star, Store, Truck } from "lucide-react";
-import { ProductCard } from "@/components/product/product-card";
+import { ProductsInfiniteResults } from "@/app/products/products-infinite-results";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { categories, getProducts, SortOption } from "@/lib/catalog";
-import { listStores, searchItems } from "@/lib/server/ecommerce-service";
+import { getProducts, SortOption } from "@/lib/catalog";
+import { getGlobalCategoryOptions, listStores, searchItems } from "@/lib/server/ecommerce-service";
+import { ProductListItemDto, SearchMeta } from "@/types/api";
 
 type SearchParams = {
   q?: string;
@@ -24,22 +25,22 @@ type SearchParams = {
 };
 
 const quickFilterLinks = [
-  { label: "Same day", href: "/search?tag=same-day", icon: Truck },
-  { label: "Personalized", href: "/search?tag=personalized", icon: Sparkles },
-  { label: "Birthday", href: "/search?category=Birthday", icon: Star },
-  { label: "Anniversary", href: "/search?category=Anniversary", icon: Store },
-  { label: "Premium", href: "/search?tag=luxury", icon: Sparkles },
+  { label: "Same day", href: "/products?tag=same-day", icon: Truck },
+  { label: "Personalized", href: "/products?tag=personalized", icon: Sparkles },
+  { label: "Birthday", href: "/products?category=Birthday", icon: Star },
+  { label: "Anniversary", href: "/products?category=Anniversary", icon: Store },
+  { label: "Premium", href: "/products?tag=luxury", icon: Sparkles },
 ];
 
 const heroThemes = {
   default: {
-    badge: "Search",
-    title: "Gift search with stronger contrast, faster scanning, and clearer category focus",
+    badge: "Products",
+    title: "Explore products with faster discovery and endless browsing",
     description: "Discover gifts, categories, and vendors with a cleaner layout, visible filter hierarchy, and a brighter product-first canvas.",
     panelClass: "border-[#edd3c5] bg-[radial-gradient(circle_at_top_left,rgba(255,183,145,0.38),transparent_34%),radial-gradient(circle_at_top_right,rgba(255,224,196,0.9),transparent_22%),linear-gradient(135deg,#fff4eb_0%,#fffaf6_52%,#ffeede_100%)]",
     badgeClass: "border border-white/80 bg-white/85 text-slate-900",
     accentClass: "border-[#efc9ba] bg-white/90 text-slate-700",
-    summary: "All gifts",
+    summary: "All products",
   },
   "tag:same-day": {
     badge: "Same day",
@@ -52,7 +53,7 @@ const heroThemes = {
   },
   "tag:personalized": {
     badge: "Personalized",
-    title: "Personalized gift search with clearer storytelling and cleaner focus",
+    title: "Personalized gift discovery with clearer storytelling and cleaner focus",
     description: "Custom keepsakes, photo gifts, and made-for-them pieces now land on a warmer surface with readable contrast.",
     panelClass: "border-[#ddcdee] bg-[radial-gradient(circle_at_top_left,rgba(206,187,255,0.5),transparent_30%),radial-gradient(circle_at_100%_0%,rgba(244,235,255,0.96),transparent_26%),linear-gradient(135deg,#f6efff_0%,#fcf9ff_52%,#eee3ff_100%)]",
     badgeClass: "border border-[#d8c6ef] bg-white/86 text-[#5f3d8f]",
@@ -80,7 +81,7 @@ const heroThemes = {
   "tag:luxury": {
     badge: "Premium",
     title: "Premium gifting with richer contrast, polished chips, and a stronger editorial feel",
-    description: "Luxury hampers, signature assortments, and high-intent gifting deserve a more refined and visible search surface.",
+    description: "Luxury hampers, signature assortments, and high-intent gifting deserve a more refined and visible products surface.",
     panelClass: "border-[#ead5b6] bg-[radial-gradient(circle_at_top_left,rgba(255,211,134,0.46),transparent_30%),radial-gradient(circle_at_92%_8%,rgba(255,245,223,0.98),transparent_24%),linear-gradient(135deg,#fff4e2_0%,#fffaf2_54%,#ffe8c9_100%)]",
     badgeClass: "border border-[#e5cb9f] bg-[#fff9ee] text-[#7a5521]",
     accentClass: "border-[#e5cb9f] bg-[#fff9ee] text-[#7a5521]",
@@ -97,15 +98,15 @@ function getHeroTheme(tag: string, category: string) {
   return heroThemes.default;
 }
 
-export default function SearchPage({
+export default function ProductsPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  return <SearchContent searchParams={searchParams} />;
+  return <ProductsContent searchParams={searchParams} />;
 }
 
-async function SearchContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
+async function ProductsContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const query = params.q ?? "";
   const category = params.category ?? "";
@@ -119,7 +120,10 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
   const inStock = params.stock === "1";
   const heroTheme = getHeroTheme(tag, category);
 
-  const stores = await listStores().catch(() => []);
+  const [stores, globalCategoryOptions] = await Promise.all([
+    listStores().catch(() => []),
+    getGlobalCategoryOptions().catch(() => []),
+  ]);
 
   const result = await searchItems({
     q: query || undefined,
@@ -143,7 +147,7 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
     });
 
     return {
-      items: fallback.items,
+      items: fallback.items as ProductListItemDto[],
       meta: {
         total: fallback.total,
         totalPages: fallback.totalPages,
@@ -160,9 +164,24 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
           minRating: undefined,
           sort,
         },
-      },
+      } satisfies SearchMeta,
     };
   });
+
+  const categoryOptions = Array.from(
+    new Set(
+      globalCategoryOptions
+        .flatMap((entry) => [entry.name, ...entry.subcategories])
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
+  const fallbackCategoryOptions = Array.from(
+    new Set(result.items.map((item) => item.category).filter(Boolean)),
+  ).sort((left, right) => left.localeCompare(right));
+
+  const filterCategoryOptions = categoryOptions.length ? categoryOptions : fallbackCategoryOptions;
 
   return (
     <div className="space-y-6 sm:space-y-7 py-4 sm:py-5 lg:py-6">
@@ -211,33 +230,33 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
       <section className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start">
         <Card className="sticky top-28 rounded-4xl border-[#ead7cb] bg-white/88 text-slate-900 shadow-[0_24px_52px_-40px_rgba(113,52,39,0.28)] backdrop-blur">
           <CardHeader className="pb-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Refine search</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Refine products</p>
             <CardTitle className="flex items-center gap-2 text-xl text-slate-950"><Filter className="h-4 w-4" /> Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <form className="grid gap-3.5" action="/search" method="get">
+            <form className="grid gap-3.5" action="/products" method="get">
               <div className="space-y-2">
-                <Label htmlFor="search-q" className="text-slate-800">Search query</Label>
+                <Label htmlFor="products-q" className="text-slate-800">Search query</Label>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="search-q" defaultValue={query} name="q" placeholder="Search gifts, vendors, occasions..." className="h-12 rounded-full border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400 pl-10" />
+                  <Input id="products-q" defaultValue={query} name="q" placeholder="Search gifts, vendors, occasions..." className="h-12 rounded-full border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400 pl-10" />
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="space-y-2">
-                  <Label htmlFor="search-category" className="text-slate-800">Category</Label>
-                  <select id="search-category" name="category" defaultValue={category} className="min-h-12 w-full rounded-2xl border border-[#dbc6b9] bg-white px-3 py-2 text-sm text-slate-900">
+                  <Label htmlFor="products-category" className="text-slate-800">Category</Label>
+                  <select id="products-category" name="category" defaultValue={category} className="min-h-12 w-full rounded-2xl border border-[#dbc6b9] bg-white px-3 py-2 text-sm text-slate-900">
                     <option value="">All categories</option>
-                    {categories.map((item) => (
+                    {filterCategoryOptions.map((item) => (
                       <option key={item} value={item}>{item}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="search-sort" className="text-slate-800">Sort</Label>
-                  <select id="search-sort" name="sort" defaultValue={sort} className="min-h-12 w-full rounded-2xl border border-[#dbc6b9] bg-white px-3 py-2 text-sm text-slate-900">
+                  <Label htmlFor="products-sort" className="text-slate-800">Sort</Label>
+                  <select id="products-sort" name="sort" defaultValue={sort} className="min-h-12 w-full rounded-2xl border border-[#dbc6b9] bg-white px-3 py-2 text-sm text-slate-900">
                     <option value="featured">Featured</option>
                     <option value="price-asc">Price: Low to high</option>
                     <option value="price-desc">Price: High to low</option>
@@ -247,8 +266,8 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="search-store" className="text-slate-800">Vendor</Label>
-                <select id="search-store" name="storeId" defaultValue={storeId} className="min-h-12 w-full rounded-2xl border border-[#dbc6b9] bg-white px-3 py-2 text-sm text-slate-900">
+                <Label htmlFor="products-store" className="text-slate-800">Vendor</Label>
+                <select id="products-store" name="storeId" defaultValue={storeId} className="min-h-12 w-full rounded-2xl border border-[#dbc6b9] bg-white px-3 py-2 text-sm text-slate-900">
                   <option value="">All vendors</option>
                   {stores.map((store) => (
                     <option key={store.id} value={store.id}>{store.name}</option>
@@ -258,23 +277,23 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="space-y-2">
-                  <Label htmlFor="search-min-price" className="text-slate-800">Min price</Label>
-                  <Input id="search-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="0" className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
+                  <Label htmlFor="products-min-price" className="text-slate-800">Min price</Label>
+                  <Input id="products-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="0" className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="search-max-price" className="text-slate-800">Max price</Label>
-                  <Input id="search-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="5000" className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
+                  <Label htmlFor="products-max-price" className="text-slate-800">Max price</Label>
+                  <Input id="products-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="5000" className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="space-y-2">
-                  <Label htmlFor="search-min-rating" className="text-slate-800">Min rating</Label>
-                  <Input id="search-min-rating" type="number" min={0} max={5} step={0.1} name="minRating" defaultValue={minRating} placeholder="4.0" className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
+                  <Label htmlFor="products-min-rating" className="text-slate-800">Min rating</Label>
+                  <Input id="products-min-rating" type="number" min={0} max={5} step={0.1} name="minRating" defaultValue={minRating} placeholder="4.0" className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="search-tag" className="text-slate-800">Tag</Label>
-                  <Input id="search-tag" name="tag" defaultValue={tag} placeholder="same-day, premium..." className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
+                  <Label htmlFor="products-tag" className="text-slate-800">Tag</Label>
+                  <Input id="products-tag" name="tag" defaultValue={tag} placeholder="same-day, premium..." className="h-12 rounded-2xl border-[#dbc6b9] bg-white text-slate-900 placeholder:text-slate-400" />
                 </div>
               </div>
 
@@ -286,122 +305,29 @@ async function SearchContent({ searchParams }: { searchParams: Promise<SearchPar
               <div className="flex flex-col gap-3 sm:flex-row xl:flex-col">
                 <Button className="h-12 sm:flex-1 xl:w-full" type="submit">Apply filters</Button>
                 <Button asChild variant="outline" className="h-12 sm:flex-1 xl:w-full">
-                  <Link href="/search">Reset</Link>
+                  <Link href="/products">Reset</Link>
                 </Button>
               </div>
             </form>
           </CardContent>
         </Card>
 
-        <div className="space-y-5">
-          <div className="flex flex-col gap-3 rounded-[1.4rem] border border-[#ead7cb] bg-white/82 px-4 py-3.5 text-slate-900 shadow-[0_20px_48px_-38px_rgba(113,52,39,0.28)] sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-slate-700">Showing {result.items.length} of {result.meta.total} products</p>
-              <p className="mt-1 text-xs text-slate-500">Compact cards keep more products visible across breakpoints.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{sort.replace("-", " ")}</Badge>
-              {category ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{category}</Badge> : null}
-              {tag ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{tag}</Badge> : null}
-            </div>
-          </div>
-
-          {result.items.length === 0 ? (
-            <Card className="rounded-4xl border-dashed border-[#e5c9bb] bg-white/78 text-slate-900">
-              <CardContent className="p-10 text-center">
-                <h2 className="font-display text-3xl font-semibold text-slate-950">No products found</h2>
-                <p className="mt-2 text-sm text-slate-600">Try adjusting the filters, broadening the price range, or removing a tag.</p>
-                <Button asChild variant="outline" className="mt-5">
-                  <Link href="/search">Reset filters</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {result.items.map((item) => (
-                <ProductCard key={item.id} product={item} />
-              ))}
-            </div>
-          )}
-
-          <Pagination
-            current={result.meta.page}
-            total={result.meta.totalPages}
-            q={query}
-            category={category}
-            tag={tag}
-            minPrice={minPrice}
-            maxPrice={maxPrice}
-            minRating={minRating}
-            storeId={storeId}
-            sort={sort}
-            stock={inStock}
-          />
-        </div>
+        <ProductsInfiniteResults
+          initialItems={result.items}
+          initialMeta={result.meta}
+          filters={{
+            q: query,
+            category,
+            tag,
+            minPrice,
+            maxPrice,
+            minRating,
+            storeId,
+            sort,
+            stock: inStock,
+          }}
+        />
       </section>
     </div>
-  );
-}
-
-function Pagination({
-  current,
-  total,
-  q,
-  category,
-  tag,
-  minPrice,
-  maxPrice,
-  minRating,
-  storeId,
-  sort,
-  stock,
-}: {
-  current: number;
-  total: number;
-  q: string;
-  category: string;
-  tag: string;
-  minPrice: string;
-  maxPrice: string;
-  minRating: string;
-  storeId: string;
-  sort: string;
-  stock: boolean;
-}) {
-  if (total <= 1) {
-    return null;
-  }
-
-  const pages = Array.from({ length: total }, (_, index) => index + 1);
-
-  const buildHref = (page: number) => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (category) params.set("category", category);
-    if (tag) params.set("tag", tag);
-    if (minPrice) params.set("minPrice", minPrice);
-    if (maxPrice) params.set("maxPrice", maxPrice);
-    if (minRating) params.set("minRating", minRating);
-    if (storeId) params.set("storeId", storeId);
-    if (sort) params.set("sort", sort);
-    if (stock) params.set("stock", "1");
-    params.set("page", String(page));
-    return `/search?${params.toString()}`;
-  };
-
-  return (
-    <nav className="flex flex-wrap items-center gap-2" aria-label="Pagination">
-      {pages.map((page) => (
-        <Button
-          key={page}
-          asChild
-          variant={page === current ? "default" : "outline"}
-          size="sm"
-          className={page === current ? "" : ""}
-        >
-          <Link href={buildHref(page)}>{page}</Link>
-        </Button>
-      ))}
-    </nav>
   );
 }

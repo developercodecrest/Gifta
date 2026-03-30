@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { categories } from "@/lib/catalog";
 import { SortOption } from "@/types/api";
 
 const toOptionalNumber = z.preprocess((value) => {
@@ -18,7 +17,7 @@ const toOptionalBoolean = z.preprocess((value) => {
 
 export const searchQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
-  category: z.enum(categories).optional(),
+  category: z.string().trim().min(1).optional(),
   tag: z.string().trim().min(1).optional(),
   sort: z.enum(["featured", "price-asc", "price-desc", "rating"] as [SortOption, ...SortOption[]]).default("featured"),
   stock: toOptionalBoolean,
@@ -48,10 +47,15 @@ const timeSlotSchema = z.object({
   end: z.string().trim().min(1),
 });
 
-const storeCategorySchema = z.object({
+export const storeCategorySchema = z.object({
   name: z.string().trim().min(1),
   subcategories: z.array(z.string().trim().min(1)).default([]),
   image: optionalString,
+});
+
+export const updateGlobalCategoriesSchema = z.object({
+  categories: z.array(storeCategorySchema).default([]),
+  customizableCategories: z.array(z.string().trim().min(1)).default([]),
 });
 
 export const createStoreSchema = z.object({

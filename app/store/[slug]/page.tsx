@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Gift, ShieldCheck, Sparkles, Star, Store, Truck } from "lucide-react";
+import { ProductMediaGallery } from "@/components/product/product-media-gallery";
 import { ProductCard } from "@/components/product/product-card";
 import { TrackRecent } from "@/components/product/track-recent";
 import { ProductOrderPanel } from "@/features/cart/ui/product-order-panel";
@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/lib/utils";
 import { getProductBySlug, getRelatedProducts } from "@/lib/catalog";
-import { getItemBySlug } from "@/lib/server/ecommerce-service";
+import { getCustomizableCategoryValues, getItemBySlug } from "@/lib/server/ecommerce-service";
 
 export default async function ProductPage({
   params,
@@ -24,6 +24,7 @@ export default async function ProductPage({
 
   const product = await getItemBySlug(slug).catch(() => null);
   const fallback = getProductBySlug(slug);
+  const customizableCategories = await getCustomizableCategoryValues().catch(() => [] as string[]);
 
   if (!product && !fallback) {
     notFound();
@@ -31,7 +32,6 @@ export default async function ProductPage({
 
   const currentProduct = (product ?? fallback)!;
   const related = product?.suggestions ?? getRelatedProducts(currentProduct.id, currentProduct.category, 4);
-  const galleryImages = currentProduct.images.filter(Boolean);
   const bestOffer = product?.offers?.[0];
   const hasVariants = (currentProduct.attributes?.length ?? 0) > 0 && (currentProduct.variants?.length ?? 0) > 0;
   const lowestVariantPrice = hasVariants
@@ -42,6 +42,7 @@ export default async function ProductPage({
     ? undefined
     : (bestOffer?.originalPrice ?? currentProduct.originalPrice);
   const tags = Array.from(new Set([currentProduct.category, ...(currentProduct.tags ?? [])])).slice(0, 6);
+  const isCustomizable = customizableCategories.includes(currentProduct.category);
 
   return (
     <div className="space-y-8 pb-8 sm:space-y-10 sm:pb-10">
@@ -51,37 +52,18 @@ export default async function ProductPage({
         <div className="flex flex-wrap items-center gap-2 text-sm text-[#74655c]">
           <Link href="/" className="transition hover:text-foreground">Home</Link>
           <span>/</span>
-          <Link href="/search" className="transition hover:text-foreground">Search</Link>
+          <Link href="/products" className="transition hover:text-foreground">Products</Link>
           <span>/</span>
           <span className="text-foreground">{currentProduct.name}</span>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr] xl:items-start">
-          <div className="space-y-4">
-            <article className="surface-mesh soft-shadow relative aspect-[4/4.2] overflow-hidden rounded-4xl border border-white/70">
-              <Image
-                src={galleryImages[0]}
-                alt={currentProduct.name}
-                fill
-                className="object-cover"
-                sizes="(max-width: 1280px) 100vw, 52vw"
-              />
-              <div className="absolute inset-0 bg-linear-to-t from-black/15 via-transparent to-transparent" />
-              <div className="absolute left-4 top-4 flex flex-wrap gap-2">
-                {currentProduct.featured ? <Badge className="border-0 bg-white/92 text-slate-900">Featured</Badge> : null}
-                {currentProduct.inStock ? <Badge variant="secondary" className="border-0 bg-[#fff0e5] text-[#7b3d15]">Ready to ship</Badge> : null}
-              </div>
-            </article>
-
-            {galleryImages.length > 1 ? (
-              <div className="grid gap-4 sm:grid-cols-3">
-                {galleryImages.slice(1, 4).map((image, index) => (
-                  <div key={`${image}-${index}`} className="relative aspect-4/3 overflow-hidden rounded-3xl border border-white/70 bg-white/80">
-                    <Image src={image} alt={`${currentProduct.name} ${index + 2}`} fill className="object-cover" sizes="(max-width: 1280px) 33vw, 20vw" />
-                  </div>
-                ))}
-              </div>
-            ) : null}
+          <div className="space-y-3">
+            <ProductMediaGallery media={currentProduct.media} images={currentProduct.images} productName={currentProduct.name} />
+            <div className="flex flex-wrap gap-2">
+              {currentProduct.featured ? <Badge className="border-0 bg-white/92 text-slate-900">Featured</Badge> : null}
+              {currentProduct.inStock ? <Badge variant="secondary" className="border-0 bg-[#fff0e5] text-[#7b3d15]">Ready to ship</Badge> : null}
+            </div>
           </div>
 
           <Card className="glass-panel rounded-4xl border-white/60 soft-shadow">
@@ -94,7 +76,7 @@ export default async function ProductPage({
                   ))}
                 </div>
                 <h1 className="font-display text-4xl font-semibold leading-tight sm:text-5xl">{currentProduct.name}</h1>
-                <p className="max-w-2xl text-sm text-[#5f5047] sm:text-base">{currentProduct.description}</p>
+                <p className="max-w-2xl text-sm text-[#5f5047] sm:text-base">{currentProduct.shortDescription || currentProduct.description}</p>
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
@@ -116,7 +98,7 @@ export default async function ProductPage({
                   <p className="flex items-center gap-2 font-medium text-slate-900">
                     <Store className="h-4 w-4 text-primary" />
                     Lowest offer by
-                    <Link href={`/search?q=${encodeURIComponent(bestOffer.store.name)}`} className="text-primary underline-offset-4 hover:underline">
+                    <Link href={`/products?q=${encodeURIComponent(bestOffer.store.name)}`} className="text-primary underline-offset-4 hover:underline">
                       {bestOffer.store.name}
                     </Link>
                   </p>
@@ -134,6 +116,7 @@ export default async function ProductPage({
                   variants={currentProduct.variants}
                   fallbackPrice={bestOffer?.price ?? currentProduct.price}
                   fallbackOriginalPrice={bestOffer?.originalPrice ?? currentProduct.originalPrice}
+                  customizable={isCustomizable}
                 />
                 <WishlistInlineButton productId={currentProduct.id} />
               </div>
@@ -163,7 +146,7 @@ export default async function ProductPage({
                     <p className="text-base font-semibold">
                       {offer.store?.name ? (
                         <Link
-                          href={`/search?q=${encodeURIComponent(offer.store.name)}`}
+                          href={`/products?q=${encodeURIComponent(offer.store.name)}`}
                           className="underline-offset-4 hover:text-primary hover:underline"
                         >
                           {offer.store.name}
@@ -200,7 +183,7 @@ export default async function ProductPage({
               ))}
             </div>
             <Button asChild variant="outline" className="mt-6">
-              <Link href="/search">
+              <Link href="/products">
                 Continue browsing
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -208,7 +191,23 @@ export default async function ProductPage({
           </CardContent>
         </Card>
 
-        <div>
+        <div className="space-y-4">
+          <Card className="glass-panel rounded-4xl border-white/60">
+            <CardContent className="p-6 sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Description</p>
+              <p className="mt-3 text-sm leading-7 text-[#5f5047] sm:text-base">{currentProduct.description}</p>
+            </CardContent>
+          </Card>
+          <Card className="glass-panel rounded-4xl border-white/60">
+            <CardContent className="p-6 sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Shipping and Returns</p>
+              <p className="mt-3 text-sm leading-7 text-[#5f5047] sm:text-base">
+                Dispatch usually happens within 24 hours for active offers. Delivery ETA depends on your selected vendor and city. Returns are accepted only for damaged deliveries and must be reported with unboxing proof.
+              </p>
+            </CardContent>
+          </Card>
+
+          <div>
           <div className="mb-4 flex items-center gap-3">
             <h2 className="font-display text-3xl font-semibold tracking-tight">You may also like</h2>
             <Separator className="flex-1" />
@@ -217,6 +216,7 @@ export default async function ProductPage({
             {related.map((item) => (
               <ProductCard key={item.id} product={item} />
             ))}
+          </div>
           </div>
         </div>
       </section>

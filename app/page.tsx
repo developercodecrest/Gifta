@@ -254,7 +254,7 @@ export default async function Home() {
             <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Popular categories</h2>
           </div>
           <Button  variant="outline">
-            <Link href="/search">Browse all categories</Link>
+            <Link href="/products">Browse all categories</Link>
           </Button>
         </div>
 
@@ -292,7 +292,7 @@ export default async function Home() {
             <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Bestsellers</h2>
           </div>
           <Button >
-            <Link href="/search?sort=rating">See top-rated gifts</Link>
+            <Link href="/products?sort=rating">See top-rated gifts</Link>
           </Button>
         </div>
 
@@ -310,7 +310,7 @@ export default async function Home() {
             <h3 className="font-display mt-2 text-3xl font-semibold">Best reviewed gifts</h3>
           </div>
           <Button >
-            <Link href="/search?sort=rating">View all</Link>
+            <Link href="/products?sort=rating">View all</Link>
           </Button>
         </div>
 
@@ -328,7 +328,7 @@ export default async function Home() {
             <h3 className="font-display mt-2 text-3xl font-semibold text-[#ff0066] sm:text-4xl">Signature picks this week</h3>
           </div>
           <Button  variant="outline" className="border-[#ff80b3] text-[#ff0066] hover:bg-[#fff0f7]">
-            <Link href="/search?tag=luxury">Explore signature gifts</Link>
+            <Link href="/products?tag=luxury">Explore signature gifts</Link>
           </Button>
         </div>
 

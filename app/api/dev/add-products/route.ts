@@ -22,8 +22,8 @@ interface ProductDoc {
   storeId: string;
   minOrderQty?: number;
   maxOrderQty?: number;
-  attributes?: any[];
-  variants?: any[];
+  attributes?: unknown[];
+  variants?: unknown[];
 }
 
 function normalizeInventoryProduct(doc: ProductDoc): ProductDoc {
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   if (process.env.NODE_ENV === "production") {
     return badRequest("This endpoint is only available in development");
   }

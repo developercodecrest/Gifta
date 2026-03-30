@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Gift, Minus, Plus, ShieldCheck, Sparkles, Store, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,13 @@ import { CartSnapshot } from "@/lib/server/cart-service";
 import { formatCurrency } from "@/lib/utils";
 
 export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { status } = useSession();
   const { items, hydrateFromCookie, removeItem, updateQty, setOffer, setVariant, clear } = useCartStore();
+  const [dismissedCheckoutReadyNotice, setDismissedCheckoutReadyNotice] = useState(false);
+  const checkoutReadyParam = searchParams.get("checkoutReady");
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -21,13 +27,14 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
     }
   }, [hydrateFromCookie, status]);
 
-  const keyOf = (productId: string, variantId?: string) => `${productId}::${variantId ?? "default"}`;
-  const quantityById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId), entry.quantity]));
-  const offerById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId), entry.offerId]));
-  const variantById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId), entry.variantId]));
+  const keyOf = (productId: string, variantId?: string, customizationSignature?: string) =>
+    `${productId}::${variantId ?? "default"}::${customizationSignature ?? "base"}`;
+  const quantityById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId, entry.customizationSignature), entry.quantity]));
+  const offerById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId, entry.customizationSignature), entry.offerId]));
+  const variantById = new Map(items.map((entry) => [keyOf(entry.productId, entry.variantId, entry.customizationSignature), entry.variantId]));
 
   const liveLines = snapshot.lines.map((line) => {
-    const lineKey = keyOf(line.product.id, line.selectedVariant?.id);
+    const lineKey = keyOf(line.product.id, line.selectedVariant?.id, line.customizationSignature);
     const liveQty = quantityById.get(lineKey) ?? line.quantity;
     const selectedOffer =
       line.offers.find((offer) => offer.id === offerById.get(lineKey)) ?? line.selectedOffer;
@@ -71,9 +78,35 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const total = subtotal + tax + platformFee;
 
   const hasItems = liveLines.length > 0;
+  const showCheckoutReadyNotice = status === "authenticated" && checkoutReadyParam === "1" && !dismissedCheckoutReadyNotice;
+  const checkoutHref = status === "authenticated"
+    ? "/checkout"
+    : "/auth/sign-in?callbackUrl=%2Fcart%3FcheckoutReady%3D1";
 
   return (
     <div className="space-y-6">
+      {showCheckoutReadyNotice ? (
+        <Card className="rounded-3xl border border-[#e9d3a6] bg-[#fff9ef]">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <p className="text-sm text-[#5f5047]">Signed in successfully. Continue to checkout.</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDismissedCheckoutReadyNotice(true);
+                const nextParams = new URLSearchParams(searchParams.toString());
+                nextParams.delete("checkoutReady");
+                const nextPath = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
+                router.replace(nextPath, { scroll: false });
+              }}
+            >
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <header className="surface-mesh soft-shadow rounded-4xl border border-white/70 p-6 sm:p-8 lg:p-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -110,7 +143,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               const maxQty = line.product.maxOrderQty ?? 10;
 
               return (
-              <Card key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}`} className="glass-panel rounded-4xl border-white/60">
+              <Card key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}-${line.customizationSignature ?? "base"}`} className="glass-panel rounded-4xl border-white/60">
                 <CardContent className="grid grid-cols-[96px_1fr] gap-3 p-3 sm:grid-cols-[128px_minmax(0,1fr)_auto] sm:gap-5 sm:p-5 sm:items-center">
                   <div className="relative aspect-square overflow-hidden rounded-3xl bg-[#fff2e8]">
                     <Image
@@ -130,13 +163,29 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                       <p className="text-sm text-[#5f5047]">Variant: {line.variantLabel}</p>
                     ) : null}
 
+                    {line.customization ? (
+                      <div className="rounded-xl border border-[#e4cf9e] bg-[#fffaf0] px-3 py-2 text-xs text-[#5f5047]">
+                        <p className="font-medium text-[#3c2a25]">Customized item</p>
+                        {line.customization.images?.length ? <p>Images: {line.customization.images.length}</p> : null}
+                        {line.customization.whatsappNumber ? <p>WhatsApp: {line.customization.whatsappNumber}</p> : null}
+                        {line.customization.description ? <p className="line-clamp-2">{line.customization.description}</p> : null}
+                      </div>
+                    ) : null}
+
                     {line.selectedVariant ? (
                       <p className="text-sm text-[#5f5047]">{formatCurrency(line.selectedVariant.salePrice)} each</p>
                     ) : line.offers.length > 0 ? (
                       <select
                         className="app-input-surface min-h-11 w-full rounded-full px-3 py-2 text-sm"
                         value={line.selectedOffer?.id ?? ""}
-                        onChange={(event) => setOffer(line.product.id, event.target.value || undefined, line.selectedVariant?.id)}
+                        onChange={(event) =>
+                          setOffer(
+                            line.product.id,
+                            event.target.value || undefined,
+                            line.selectedVariant?.id,
+                            line.customizationSignature,
+                          )
+                        }
                       >
                         {line.offers.map((offer) => (
                           <option key={offer.id} value={offer.id}>
@@ -154,7 +203,13 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                         value={line.selectedVariant?.id ?? ""}
                         onChange={(event) => {
                           const nextVariant = line.product.variants?.find((variant) => variant.id === event.target.value);
-                          setVariant(line.product.id, nextVariant?.id, nextVariant?.options, line.selectedVariant?.id);
+                          setVariant(
+                            line.product.id,
+                            nextVariant?.id,
+                            nextVariant?.options,
+                            line.selectedVariant?.id,
+                            line.customizationSignature,
+                          );
                         }}
                       >
                         {(line.product.variants ?? []).map((variant) => {
@@ -173,18 +228,46 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
                   <div className="col-span-2 flex flex-col space-y-3 sm:col-span-1 sm:items-end">
                     <div className="inline-flex min-h-11 items-center rounded-full border border-border/70 bg-background/90 px-1">
-                      <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity - 1, minQty, maxQty, line.selectedVariant?.id)} disabled={line.quantity <= minQty}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          updateQty(
+                            line.product.id,
+                            line.quantity - 1,
+                            minQty,
+                            maxQty,
+                            line.selectedVariant?.id,
+                            line.customizationSignature,
+                          )
+                        }
+                        disabled={line.quantity <= minQty}
+                      >
                         <Minus className="h-4 w-4" />
                       </Button>
                       <span className="px-3 text-sm">{line.quantity}</span>
-                      <Button variant="ghost" size="icon" onClick={() => updateQty(line.product.id, line.quantity + 1, minQty, maxQty, line.selectedVariant?.id)} disabled={line.quantity >= maxQty}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          updateQty(
+                            line.product.id,
+                            line.quantity + 1,
+                            minQty,
+                            maxQty,
+                            line.selectedVariant?.id,
+                            line.customizationSignature,
+                          )
+                        }
+                        disabled={line.quantity >= maxQty}
+                      >
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
                     <p className="text-xs text-[#74655c] sm:text-right">Min {minQty} • Max {maxQty}</p>
                     <p className="text-sm font-semibold text-primary sm:text-right">{formatCurrency(line.lineSubtotal)}</p>
                     <Button
-                      onClick={() => removeItem(line.product.id, line.selectedVariant?.id)}
+                      onClick={() => removeItem(line.product.id, line.selectedVariant?.id, line.customizationSignature)}
                       variant="outline"
                       size="sm"
                       className="gap-1 sm:ml-auto"
@@ -261,7 +344,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
             </dl>
 
             <Button asChild className="w-full" disabled={!hasItems}>
-              <Link href={hasItems ? "/checkout" : "/store"}>{hasItems ? "Proceed to checkout" : "Browse products"}</Link>
+              <Link href={hasItems ? checkoutHref : "/store"}>{hasItems ? "Proceed to checkout" : "Browse products"}</Link>
             </Button>
           </CardContent>
         </Card>

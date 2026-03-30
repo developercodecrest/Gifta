@@ -1,4 +1,5 @@
 import { CartItem } from "@/types/ecommerce";
+import { normalizeCartLine } from "@/lib/cart-customization";
 
 export const CART_COOKIE_NAME = "gifta-cart";
 const MAX_COOKIE_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -14,37 +15,7 @@ export function parseCartCookie(value?: string): CartItem[] {
       return [];
     }
 
-    const mapped: Array<CartItem | null> = parsed
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return null;
-        }
-
-        const candidate = entry as Partial<CartItem>;
-        if (typeof candidate.productId !== "string") {
-          return null;
-        }
-
-        const quantity =
-          typeof candidate.quantity === "number" && Number.isFinite(candidate.quantity)
-            ? Math.max(1, Math.floor(candidate.quantity))
-            : 1;
-
-        return {
-          productId: candidate.productId,
-          quantity,
-          offerId: typeof candidate.offerId === "string" ? candidate.offerId : undefined,
-          variantId: typeof candidate.variantId === "string" ? candidate.variantId : undefined,
-          variantOptions:
-            candidate.variantOptions && typeof candidate.variantOptions === "object" && !Array.isArray(candidate.variantOptions)
-              ? Object.fromEntries(
-                  Object.entries(candidate.variantOptions)
-                    .map(([key, value]) => [key.trim(), typeof value === "string" ? value.trim() : ""] as const)
-                    .filter(([key, value]) => Boolean(key) && Boolean(value)),
-                )
-              : undefined,
-        };
-      });
+    const mapped: Array<CartItem | null> = parsed.map((entry) => normalizeCartLine(entry as CartItem));
 
     return mapped.filter((entry): entry is CartItem => entry !== null);
   } catch {
@@ -54,12 +25,16 @@ export function parseCartCookie(value?: string): CartItem[] {
 
 export function serializeCartCookie(items: CartItem[]): string {
   const normalized = items
+    .map((entry) => normalizeCartLine(entry))
+    .filter((entry): entry is CartItem => Boolean(entry))
     .map((entry) => ({
       productId: entry.productId,
-      quantity: Math.max(1, Math.floor(entry.quantity)),
+      quantity: entry.quantity,
       ...(entry.offerId ? { offerId: entry.offerId } : {}),
       ...(entry.variantId ? { variantId: entry.variantId } : {}),
       ...(entry.variantOptions ? { variantOptions: entry.variantOptions } : {}),
+      ...(entry.customization ? { customization: entry.customization } : {}),
+      ...(entry.customizationSignature ? { customizationSignature: entry.customizationSignature } : {}),
     }))
     .slice(0, 50);
 

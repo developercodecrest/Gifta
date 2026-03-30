@@ -1,8 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
-import { categories as globalCategories } from "@/lib/catalog";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { deleteAdminItemScoped, getVendorSummariesScoped, updateAdminItemScoped } from "@/lib/server/ecommerce-service";
-import { ProductAttribute, ProductVariant, ProductVariantUnit } from "@/types/ecommerce";
+import { deleteAdminItemScoped, getMergedCategoryValuesForStoreScoped, updateAdminItemScoped } from "@/lib/server/ecommerce-service";
+import { ProductAttribute, ProductMediaItem, ProductVariant, ProductVariantUnit } from "@/types/ecommerce";
 
 export const runtime = "nodejs";
 
@@ -19,6 +18,7 @@ export async function PATCH(
     const { id } = await context.params;
     const body = (await request.json().catch(() => ({}))) as {
       name?: string;
+      shortDescription?: string;
       description?: string;
       category?: string;
       price?: number;
@@ -26,6 +26,7 @@ export async function PATCH(
       featured?: boolean;
       tags?: string[];
       images?: string[];
+      media?: unknown;
       offerStoreId?: string;
       offerPrice?: number;
       originalPrice?: number;
@@ -37,6 +38,7 @@ export async function PATCH(
 
     if (
       typeof body.name !== "string" &&
+      typeof body.shortDescription !== "string" &&
       typeof body.description !== "string" &&
       typeof body.category !== "string" &&
       typeof body.price !== "number" &&
@@ -44,6 +46,7 @@ export async function PATCH(
       typeof body.featured !== "boolean" &&
       !Array.isArray(body.tags) &&
       !Array.isArray(body.images) &&
+      body.media === undefined &&
       typeof body.offerStoreId !== "string" &&
       typeof body.offerPrice !== "number" &&
       typeof body.originalPrice !== "number" &&
@@ -55,26 +58,25 @@ export async function PATCH(
       return badRequest("Provide at least one valid field to update");
     }
 
+    const parsedMedia = parseMediaInput(body.media);
+    if (parsedMedia.error) {
+      return badRequest(parsedMedia.error);
+    }
+
     const parsedAttributeAndVariant = parseAttributesAndVariants(body.attributes, body.variants);
     if (parsedAttributeAndVariant.error) {
       return badRequest(parsedAttributeAndVariant.error);
     }
 
     if (typeof body.category === "string" && body.category.trim() && typeof body.offerStoreId === "string" && body.offerStoreId.trim()) {
-      const scopedVendors = await getVendorSummariesScoped(identity);
-      const vendor = scopedVendors.find((entry) => entry.id === body.offerStoreId);
-      if (!vendor) {
-        return unauthorized("Not allowed");
-      }
+      const categoryScope = await getMergedCategoryValuesForStoreScoped({
+        storeId: body.offerStoreId,
+        scope: identity,
+      });
 
-      const vendorCategorySet = new Set<string>(
-        vendor.categories.flatMap((entry) => [entry.name, ...entry.subcategories]).map((entry) => entry.trim()).filter(Boolean),
-      );
-      const globalCategorySet = new Set<string>(globalCategories.map((entry) => entry.trim()));
-      const allowedCategories = vendorCategorySet.size ? vendorCategorySet : globalCategorySet;
+      const allowedCategories = new Set<string>(categoryScope.mergedCategoryValues.map((entry) => entry.trim()).filter(Boolean));
       if (!allowedCategories.has(body.category.trim())) {
-        const mode = vendorCategorySet.size ? "vendor" : "global";
-        return badRequest(`Category must match ${mode} category mapping for the selected vendor`);
+        return badRequest("Category must match global or vendor category mapping for the selected vendor");
       }
       body.category = body.category.trim();
     }
@@ -83,6 +85,7 @@ export async function PATCH(
       itemId: id,
       updates: {
         ...body,
+        media: parsedMedia.media,
         attributes: parsedAttributeAndVariant.attributes,
         variants: parsedAttributeAndVariant.variants,
       },
@@ -91,6 +94,9 @@ export async function PATCH(
 
     return ok(updated);
   } catch (error) {
+    if (error instanceof Error && error.message === "FORBIDDEN_STORE_SCOPE") {
+      return unauthorized("Not allowed");
+    }
     if (error instanceof Error && error.message === "FORBIDDEN_ITEM_SCOPE") {
       return unauthorized("Not allowed");
     }
@@ -103,6 +109,48 @@ export async function PATCH(
 
     return serverError("Unable to update item", error);
   }
+}
+
+function parseMediaInput(mediaInput: unknown): {
+  media?: ProductMediaItem[];
+  error?: string;
+} {
+  if (mediaInput === undefined) {
+    return { media: undefined };
+  }
+
+  if (!Array.isArray(mediaInput)) {
+    return { error: "media must be an array" };
+  }
+
+  const media: ProductMediaItem[] = [];
+  for (const entry of mediaInput) {
+    if (!entry || typeof entry !== "object") {
+      return { error: "Each media entry must be an object" };
+    }
+
+    const source = entry as {
+      type?: unknown;
+      url?: unknown;
+      thumbnailUrl?: unknown;
+      alt?: unknown;
+    };
+
+    const type = source.type === "video" ? "video" : source.type === "image" ? "image" : "";
+    const url = typeof source.url === "string" ? source.url.trim() : "";
+    if (!type || !url) {
+      return { error: "Each media entry must include type and url" };
+    }
+
+    media.push({
+      type,
+      url,
+      ...(typeof source.thumbnailUrl === "string" && source.thumbnailUrl.trim() ? { thumbnailUrl: source.thumbnailUrl.trim() } : {}),
+      ...(typeof source.alt === "string" && source.alt.trim() ? { alt: source.alt.trim() } : {}),
+    });
+  }
+
+  return { media };
 }
 
 function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unknown): {

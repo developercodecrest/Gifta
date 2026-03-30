@@ -23,11 +23,27 @@ export type ProductVariant = {
   inStock: boolean;
 };
 
+export type ProductMediaType = "image" | "video";
+
+export type ProductMediaItem = {
+  type: ProductMediaType;
+  url: string;
+  thumbnailUrl?: string;
+  alt?: string;
+};
+
+export type CartItemCustomization = {
+  images?: string[];
+  description?: string;
+  whatsappNumber?: string;
+};
+
 export type Product = {
   id: string;
   storeId?: string;
   slug: string;
   name: string;
+  shortDescription?: string;
   description: string;
   price: number;
   originalPrice?: number;
@@ -35,6 +51,7 @@ export type Product = {
   reviews: number;
   category: Category;
   tags: string[];
+  media?: ProductMediaItem[];
   images: string[];
   inStock: boolean;
   minOrderQty?: number;
@@ -50,4 +67,6 @@ export type CartItem = {
   offerId?: string;
   variantId?: string;
   variantOptions?: Record<string, string>;
+  customization?: CartItemCustomization;
+  customizationSignature?: string;
 };

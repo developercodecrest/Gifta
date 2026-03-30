@@ -1,5 +1,6 @@
 import { getMongoDb } from "@/lib/mongodb";
-import { CartItem, Product, ProductVariant } from "@/types/ecommerce";
+import { resolveCustomizationSignature } from "@/lib/cart-customization";
+import { CartItem, CartItemCustomization, Product, ProductVariant } from "@/types/ecommerce";
 import { OfferDto, StoreDto } from "@/types/api";
 
 type OfferDoc = {
@@ -19,6 +20,8 @@ type CartLine = {
   selectedOffer?: OfferDto;
   selectedVariant?: ProductVariant;
   variantLabel?: string;
+  customization?: CartItemCustomization;
+  customizationSignature?: string;
   lineSubtotal: number;
 };
 
@@ -134,6 +137,10 @@ export async function buildCartSnapshot(items: CartItem[]): Promise<CartSnapshot
           .map(([name, value]) => `${name}: ${value}`)
           .join(" | ")
       : undefined;
+    const normalizedCustomization = resolveCustomizationSignature({
+      customization: item.customization,
+      customizationSignature: item.customizationSignature,
+    });
 
     lines.push({
       product,
@@ -142,6 +149,8 @@ export async function buildCartSnapshot(items: CartItem[]): Promise<CartSnapshot
       selectedOffer,
       selectedVariant,
       variantLabel,
+      customization: normalizedCustomization.customization,
+      customizationSignature: normalizedCustomization.customizationSignature,
       lineSubtotal: linePrice * clampedQty,
     });
   }

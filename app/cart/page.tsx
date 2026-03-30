@@ -8,15 +8,17 @@ import { getUserCart } from "@/lib/server/user-cart-service";
 export default async function CartPage() {
   const session = await auth();
   const userId = session?.user?.id;
+  const cookieStore = await cookies();
+  const cartCookie = cookieStore.get(CART_COOKIE_NAME)?.value;
+  const cookieCartItems = parseCartCookie(cartCookie);
 
   let cartItems = [];
 
   if (userId) {
-    cartItems = await getUserCart(userId).catch(() => []);
+    const userCartItems = await getUserCart(userId).catch(() => []);
+    cartItems = userCartItems.length ? userCartItems : cookieCartItems;
   } else {
-    const cookieStore = await cookies();
-    const cartCookie = cookieStore.get(CART_COOKIE_NAME)?.value;
-    cartItems = parseCartCookie(cartCookie);
+    cartItems = cookieCartItems;
   }
 
   const snapshot = await buildCartSnapshot(cartItems).catch(() => ({

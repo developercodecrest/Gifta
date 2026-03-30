@@ -700,7 +700,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
             <CardContent>
               <ul className="divide-y divide-border">
                 {snapshot.lines.map((line) => (
-                  <li key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}`} className="grid grid-cols-[50px_1fr_auto] items-center gap-3 py-3">
+                  <li key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}-${line.customizationSignature ?? "base"}`} className="grid grid-cols-[50px_1fr_auto] items-center gap-3 py-3">
                     <div className="relative h-12 w-12 overflow-hidden rounded-md border border-border">
                       <Image src={line.product.images[0]} alt={line.product.name} fill className="object-cover" sizes="48px" />
                     </div>
@@ -709,6 +709,12 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                       <p className="text-xs text-[#74655c]">
                         {line.variantLabel ? `Variant: ${line.variantLabel}` : (line.selectedOffer?.store?.name ?? "Gifta Marketplace")}
                       </p>
+                      {line.customization ? (
+                        <p className="mt-1 text-[11px] text-[#74655c]">
+                          Customized • {line.customization.images?.length ?? 0} image{(line.customization.images?.length ?? 0) === 1 ? "" : "s"}
+                          {line.customization.whatsappNumber ? ` • ${line.customization.whatsappNumber}` : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold">{formatCurrency(line.lineSubtotal)}</p>

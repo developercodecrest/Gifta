@@ -2,18 +2,41 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Heart, Minus, Plus, ShoppingCart, Star, Store } from "lucide-react";
+import { Heart, Minus, Play, Plus, ShoppingCart, Star, Store } from "lucide-react";
 import { Product } from "@/types/ecommerce";
 import { ProductListItemDto } from "@/types/api";
 import { formatCurrency } from "@/lib/utils";
 import { useWishlistStore } from "@/features/wishlist/store";
 import { useCartStore } from "@/features/cart/store";
+import { getCartLineIdentity } from "@/lib/cart-customization";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 type ProductCardData = Product | ProductListItemDto;
+
+function inferMediaTypeFromUrl(url: string): "image" | "video" {
+  const normalized = url.trim().toLowerCase();
+  if (normalized.includes("/video/upload/") || /\.(mp4|webm|mov|mkv|m4v)(\?|$)/i.test(normalized)) {
+    return "video";
+  }
+  return "image";
+}
+
+function deriveCloudinaryVideoThumbnail(url: string) {
+  if (!url.includes("res.cloudinary.com") || !url.includes("/video/upload/")) {
+    return undefined;
+  }
+
+  const [base, query = ""] = url.split("?");
+  const withFrame = base.replace("/video/upload/", "/video/upload/so_0/");
+  const asImage = /\.[a-z0-9]+$/i.test(withFrame)
+    ? withFrame.replace(/\.[a-z0-9]+$/i, ".jpg")
+    : `${withFrame}.jpg`;
+
+  return query ? `${asImage}?${query}` : asImage;
+}
 
 export function ProductCard({ product }: { product: ProductCardData }) {
   const { items, addItem, updateQty } = useCartStore();
@@ -36,19 +59,40 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const minQty = product.minOrderQty ?? 1;
   const maxQty = product.maxOrderQty ?? 10;
   const outOfStock = !product.inStock || maxQty === 0;
-  const existing = items.find((item) => item.productId === product.id);
+  const firstMedia = product.media?.[0] ?? {
+    type: inferMediaTypeFromUrl(product.images[0] ?? ""),
+    url: product.images[0],
+    thumbnailUrl: product.images[0],
+  };
+  const mediaPreview = firstMedia.type === "video"
+    ? (firstMedia.thumbnailUrl || deriveCloudinaryVideoThumbnail(firstMedia.url) || product.images[0])
+    : firstMedia.url;
+
+  const baseLineIdentity = getCartLineIdentity({
+    productId: product.id,
+    variantId: undefined,
+    customizationSignature: undefined,
+  });
+  const existing = items.find((item) => getCartLineIdentity(item) === baseLineIdentity);
   const currentQty = existing?.quantity ?? 0;
 
   return (
     <Card className="group glass-panel flex h-full flex-col overflow-hidden rounded-[1.45rem] border-white/60 shadow-[0_20px_46px_-36px_rgba(67,34,29,0.42)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_60px_-38px_rgba(67,34,29,0.52)]">
       <Link href={`/store/${product.slug}`} className="relative block aspect-4/3 w-full shrink-0 overflow-hidden bg-[#f8ede5]">
         <Image
-          src={product.images[0]}
+          src={mediaPreview}
           alt={product.name}
           fill
           className="object-cover transition duration-700 group-hover:scale-110"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
         />
+        {firstMedia.type === "video" ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white">
+              <Play className="h-4 w-4" />
+            </span>
+          </div>
+        ) : null}
         <div className="absolute inset-x-0 top-0 h-20 bg-linear-to-b from-black/28 to-transparent" />
         <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1">
           {product.featured && <Badge className="text-[10px]">Featured</Badge>}
@@ -110,11 +154,11 @@ export function ProductCard({ product }: { product: ProductCardData }) {
         ) : existing ? (
           <div className="space-y-2">
             <div className="inline-flex min-h-10 w-full items-center justify-between rounded-full border border-border/70 bg-background/90 px-1">
-              <Button variant="ghost" size="icon" onClick={() => updateQty(product.id, currentQty - 1, minQty, maxQty)} disabled={currentQty <= minQty}>
+              <Button variant="ghost" size="icon" onClick={() => updateQty(product.id, currentQty - 1, minQty, maxQty, undefined, undefined)} disabled={currentQty <= minQty}>
                 <Minus className="h-3.5 w-3.5" />
               </Button>
               <span className="px-2 text-sm font-medium">{currentQty}</span>
-              <Button variant="ghost" size="icon" onClick={() => updateQty(product.id, currentQty + 1, minQty, maxQty)} disabled={currentQty >= maxQty}>
+              <Button variant="ghost" size="icon" onClick={() => updateQty(product.id, currentQty + 1, minQty, maxQty, undefined, undefined)} disabled={currentQty >= maxQty}>
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>

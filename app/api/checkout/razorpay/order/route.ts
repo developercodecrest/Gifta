@@ -105,10 +105,22 @@ export async function POST(request: Request) {
   const identity = await resolveRequestIdentity(request);
   const userId = identity?.userId;
 
+  if (!userId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Sign in is required to continue checkout.",
+        },
+      },
+      { status: 401 },
+    );
+  }
+
   let cartItems = [];
-  if (userId) {
-    cartItems = await getUserCart(userId).catch(() => []);
-  } else {
+  cartItems = await getUserCart(userId).catch(() => []);
+  if (!cartItems.length) {
     const cookieStore = await cookies();
     const cartCookie = cookieStore.get(CART_COOKIE_NAME)?.value;
     cartItems = parseCartCookie(cartCookie);
@@ -238,6 +250,8 @@ export async function POST(request: Request) {
     deliveryFee: shipping,
     shippingProvider: "delhivery",
     shippingProviderStatus: "pending-payment",
+    customization: line.customization,
+    customizationSignature: line.customizationSignature,
     shippingPackage: {
       ...basePackage,
       quantity: Math.max(1, line.quantity),

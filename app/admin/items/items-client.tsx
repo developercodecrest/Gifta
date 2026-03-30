@@ -21,7 +21,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AdminEmptyState, AdminSection } from "@/app/admin/_components/admin-surface";
 import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
-import { VendorSummaryDto } from "@/types/api";
+import { ProductMediaItem } from "@/types/ecommerce";
+import { StoreCategoryOption, VendorSummaryDto } from "@/types/api";
 
 type AdminItemOffer = {
   id: string;
@@ -52,9 +53,11 @@ type AdminItem = {
   id: string;
   name: string;
   slug: string;
+  shortDescription?: string;
   description: string;
   category: string;
   tags: string[];
+  media?: ProductMediaItem[];
   images: string[];
   featured?: boolean;
   inStock: boolean;
@@ -101,13 +104,64 @@ function createSlugPreview(value: string) {
 function parseImageLines(value: string) {
   return value.split("\n").map((entry) => entry.trim()).filter(Boolean);
 }
+
+function inferMediaTypeFromUrl(url: string): "image" | "video" {
+  const normalized = url.trim().toLowerCase();
+  if (normalized.includes("/video/upload/")) {
+    return "video";
+  }
+  if (/\.(mp4|webm|mov|mkv|m4v)(\?|$)/i.test(normalized)) {
+    return "video";
+  }
+  return "image";
+}
+
+function deriveCloudinaryVideoThumbnail(url: string) {
+  if (!url.includes("res.cloudinary.com") || !url.includes("/video/upload/")) {
+    return undefined;
+  }
+
+  const [base, query = ""] = url.split("?");
+  const withFrame = base.replace("/video/upload/", "/video/upload/so_0/");
+  const asImage = /\.[a-z0-9]+$/i.test(withFrame)
+    ? withFrame.replace(/\.[a-z0-9]+$/i, ".jpg")
+    : `${withFrame}.jpg`;
+
+  return query ? `${asImage}?${query}` : asImage;
+}
+
+function toMediaInputLines(media: ProductMediaItem[] | undefined, images: string[] | undefined) {
+  const urls = Array.from(
+    new Set([
+      ...(media ?? []).map((entry) => entry.url.trim()),
+      ...((images ?? []).map((entry) => entry.trim())),
+    ].filter(Boolean)),
+  );
+
+  return urls.join("\n");
+}
+
+function parseMediaInputLines(value: string): ProductMediaItem[] {
+  const urls = parseImageLines(value);
+  return urls.map((url) => {
+    const type = inferMediaTypeFromUrl(url);
+    return {
+      type,
+      url,
+      ...(type === "video" ? { thumbnailUrl: deriveCloudinaryVideoThumbnail(url) } : {}),
+    };
+  });
+}
+
 export function ItemsClient({
   items,
   vendors,
+  globalCategories,
   lockedStoreId,
 }: {
   items: AdminItem[];
   vendors: VendorSummaryDto[];
+  globalCategories: StoreCategoryOption[];
   lockedStoreId?: string;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("overview");
@@ -121,14 +175,15 @@ export function ItemsClient({
 
   const categories = useMemo(() => {
     const itemCategories = items.map((item) => item.category).filter(Boolean);
-    if (!lockedVendor) {
-      return Array.from(new Set(itemCategories)).sort();
-    }
+    const globalCategoryValues = globalCategories.flatMap((entry) => [entry.name, ...entry.subcategories]).filter(Boolean);
+    const vendorCategoryValues = lockedVendor
+      ? lockedVendor.categories.flatMap((entry) => [entry.name, ...entry.subcategories]).filter(Boolean)
+      : [];
 
-    const vendorCategories = lockedVendor.categories.flatMap((entry) => [entry.name, ...entry.subcategories]).filter(Boolean);
-    const source = vendorCategories.length ? vendorCategories : itemCategories;
-    return Array.from(new Set(source)).sort();
-  }, [items, lockedVendor]);
+    return Array.from(
+      new Set([...globalCategoryValues, ...vendorCategoryValues, ...itemCategories].map((entry) => entry.trim()).filter(Boolean)),
+    ).sort((left, right) => left.localeCompare(right));
+  }, [globalCategories, items, lockedVendor]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -225,7 +280,7 @@ export function ItemsClient({
                         <td className="px-3 py-3 text-[#5f5047]">{item.minOrderQty ?? 1} to {item.maxOrderQty ?? 10}</td>
                         <td className="px-3 py-3">
                           <div className="flex justify-end">
-                            <ItemRowActions item={item} vendors={vendors} />
+                            <ItemRowActions item={item} vendors={vendors} categoryOptions={categories} />
                           </div>
                         </td>
                       </tr>
@@ -262,7 +317,7 @@ export function ItemsClient({
                         {item.bestOffer?.store?.name ?? "No store linked"} • ETA {item.bestOffer?.deliveryEtaHours ?? "--"} hrs
                       </div>
                     </div>
-                    <div className="mt-auto"><ItemRowActions item={item} vendors={vendors} /></div>
+                    <div className="mt-auto"><ItemRowActions item={item} vendors={vendors} categoryOptions={categories} /></div>
                   </CardContent>
                 </Card>
               ))}
@@ -286,7 +341,7 @@ export function ItemsClient({
                           <Badge variant="outline">{item.offerCount} linked offers</Badge>
                         </div>
                       </div>
-                      <ItemRowActions item={item} vendors={vendors} />
+                      <ItemRowActions item={item} vendors={vendors} categoryOptions={categories} />
                     </div>
 
                     <div className="grid gap-2.5 md:grid-cols-2">
@@ -327,11 +382,15 @@ function CreateItemDialog({
   categoryOptions: string[];
 }) {
   const router = useRouter();
-  const safeCategoryOptions = categoryOptions.length ? categoryOptions : ["Birthday"];
+  const safeCategoryOptions = useMemo(() => {
+    const normalized = Array.from(new Set(categoryOptions.map((entry) => entry.trim()).filter(Boolean)));
+    return normalized.length ? normalized.sort((left, right) => left.localeCompare(right)) : ["Birthday"];
+  }, [categoryOptions]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState(safeCategoryOptions[0] ?? vendors[0]?.primaryCategory ?? "Birthday");
   const [storeId, setStoreId] = useState(lockedStoreId ?? vendors[0]?.id ?? "");
+  const [shortDescription, setShortDescription] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("1000");
   const [originalPrice, setOriginalPrice] = useState("1200");
@@ -339,8 +398,8 @@ function CreateItemDialog({
   const [minOrderQty, setMinOrderQty] = useState("1");
   const [maxOrderQty, setMaxOrderQty] = useState("10");
   const [tags, setTags] = useState("gift, premium");
-  const [images, setImages] = useState("");
-  const [imageUploadProgress, setImageUploadProgress] = useState(0);
+  const [mediaInput, setMediaInput] = useState("");
+  const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
   const [attributeRows, setAttributeRows] = useState<AttributeInputRow[]>([{ id: makeLocalId("attr"), name: "", value: "" }]);
   const [variantRows, setVariantRows] = useState<VariantInputRow[]>([]);
   const [featured, setFeatured] = useState(false);
@@ -348,24 +407,25 @@ function CreateItemDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const imageList = useMemo(() => parseImageLines(images), [images]);
+  const mediaList = useMemo(() => parseMediaInputLines(mediaInput), [mediaInput]);
 
-  const uploadItemImage = async (file: File) => {
+  const uploadItemMedia = async (file: File) => {
     setError(null);
     try {
+      const resourceType = file.type.startsWith("video/") ? "video" : "image";
       const url = await uploadFileToCloudinary(file, {
         folder: "gifta/items",
-        resourceType: "image",
-        onProgress: setImageUploadProgress,
+        resourceType,
+        onProgress: setMediaUploadProgress,
       });
 
-      setImages((current) => {
+      setMediaInput((current) => {
         const next = [...parseImageLines(current), url];
         return next.join("\n");
       });
-      setImageUploadProgress(100);
+      setMediaUploadProgress(100);
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload image");
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload media");
     }
   };
   const attributeDefinitions = useMemo(() => getAttributeDefinitions(attributeRows), [attributeRows]);
@@ -401,6 +461,7 @@ function CreateItemDialog({
         body: JSON.stringify({
           storeId,
           name,
+          shortDescription,
           category,
           description,
           price: Number(price) || 0,
@@ -409,7 +470,7 @@ function CreateItemDialog({
           minOrderQty: Number(minOrderQty) || 1,
           maxOrderQty: Number(maxOrderQty) || 10,
           tags: tags.split(",").map((entry) => entry.trim()).filter(Boolean),
-          images: images.split("\n").map((entry) => entry.trim()).filter(Boolean),
+          media: parseMediaInputLines(mediaInput),
           featured,
           inStock,
           attributes: attributeDefinitions,
@@ -445,6 +506,7 @@ function CreateItemDialog({
 
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Item name"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Rose celebration hamper" /></Field>
+          <Field label="Short description"><Input value={shortDescription} onChange={(event) => setShortDescription(event.target.value)} placeholder="A concise one-line product summary" /></Field>
           <Field label="Slug preview"><div className="min-h-11 rounded-full border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">/{createSlugPreview(name) || "generated-from-name"}</div></Field>
           <Field label="Category">
             <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
@@ -676,36 +738,37 @@ function CreateItemDialog({
           </div>
 
           <div className="space-y-2 md:col-span-2">
-            <Label>Image URLs (one per line)</Label>
-            <textarea value={images} onChange={(event) => setImages(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" placeholder="https://..." />
+            <Label>Media URLs (images/videos, one per line)</Label>
+            <textarea value={mediaInput} onChange={(event) => setMediaInput(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" placeholder="https://..." />
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/30">
-              <UploadCloud className="h-3.5 w-3.5" /> Upload image
+              <UploadCloud className="h-3.5 w-3.5" /> Upload media
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
-                  void uploadItemImage(file);
+                  void uploadItemMedia(file);
                   event.currentTarget.value = "";
                 }}
               />
             </label>
             <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-              <div className="h-full bg-primary transition-all" style={{ width: `${imageUploadProgress}%` }} />
+              <div className="h-full bg-primary transition-all" style={{ width: `${mediaUploadProgress}%` }} />
             </div>
-            {imageList.length ? (
+            {mediaList.length ? (
               <div className="grid gap-2 sm:grid-cols-3">
-                {imageList.map((url) => (
-                  <div key={url} className="relative overflow-hidden rounded-xl border border-border">
+                {mediaList.map((entry) => (
+                  <div key={`${entry.type}-${entry.url}`} className="relative overflow-hidden rounded-xl border border-border">
                     <div className="relative h-24 w-full bg-muted/20">
-                      <Image src={url} alt="Item image" fill className="object-cover" sizes="160px" />
+                      <Image src={entry.type === "video" ? (entry.thumbnailUrl || entry.url) : entry.url} alt="Item media" fill className="object-cover" sizes="160px" />
+                      {entry.type === "video" ? <div className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">VIDEO</div> : null}
                     </div>
                     <button
                       type="button"
                       className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
-                      onClick={() => setImages((current) => parseImageLines(current).filter((entry) => entry !== url).join("\n"))}
+                      onClick={() => setMediaInput((current) => parseImageLines(current).filter((url) => url !== entry.url).join("\n"))}
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -737,7 +800,15 @@ function CreateItemDialog({
   );
 }
 
-function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSummaryDto[] }) {
+function ItemRowActions({
+  item,
+  vendors,
+  categoryOptions,
+}: {
+  item: AdminItem;
+  vendors: VendorSummaryDto[];
+  categoryOptions: string[];
+}) {
   const router = useRouter();
   const [viewOpen, setViewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -745,10 +816,11 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
 
   const [name, setName] = useState(item.name);
   const [category, setCategory] = useState(item.category);
+  const [shortDescription, setShortDescription] = useState(item.shortDescription ?? "");
   const [description, setDescription] = useState(item.description);
   const [tags, setTags] = useState((item.tags ?? []).join(", "));
-  const [images, setImages] = useState((item.images ?? []).join("\n"));
-  const [imageUploadProgress, setImageUploadProgress] = useState(0);
+  const [mediaInput, setMediaInput] = useState(() => toMediaInputLines(item.media, item.images));
+  const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
   const [attributeRows, setAttributeRows] = useState<AttributeInputRow[]>(() => toAttributeRows(item.attributes));
   const [variantRows, setVariantRows] = useState<VariantInputRow[]>(() => toVariantRows(item.variants));
   const [featured, setFeatured] = useState(Boolean(item.featured));
@@ -774,24 +846,29 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const imageList = useMemo(() => parseImageLines(images), [images]);
+  const safeCategoryOptions = useMemo(() => {
+    return Array.from(new Set([item.category, ...categoryOptions].map((entry) => entry.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+  }, [categoryOptions, item.category]);
 
-  const uploadItemImage = async (file: File) => {
+  const mediaList = useMemo(() => parseMediaInputLines(mediaInput), [mediaInput]);
+
+  const uploadItemMedia = async (file: File) => {
     setError(null);
     try {
+      const resourceType = file.type.startsWith("video/") ? "video" : "image";
       const url = await uploadFileToCloudinary(file, {
         folder: "gifta/items",
-        resourceType: "image",
-        onProgress: setImageUploadProgress,
+        resourceType,
+        onProgress: setMediaUploadProgress,
       });
 
-      setImages((current) => {
+      setMediaInput((current) => {
         const next = [...parseImageLines(current), url];
         return next.join("\n");
       });
-      setImageUploadProgress(100);
+      setMediaUploadProgress(100);
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload image");
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload media");
     }
   };
   const attributeDefinitions = useMemo(() => getAttributeDefinitions(attributeRows), [attributeRows]);
@@ -836,13 +913,14 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
+          shortDescription,
           description,
           category,
           price: Number(offerPrice) || 0,
           inStock: productInStock,
           featured,
           tags: tags.split(",").map((entry) => entry.trim()).filter(Boolean),
-          images: images.split("\n").map((entry) => entry.trim()).filter(Boolean),
+          media: parseMediaInputLines(mediaInput),
           offerStoreId,
           offerPrice: Number(offerPrice) || 0,
           originalPrice: Number(originalPrice) || 0,
@@ -1005,39 +1083,47 @@ function ItemRowActions({ item, vendors }: { item: AdminItem; vendors: VendorSum
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Item name"><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
-            <Field label="Category"><Input value={category} onChange={(event) => setCategory(event.target.value)} /></Field>
+            <Field label="Short description"><Input value={shortDescription} onChange={(event) => setShortDescription(event.target.value)} /></Field>
+            <Field label="Category">
+              <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+                {safeCategoryOptions.map((entry) => (
+                  <option key={entry} value={entry}>{entry}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Tags (comma separated)"><Input value={tags} onChange={(event) => setTags(event.target.value)} /></Field>
             <div className="space-y-2">
-              <Label>Images (one per line)</Label>
-              <textarea value={images} onChange={(event) => setImages(event.target.value)} rows={3} className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" />
+              <Label>Media URLs (images/videos)</Label>
+              <textarea value={mediaInput} onChange={(event) => setMediaInput(event.target.value)} rows={3} className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" />
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/30">
-                <UploadCloud className="h-3.5 w-3.5" /> Upload image
+                <UploadCloud className="h-3.5 w-3.5" /> Upload media
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) return;
-                    void uploadItemImage(file);
+                    void uploadItemMedia(file);
                     event.currentTarget.value = "";
                   }}
                 />
               </label>
               <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                <div className="h-full bg-primary transition-all" style={{ width: `${imageUploadProgress}%` }} />
+                <div className="h-full bg-primary transition-all" style={{ width: `${mediaUploadProgress}%` }} />
               </div>
-              {imageList.length ? (
+              {mediaList.length ? (
                 <div className="grid gap-2 sm:grid-cols-3">
-                  {imageList.map((url) => (
-                    <div key={url} className="relative overflow-hidden rounded-xl border border-border">
+                  {mediaList.map((entry) => (
+                    <div key={`${entry.type}-${entry.url}`} className="relative overflow-hidden rounded-xl border border-border">
                       <div className="relative h-24 w-full bg-muted/20">
-                        <Image src={url} alt="Item image" fill className="object-cover" sizes="160px" />
+                        <Image src={entry.type === "video" ? (entry.thumbnailUrl || entry.url) : entry.url} alt="Item media" fill className="object-cover" sizes="160px" />
+                        {entry.type === "video" ? <div className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">VIDEO</div> : null}
                       </div>
                       <button
                         type="button"
                         className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
-                        onClick={() => setImages((current) => parseImageLines(current).filter((entry) => entry !== url).join("\n"))}
+                        onClick={() => setMediaInput((current) => parseImageLines(current).filter((url) => url !== entry.url).join("\n"))}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
