@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { HeroSlider } from "@/components/home/hero-slider";
-import { GiftCategoryHeroSection } from "@/components/home/gift-category-icons";
+import { GiftCategoryHeroSection, type HomeCategoryTile } from "@/components/home/gift-category-icons";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
-import { getHomeData } from "@/lib/server/ecommerce-service";
+import { getGlobalCategoryOptions, getHomeData } from "@/lib/server/ecommerce-service";
 import { Play } from "lucide-react";
 import QRCode from "qrcode";
 import type { ProductListItemDto } from "@/types/api";
@@ -74,92 +74,6 @@ const demoBestSeller = createDemoProduct({
   image: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=1200&q=80",
 });
 
-const popularCategoryProducts: ProductListItemDto[] = [
-  createDemoProduct({
-    id: "demo-category-birthday-bloom-box",
-    slug: "birthday-bloom-box",
-    name: "Birthday Bloom Box",
-    description: "Fresh florals, gourmet treats, and a bright note card packed for joyful birthday surprises.",
-    price: 1299,
-    originalPrice: 1599,
-    rating: 4.7,
-    reviews: 164,
-    category: "Birthday",
-    tags: ["birthday", "flowers", "same-day"],
-    image: "https://images.unsplash.com/photo-1518895949257-7621c3c786d7?auto=format&fit=crop&w=1200&q=80",
-  }),
-  createDemoProduct({
-    id: "demo-category-anniversary-memory-trunk",
-    slug: "anniversary-memory-trunk",
-    name: "Anniversary Memory Trunk",
-    description: "A romantic keepsake trunk with artisan chocolates and a premium card for meaningful moments.",
-    price: 1899,
-    originalPrice: 2299,
-    rating: 4.9,
-    reviews: 208,
-    category: "Anniversary",
-    tags: ["anniversary", "romantic", "premium"],
-    image: "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=1200&q=80",
-    deliveryEtaHours: 8,
-  }),
-  createDemoProduct({
-    id: "demo-category-wedding-blessing-hamper",
-    slug: "wedding-blessing-hamper",
-    name: "Wedding Blessing Hamper",
-    description: "An elegant wedding hamper with celebratory sweets, decor accents, and blessing cards.",
-    price: 2499,
-    originalPrice: 2999,
-    rating: 4.8,
-    reviews: 141,
-    category: "Wedding",
-    tags: ["wedding", "luxury", "celebration"],
-    image: "https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=1200&q=80",
-    deliveryEtaHours: 12,
-  }),
-  createDemoProduct({
-    id: "demo-category-festive-saffron-treasure-box",
-    slug: "festive-saffron-treasure-box",
-    name: "Festive Saffron Treasure Box",
-    description: "A festive curation of sweets, dry fruits, and saffron-toned keepsakes for seasonal gifting.",
-    price: 1799,
-    originalPrice: 2199,
-    rating: 4.8,
-    reviews: 176,
-    category: "Festive",
-    tags: ["festive", "family", "premium"],
-    image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1200&q=80",
-    deliveryEtaHours: 10,
-  }),
-  createDemoProduct({
-    id: "demo-category-corporate-signature-desk-box",
-    slug: "corporate-signature-desk-box",
-    name: "Corporate Signature Desk Box",
-    description: "A polished desk-ready gift set with premium snacks, a notebook, and executive finishing details.",
-    price: 2099,
-    originalPrice: 2599,
-    rating: 4.7,
-    reviews: 98,
-    category: "Corporate",
-    tags: ["corporate", "executive", "premium"],
-    image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
-    deliveryEtaHours: 14,
-  }),
-  createDemoProduct({
-    id: "demo-category-self-care-moonlight-retreat",
-    slug: "self-care-moonlight-retreat",
-    name: "Self Care Moonlight Retreat",
-    description: "A calming self-care box with candles, tea, bath essentials, and wellness treats.",
-    price: 1399,
-    originalPrice: 1699,
-    rating: 4.8,
-    reviews: 156,
-    category: "Self Care",
-    tags: ["self-care", "wellness", "relaxation"],
-    image: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=1200&q=80",
-    deliveryEtaHours: 9,
-  }),
-];
-
 const testimonials = [
   {
     id: "testimonial-1",
@@ -212,16 +126,83 @@ export default async function Home() {
   let featured: ProductListItemDto[] = [];
   let arrivals: ProductListItemDto[] = [];
 
-  try {
-    const homeData = await getHomeData();
+  const [homeData, globalCategoryOptions] = await Promise.all([
+    getHomeData().catch(() => null),
+    getGlobalCategoryOptions().catch(() => []),
+  ]);
+
+  if (homeData) {
     featured = homeData.featured;
     arrivals = homeData.topRated;
-  } catch {
-    featured = [];
-    arrivals = [];
   }
 
   const leadProducts = (featured.length ? featured : arrivals).slice(0, 8);
+  const categoryImageFallbackByName = new Map<string, string>();
+  const categoryNameByKey = new Map<string, string>();
+  for (const item of [...featured, ...arrivals]) {
+    const categoryName = item.category.trim().toLowerCase();
+    const image = item.images[0]?.trim();
+    if (!categoryName) {
+      continue;
+    }
+
+    if (!categoryNameByKey.has(categoryName)) {
+      categoryNameByKey.set(categoryName, item.category.trim());
+    }
+
+    if (!image || categoryImageFallbackByName.has(categoryName)) {
+      continue;
+    }
+
+    categoryImageFallbackByName.set(categoryName, image);
+  }
+
+  const productCategoryKeys = new Set(categoryNameByKey.keys());
+  const categoryTilesByKey = new Map<string, HomeCategoryTile>();
+  const categoryCandidates = globalCategoryOptions
+    .map((entry) => ({
+      name: entry.name.trim(),
+      image: entry.image?.trim() || "",
+    }))
+    .filter((entry) => productCategoryKeys.has(entry.name.toLowerCase()));
+
+  // If category settings are empty, fall back to categories already present in DB products.
+  if (!categoryCandidates.length) {
+    for (const [key, name] of categoryNameByKey.entries()) {
+      categoryCandidates.push({
+        name,
+        image: categoryImageFallbackByName.get(key) || "",
+      });
+    }
+  }
+
+  for (const category of categoryCandidates) {
+    const name = category.name.trim();
+    if (!name) {
+      continue;
+    }
+
+    const key = name.toLowerCase();
+    const fallbackImage = categoryImageFallbackByName.get(key);
+    const image = category.image || fallbackImage;
+    const existing = categoryTilesByKey.get(key);
+
+    if (!existing) {
+      categoryTilesByKey.set(key, {
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || key,
+        name,
+        href: `/products?category=${encodeURIComponent(name)}`,
+        ...(image ? { image } : {}),
+      });
+      continue;
+    }
+
+    if (!existing.image && image) {
+      existing.image = image;
+    }
+  }
+
+  const homepageCategories = Array.from(categoryTilesByKey.values());
   const bestSellerProducts = leadProducts.some((item) => item.id === demoBestSeller.id)
     ? leadProducts
     : [...leadProducts, demoBestSeller];
@@ -245,45 +226,7 @@ export default async function Home() {
         <HeroSlider />
       </section>
 
-      <GiftCategoryHeroSection />
-
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Choose by occasion</p>
-            <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Popular categories</h2>
-          </div>
-          <Button  variant="outline">
-            <Link href="/products">Browse all categories</Link>
-          </Button>
-        </div>
-
-        <div className="rounded-4xl border border-[rgba(201,160,122,0.24)] bg-[linear-gradient(180deg,rgba(255,251,246,0.98),rgba(248,238,228,0.94))] px-3 py-5 shadow-[0_28px_65px_-50px_rgba(88,52,24,0.4)] sm:px-4 lg:px-5">
-          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-between sm:gap-4 lg:gap-3">
-            {popularCategoryProducts.map((item) => (
-              <div key={item.id} className="min-w-24 shrink-0 snap-start text-center sm:min-w-0 sm:flex-1">
-                <Link href={`/store/${item.slug}`} className="group flex flex-col items-center gap-2.5">
-                  <span className="relative block h-22 w-22 rounded-full bg-[linear-gradient(135deg,rgba(242,213,189,0.92),rgba(255,246,238,0.98))] p-1 shadow-[0_18px_34px_-24px_rgba(78,42,26,0.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_24px_40px_-24px_rgba(78,42,26,0.52)] sm:h-24 sm:w-24 lg:h-28 lg:w-28">
-                    <span className="relative block h-full w-full overflow-hidden rounded-full border border-white/80 bg-[#f6e6d6]">
-                      <Image
-                        src={item.images[0]}
-                        alt={item.category}
-                        fill
-                        className="object-cover transition duration-500 group-hover:scale-110"
-                        sizes="(max-width: 640px) 96px, (max-width: 1024px) 112px, 128px"
-                      />
-                    </span>
-                  </span>
-
-                  <p className="text-sm font-medium leading-none text-foreground transition group-hover:text-primary sm:text-[0.95rem] lg:text-base">
-                    {item.category}
-                  </p>
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <GiftCategoryHeroSection categories={homepageCategories} />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">

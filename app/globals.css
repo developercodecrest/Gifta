@@ -215,6 +215,39 @@ h4 {
   color: #4b3412;
 }
 
+.gc-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.gc-title {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.024em;
+  line-height: 1.08;
+}
+
+.gc-copy {
+  color: #5f5047;
+  line-height: 1.7;
+}
+
+.gc-tag {
+  border: 1px solid #e4c79d;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #5f4424;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0.48rem 0.78rem;
+  text-transform: uppercase;
+}
+
 .animate-rise {
   animation: rise-in 700ms ease both;
 }

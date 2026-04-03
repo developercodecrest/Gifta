@@ -459,7 +459,7 @@ export type SearchMeta = {
 export type HomePayload = {
   featured: ProductListItemDto[];
   topRated: ProductListItemDto[];
-  categories: Category[];
+  categories: string[];
 };
 
 export type AdminDashboardPayload = {

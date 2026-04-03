@@ -148,27 +148,27 @@ export function HeroSlider() {
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_22%,rgba(7,4,6,0.44)_100%)]" />
 
       <div className="relative z-20 flex min-h-120 flex-col justify-end px-(--page-gutter) py-10 sm:min-h-148 sm:py-12 lg:min-h-140 lg:py-16 pb-12 sm:pb-16 lg:pb-20 transition-all">
-        <article className="animate-rise relative z-30 max-w-3xl space-y-6">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/88 backdrop-blur-md">
+        <article className="animate-rise relative z-30 max-w-3xl space-y-5 sm:space-y-6">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/88 backdrop-blur-md">
             <Sparkles className="h-3.5 w-3.5 text-[#ffc38f]" />
             {active.eyebrow}
           </span>
-          {/* <h1 className="font-display text-4xl leading-[0.98] text-white sm:text-5xl lg:text-6xl">
+          <h1 className="gc-title max-w-3xl text-4xl font-semibold text-white sm:text-5xl lg:text-6xl">
             {active.title}
-          </h1> */}
-          <p className="max-w-2xl text-base font-medium text-white/82 sm:text-lg lg:text-xl">
+          </h1>
+          <p className="max-w-2xl text-sm font-medium leading-relaxed text-white/84 sm:text-base lg:text-lg">
             {active.subtitle}
           </p>
 
           <div className="flex flex-wrap gap-2.5">
             {active.highlights.map((item) => (
-              <span key={item} className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/88 backdrop-blur">
+              <span key={item} className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88 backdrop-blur">
                 {item}
               </span>
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-4 pt-2">
+          <div className="flex flex-wrap gap-3.5 pt-2">
             <Link 
               href={active.ctaHref}
               className="group relative z-30 inline-flex h-14 items-center justify-center overflow-hidden rounded-full bg-linear-to-r from-primary to-primary/90 px-8 font-semibold text-white shadow-lg transition-all hover:scale-[1.01] hover:shadow-xl"

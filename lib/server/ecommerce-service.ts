@@ -1,6 +1,5 @@
 import { ObjectId } from "mongodb";
 import { products as seedProducts } from "@/data/products";
-import { categories } from "@/lib/catalog";
 import { getMongoDb } from "@/lib/mongodb";
 import { ensureAuthUserRole } from "@/lib/server/otp-service";
 import {
@@ -552,13 +551,6 @@ function toNormalizedCategoryValueList(entries: string[] | undefined) {
   return Array.from(new Set(entries.map((entry) => entry.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
 }
 
-function getDefaultGlobalCategoryOptions(): StoreCategoryOption[] {
-  return categories.map((name) => ({
-    name,
-    subcategories: [],
-  }));
-}
-
 function getStoreBasicInfo(details: StoreDoc["details"]) {
   const basicInfo = (details as { basicInfo?: { category?: unknown; subcategory?: unknown } } | undefined)?.basicInfo;
   return {
@@ -703,10 +695,19 @@ export async function getHomeData(): Promise<HomePayload> {
     };
   };
 
+  const rawCategories = await products.distinct("category");
+  const dbCategories = Array.from(
+    new Set(
+      rawCategories
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
   return {
     featured: featuredDocs.map(toListItem),
     topRated: topRatedDocs.map(toListItem),
-    categories: [...categories],
+    categories: dbCategories,
   };
 }
 
@@ -1213,14 +1214,11 @@ export async function getGlobalCategoryOptions() {
 export async function getGlobalCategorySettings(): Promise<GlobalCategorySettingsDto> {
   const { globalCategorySettings } = await getCollections();
   const settings = await globalCategorySettings.findOne({ _id: GLOBAL_CATEGORY_SETTINGS_DOC_ID });
-  const categories = settings?.categories?.length
-    ? toNormalizedStoreCategoryOptions(settings.categories)
-    : getDefaultGlobalCategoryOptions();
-  const fallbackCategories = categories.length ? categories : getDefaultGlobalCategoryOptions();
+  const categories = toNormalizedStoreCategoryOptions(settings?.categories ?? []);
   const customizableCategories = toNormalizedCategoryValueList(settings?.customizableCategories);
 
   return {
-    categories: fallbackCategories,
+    categories,
     customizableCategories,
   };
 }
@@ -1237,7 +1235,7 @@ export async function updateGlobalCategoryOptions(input: {
 }) {
   const { globalCategorySettings } = await getCollections();
   const normalized = toNormalizedStoreCategoryOptions(input.categories ?? []);
-  const categoriesToSave = normalized.length ? normalized : getDefaultGlobalCategoryOptions();
+  const categoriesToSave = normalized;
   const customizableCategories = toNormalizedCategoryValueList(input.customizableCategories);
 
   await globalCategorySettings.updateOne(
