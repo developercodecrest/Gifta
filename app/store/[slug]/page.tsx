@@ -1,16 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Gift, ShieldCheck, Sparkles, Star, Truck } from "lucide-react";
+import { Gift, ShieldCheck, Star, Truck } from "lucide-react";
 import { InlineProductSuggestions } from "@/components/product/inline-product-suggestions";
 import { ProductMediaGallery } from "@/components/product/product-media-gallery";
-import { ProductCard } from "@/components/product/product-card";
 import { ProductContentTabs } from "@/components/product/product-content-tabs";
 import { TrackRecent } from "@/components/product/track-recent";
 import { ProductOrderPanel } from "@/features/cart/ui/product-order-panel";
 import { RecentlyViewed } from "@/features/recent/ui/recently-viewed";
 import { WishlistInlineButton } from "@/features/wishlist/ui/wishlist-inline-button";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/lib/utils";
@@ -47,7 +45,6 @@ export default async function ProductPage({
     ? Math.round(((originalPrice - activePrice) / originalPrice) * 100)
     : 0;
   const tags = Array.from(new Set([currentProduct.category, ...(currentProduct.tags ?? [])])).slice(0, 6);
-  const sku = currentProduct.id.toUpperCase();
   const isCustomizable = customizableCategories.includes(currentProduct.category);
 
   return (
@@ -79,7 +76,7 @@ export default async function ProductPage({
 
           <Card className="glass-panel rounded-4xl border-white/60 soft-shadow">
             <CardContent className="flex flex-col gap-3 p-4 sm:p-5 lg:p-5">
-              <div className="order-1 space-y-2.5">
+              <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="border-0 bg-[#fff1e6] text-[#7b3d15]">{currentProduct.category}</Badge>
                   {tags.slice(1, 4).map((tag) => (
@@ -98,10 +95,10 @@ export default async function ProductPage({
                 <p className="max-w-2xl text-sm text-[#5f5047] sm:text-base">{currentProduct.shortDescription || currentProduct.description}</p>
               </div>
 
-              <div className="order-2 space-y-1.5">
+              <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  {originalPrice ? <span className="text-2xl text-[#74655c] line-through">{formatCurrency(originalPrice)}</span> : null}
-                  <span className="text-4xl font-bold tracking-tight text-primary sm:text-5xl">
+                  {originalPrice ? <span className="text-xl text-[#74655c] line-through">{formatCurrency(originalPrice)}</span> : null}
+                  <span className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
                     {hasVariants ? `From ${formatCurrency(activePrice ?? 0)}` : formatCurrency(activePrice ?? 0)}
                   </span>
                   {discountPercent > 0 ? (
@@ -111,21 +108,10 @@ export default async function ProductPage({
                   ) : null}
                 </div>
                 <p className="text-sm text-[#5f5047]">MRP / Special Price (Tax Included)</p>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="font-medium text-[#e53e3e]">Free Shipping | COD Available</span>
-                  <span className="text-[#74655c]">SKU: {sku}</span>
-                </div>
                 <Separator />
               </div>
 
-              <div className="order-5 grid gap-2 sm:grid-cols-2 md:order-3">
-                <InfoTile icon={Star} label="Ratings" value={`${product?.reviewSummary.averageRating ?? currentProduct.rating} from ${product?.reviewSummary.totalReviews ?? currentProduct.reviews} reviews`} />
-                <InfoTile icon={Truck} label="Delivery" value="24-48 hours in major cities" />
-                <InfoTile icon={Gift} label="Gift finish" value="Premium wrapping on select offers" />
-                <InfoTile icon={ShieldCheck} label="Checkout" value="Verified vendors and secure payment" />
-              </div>
-
-              <div className="order-3 md:order-4">
+              <div>
                 <ProductOrderPanel
                   productId={currentProduct.id}
                   offerId={bestOffer?.id}
@@ -134,13 +120,18 @@ export default async function ProductPage({
                   disabled={!currentProduct.inStock}
                   attributes={currentProduct.attributes}
                   variants={currentProduct.variants}
-                  fallbackPrice={bestOffer?.price ?? currentProduct.price}
-                  fallbackOriginalPrice={bestOffer?.originalPrice ?? currentProduct.originalPrice}
                   customizable={isCustomizable}
                 />
               </div>
 
-              <div className="order-4 md:order-5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <InfoTile icon={Star} label="Ratings" value={`${product?.reviewSummary.averageRating ?? currentProduct.rating} from ${product?.reviewSummary.totalReviews ?? currentProduct.reviews} reviews`} />
+                <InfoTile icon={Truck} label="Delivery" value="24-48 hours in major cities" />
+                <InfoTile icon={Gift} label="Gift finish" value="Premium wrapping on select offers" />
+                <InfoTile icon={ShieldCheck} label="Checkout" value="Verified vendors and secure payment" />
+              </div>
+
+              <div>
                 <InlineProductSuggestions items={related} />
               </div>
             </CardContent>
@@ -159,55 +150,6 @@ export default async function ProductPage({
           brandDetailsHtml={currentProduct.brandDetailsHtml}
           disclaimerHtml={currentProduct.disclaimerHtml}
         />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
-        <Card className="surface-mesh rounded-4xl border-white/60">
-          <CardContent className="p-6 sm:p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Gifting notes</p>
-            <h2 className="font-display mt-3 text-3xl font-semibold">A warmer, more premium single-item page</h2>
-            <p className="mt-3 text-sm text-[#5f5047] sm:text-base">
-              Larger imagery, more expressive typography, and clearer price and delivery cues help the product page feel closer to a luxury gifting destination.
-            </p>
-            <div className="mt-6 grid gap-3">
-              {tags.map((tag) => (
-                <div key={tag} className="flex items-center justify-between rounded-[1.1rem] border border-white/70 bg-white/75 px-4 py-3 text-sm font-medium">
-                  <span>{tag}</span>
-                  <Sparkles className="h-4 w-4 text-primary" />
-                </div>
-              ))}
-            </div>
-            <Button asChild variant="outline" className="mt-6">
-              <Link href="/products">
-                Continue browsing
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card className="glass-panel rounded-4xl border-white/60">
-            <CardContent className="p-6 sm:p-8">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Shipping and Returns</p>
-              <p className="mt-3 text-sm leading-7 text-[#5f5047] sm:text-base">
-                Dispatch usually happens within 24 hours for active offers. Delivery ETA depends on your selected vendor and city. Returns are accepted only for damaged deliveries and must be reported with unboxing proof.
-              </p>
-            </CardContent>
-          </Card>
-
-          <div>
-          <div className="mb-4 flex items-center gap-3">
-            <h2 className="font-display text-3xl font-semibold tracking-tight">You may also like</h2>
-            <Separator className="flex-1" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {related.map((item) => (
-              <ProductCard key={item.id} product={item} />
-            ))}
-          </div>
-          </div>
-        </div>
       </section>
 
       <RecentlyViewed currentId={currentProduct.id} />

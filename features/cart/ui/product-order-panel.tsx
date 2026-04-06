@@ -4,12 +4,12 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useMemo, useState } from "react";
-import { Minus, Plus, ShoppingBag, UploadCloud, Zap, X } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Trash2, UploadCloud, Zap, X } from "lucide-react";
 import { useCartStore } from "@/features/cart/store";
+import { getCartLineIdentity } from "@/lib/cart-customization";
 import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
 import { createCustomizationSignature } from "@/lib/cart-customization";
 import { ProductAttribute, ProductVariant } from "@/types/ecommerce";
-import { formatCurrency } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,6 @@ export function ProductOrderPanel({
   disabled,
   attributes,
   variants,
-  fallbackPrice,
-  fallbackOriginalPrice,
   customizable,
 }: {
   productId: string;
@@ -33,14 +31,14 @@ export function ProductOrderPanel({
   disabled?: boolean;
   attributes?: ProductAttribute[];
   variants?: ProductVariant[];
-  fallbackPrice: number;
-  fallbackOriginalPrice?: number;
   customizable?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const { status } = useSession();
   const addItem = useCartStore((state) => state.addItem);
+  const removeItem = useCartStore((state) => state.removeItem);
+  const items = useCartStore((state) => state.items);
   const hasVariants = (attributes?.length ?? 0) > 0 && (variants?.length ?? 0) > 0;
   const qtyMin = Math.max(1, minQty);
   const qtyMax = Math.max(qtyMin, maxQty);
@@ -75,8 +73,6 @@ export function ProductOrderPanel({
     );
   }, [attributes, hasVariants, selectedOptions, variants]);
 
-  const selectedPrice = selectedVariant?.salePrice ?? (hasVariants ? undefined : fallbackPrice);
-  const selectedOriginalPrice = selectedVariant?.regularPrice ?? (hasVariants ? undefined : fallbackOriginalPrice);
   const outOfStock = disabled || maxQty === 0;
   const variantPending = hasVariants && !selectedVariant;
   const actionDisabled = outOfStock || variantPending;
@@ -97,6 +93,14 @@ export function ProductOrderPanel({
   }, [approvalByEmail, customDescription, customWhatsapp, customImages, giftCard, giftMessage, giftWrap]);
 
   const hasCustomization = Boolean(createCustomizationSignature(customizationPayload));
+  const customizationSignature = hasCustomization ? createCustomizationSignature(customizationPayload) : undefined;
+  const activeLineIdentity = getCartLineIdentity({
+    productId,
+    variantId: selectedVariant?.id,
+    customization: hasCustomization ? customizationPayload : undefined,
+    customizationSignature: customizationSignature,
+  });
+  const lineInCart = items.find((item) => getCartLineIdentity(item) === activeLineIdentity);
 
   const addCurrentSelectionToCart = () => {
     addItem(
@@ -139,6 +143,10 @@ export function ProductOrderPanel({
 
     addCurrentSelectionToCart();
     router.push("/checkout");
+  };
+
+  const handleRemoveFromCart = () => {
+    removeItem(productId, selectedVariant?.id, customizationSignature);
   };
 
   const uploadCustomizationImage = async (file: File) => {
@@ -197,15 +205,6 @@ export function ProductOrderPanel({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-3">
-        <span className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-          {selectedPrice !== undefined ? formatCurrency(selectedPrice) : "Select variant"}
-        </span>
-        {selectedOriginalPrice ? (
-          <span className="pb-1 text-base text-[#74655c] line-through">{formatCurrency(selectedOriginalPrice)}</span>
-        ) : null}
-      </div>
-
       <div className="rounded-3xl border border-[#ddcfc5] bg-white/85 p-3.5">
         <p className="text-sm font-semibold text-foreground">Quantity</p>
         <div className="mt-2 flex items-center justify-between">
@@ -236,12 +235,12 @@ export function ProductOrderPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${lineInCart ? "grid-cols-[1fr_1fr_auto]" : "grid-cols-2"}`}>
         <Button
           type="button"
           onClick={handleAddToCart}
           disabled={actionDisabled}
-          className="h-15 w-full rounded-2xl bg-[#cd9933] text-base font-semibold text-white hover:bg-[#b9882f] disabled:bg-[#cd9933]/60"
+          className="h-[3.56rem] w-full rounded-2xl bg-[#cd9933] text-base font-semibold text-white hover:bg-[#b9882f] disabled:bg-[#cd9933]/60"
         >
           <ShoppingBag className="h-5 w-5" />
           {variantPending ? "Select variant" : outOfStock ? "Out of stock" : "Add to cart"}
@@ -251,11 +250,22 @@ export function ProductOrderPanel({
           type="button"
           onClick={handleOrderNow}
           disabled={actionDisabled}
-          className="h-15 w-full rounded-2xl bg-[#b8872d] text-base font-semibold text-white hover:bg-[#a47728] disabled:bg-[#b8872d]/60"
+          className="h-[3.38rem] w-full rounded-2xl bg-[#b8872d] text-base font-semibold text-white hover:bg-[#a47728] disabled:bg-[#b8872d]/60"
         >
           <Zap className="h-5 w-5" />
           {variantPending ? "Select variant" : outOfStock ? "Out of stock" : "Order now"}
         </Button>
+
+        {lineInCart ? (
+          <button
+            type="button"
+            onClick={handleRemoveFromCart}
+            className="inline-flex h-[3.56rem] w-12 items-center justify-center rounded-2xl border border-[#cf3f3f] bg-[#fff2f2] text-[#cf3f3f] transition hover:bg-[#ffe7e7]"
+            aria-label="Remove current product selection from cart"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+        ) : null}
       </div>
 
       {customizable ? (

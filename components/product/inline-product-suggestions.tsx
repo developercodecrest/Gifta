@@ -3,10 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Plus, Trash2 } from "lucide-react";
 import { ProductListItemDto } from "@/types/api";
 import { Product } from "@/types/ecommerce";
 import { useCartStore } from "@/features/cart/store";
+import { getCartLineIdentity } from "@/lib/cart-customization";
 import { resolveProductImage } from "@/lib/product-image";
 import { formatCurrency } from "@/lib/utils";
 
@@ -15,6 +16,9 @@ const ITEMS_PER_PAGE = 3;
 
 export function InlineProductSuggestions({ items }: { items: SuggestionItem[] }) {
   const addItem = useCartStore((state) => state.addItem);
+  const updateQty = useCartStore((state) => state.updateQty);
+  const removeItem = useCartStore((state) => state.removeItem);
+  const cartItems = useCartStore((state) => state.items);
   const [page, setPage] = useState(0);
 
   const pageCount = useMemo(() => Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE)), [items.length]);
@@ -59,6 +63,9 @@ export function InlineProductSuggestions({ items }: { items: SuggestionItem[] })
           const maxQty = item.maxOrderQty ?? 10;
           const disabled = !item.inStock || maxQty === 0;
           const offerId = "bestOffer" in item ? item.bestOffer?.id : undefined;
+          const lineIdentity = getCartLineIdentity({ productId: item.id, variantId: undefined, customizationSignature: undefined });
+          const existing = cartItems.find((entry) => getCartLineIdentity(entry) === lineIdentity);
+          const quantity = existing?.quantity ?? 0;
 
           return (
             <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-[#d5dbe5] bg-white px-3 py-3">
@@ -87,6 +94,39 @@ export function InlineProductSuggestions({ items }: { items: SuggestionItem[] })
                 >
                   View
                 </Link>
+              ) : existing ? (
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex h-10 items-center rounded-lg border border-[#d5dbe5] bg-white px-1">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#1b2538] hover:bg-[#f2f5fa]"
+                      onClick={() => updateQty(item.id, quantity - 1, minQty, maxQty, undefined, undefined)}
+                      disabled={quantity <= minQty}
+                      aria-label={`Decrease ${item.name} quantity`}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-6 text-center text-sm font-semibold text-[#1b2538]">{quantity}</span>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#1b2538] hover:bg-[#f2f5fa]"
+                      onClick={() => updateQty(item.id, quantity + 1, minQty, maxQty, undefined, undefined)}
+                      disabled={quantity >= maxQty}
+                      aria-label={`Increase ${item.name} quantity`}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#cf3f3f] bg-[#fff2f2] text-[#cf3f3f] hover:bg-[#ffe7e7]"
+                    onClick={() => removeItem(item.id, undefined, undefined)}
+                    aria-label={`Remove ${item.name} from cart`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
