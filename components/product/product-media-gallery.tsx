@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { Play } from "lucide-react";
+import { PRODUCT_IMAGE_FALLBACK, resolveProductImage } from "@/lib/product-image";
 import { ProductMediaItem } from "@/types/ecommerce";
 
 function inferMediaTypeFromUrl(url: string): "image" | "video" {
@@ -31,20 +32,37 @@ function normalizeGalleryItems(media: ProductMediaItem[] | undefined, images: st
   if (media?.length) {
     return media.map((entry) => ({
       ...entry,
-      thumbnailUrl: entry.type === "video" ? (entry.thumbnailUrl || deriveCloudinaryVideoThumbnail(entry.url)) : entry.url,
+      url: entry.type === "video" ? entry.url : resolveProductImage(entry.url),
+      thumbnailUrl: entry.type === "video"
+        ? (entry.thumbnailUrl || deriveCloudinaryVideoThumbnail(entry.url) || PRODUCT_IMAGE_FALLBACK)
+        : resolveProductImage(entry.url),
     }));
   }
 
-  return images
+  const derived = images
     .filter(Boolean)
     .map((url) => {
       const type = inferMediaTypeFromUrl(url);
       return {
         type,
-        url,
-        ...(type === "video" ? { thumbnailUrl: deriveCloudinaryVideoThumbnail(url) || url } : { thumbnailUrl: url }),
+        url: resolveProductImage(url),
+        ...(type === "video"
+          ? { thumbnailUrl: deriveCloudinaryVideoThumbnail(url) || PRODUCT_IMAGE_FALLBACK }
+          : { thumbnailUrl: resolveProductImage(url) }),
       };
     });
+
+  if (derived.length) {
+    return derived;
+  }
+
+  return [
+    {
+      type: "image" as const,
+      url: PRODUCT_IMAGE_FALLBACK,
+      thumbnailUrl: PRODUCT_IMAGE_FALLBACK,
+    },
+  ];
 }
 
 export function ProductMediaGallery({
@@ -71,7 +89,7 @@ export function ProductMediaGallery({
             className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border bg-white/80 transition lg:h-24 lg:w-full ${activeIndex === index ? "border-primary" : "border-white/70"}`}
           >
             <Image
-              src={entry.type === "video" ? (entry.thumbnailUrl || entry.url) : entry.url}
+              src={resolveProductImage(entry.type === "video" ? (entry.thumbnailUrl || entry.url) : entry.url)}
               alt={`${productName} media ${index + 1}`}
               fill
               className="object-cover"
@@ -90,13 +108,13 @@ export function ProductMediaGallery({
         {active?.type === "video" ? (
           <video
             src={active.url}
-            poster={active.thumbnailUrl || active.url}
+            poster={resolveProductImage(active.thumbnailUrl || active.url)}
             controls
             className="h-full w-full object-cover"
           />
         ) : (
           <Image
-            src={active?.url || images[0]}
+            src={resolveProductImage(active?.url || images[0])}
             alt={productName}
             fill
             className="object-cover"

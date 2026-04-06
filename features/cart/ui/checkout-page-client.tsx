@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCartStore } from "@/features/cart/store";
+import { resolveProductImage } from "@/lib/product-image";
 import { CartSnapshot } from "@/lib/server/cart-service";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -723,7 +724,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 {snapshot.lines.map((line) => (
                   <li key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}-${line.customizationSignature ?? "base"}`} className="grid grid-cols-[50px_1fr_auto] items-center gap-3 py-3">
                     <div className="relative h-12 w-12 overflow-hidden rounded-md border border-border">
-                      <Image src={line.product.images[0]} alt={line.product.name} fill className="object-cover" sizes="48px" />
+                      <Image src={resolveProductImage(line.product.images[0])} alt={line.product.name} fill className="object-cover" sizes="48px" />
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{line.product.name}</p>
@@ -733,6 +734,10 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                       {line.customization ? (
                         <p className="mt-1 text-[11px] text-[#74655c]">
                           Customized • {line.customization.images?.length ?? 0} image{(line.customization.images?.length ?? 0) === 1 ? "" : "s"}
+                          {line.customization.giftWrap ? " • Gift Wrap" : ""}
+                          {line.customization.giftCard ? " • Gift Card" : ""}
+                          {line.customization.giftMessage ? " • Gift Message" : ""}
+                          {line.customization.approvalByEmail ? " • Approval by email" : ""}
                           {line.customization.whatsappNumber ? ` • ${line.customization.whatsappNumber}` : ""}
                         </p>
                       ) : null}

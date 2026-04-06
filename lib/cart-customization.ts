@@ -64,8 +64,12 @@ export function normalizeCartItemCustomization(input: unknown): CartItemCustomiz
   const images = normalizeImageUrls(source.images);
   const description = clampText(source.description, 1200);
   const whatsappNumber = normalizeWhatsappNumber(source.whatsappNumber);
+  const giftWrap = Boolean(source.giftWrap);
+  const giftCard = Boolean(source.giftCard);
+  const giftMessage = Boolean(source.giftMessage);
+  const approvalByEmail = Boolean(source.approvalByEmail);
 
-  if (!images.length && !description && !whatsappNumber) {
+  if (!images.length && !description && !whatsappNumber && !giftWrap && !giftCard && !giftMessage && !approvalByEmail) {
     return undefined;
   }
 
@@ -73,6 +77,10 @@ export function normalizeCartItemCustomization(input: unknown): CartItemCustomiz
     ...(images.length ? { images } : {}),
     ...(description ? { description } : {}),
     ...(whatsappNumber ? { whatsappNumber } : {}),
+    ...(giftWrap ? { giftWrap: true } : {}),
+    ...(giftCard ? { giftCard: true } : {}),
+    ...(giftMessage ? { giftMessage: true } : {}),
+    ...(approvalByEmail ? { approvalByEmail: true } : {}),
   };
 }
 
@@ -86,6 +94,10 @@ export function createCustomizationSignature(customization?: CartItemCustomizati
     images: normalized.images ?? [],
     description: normalized.description ?? "",
     whatsappNumber: normalized.whatsappNumber ?? "",
+    giftWrap: Boolean(normalized.giftWrap),
+    giftCard: Boolean(normalized.giftCard),
+    giftMessage: Boolean(normalized.giftMessage),
+    approvalByEmail: Boolean(normalized.approvalByEmail),
   });
 
   return `cs-${fnv1a(payload)}`;

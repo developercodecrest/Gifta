@@ -6,6 +6,7 @@ import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { resolveProductImage } from "@/lib/product-image";
 import { getAdminOrderDetailsScoped } from "@/lib/server/ecommerce-service";
 import { formatCurrency } from "@/lib/utils";
 
@@ -82,9 +83,7 @@ export default async function AdminOrderDetailsPage({ params }: { params: Promis
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-border/70 bg-muted/20">
-                      {line.productImage ? (
-                        <Image src={line.productImage} alt={line.productName} fill className="object-cover" sizes="56px" />
-                      ) : null}
+                      <Image src={resolveProductImage(line.productImage)} alt={line.productName} fill className="object-cover" sizes="56px" />
                     </div>
                     <div className="space-y-1 text-sm text-[#5f5047]">
                       <p className="font-semibold text-foreground">{line.productName}</p>
@@ -180,6 +179,17 @@ export default async function AdminOrderDetailsPage({ params }: { params: Promis
                     ) : null}
                     {line.customization.images && line.customization.images.length > 5 ? (
                       <p className="mt-1 text-xs text-[#74655c]">+{line.customization.images.length - 5} more image(s)</p>
+                    ) : null}
+                    {line.customization.giftWrap || line.customization.giftCard || line.customization.giftMessage || line.customization.approvalByEmail ? (
+                      <p className="mt-1">
+                        {line.customization.giftWrap ? "Gift Wrap" : null}
+                        {line.customization.giftWrap && line.customization.giftCard ? " • " : null}
+                        {line.customization.giftCard ? "Gift Card" : null}
+                        {(line.customization.giftWrap || line.customization.giftCard) && line.customization.giftMessage ? " • " : null}
+                        {line.customization.giftMessage ? "Gift Message" : null}
+                        {(line.customization.giftWrap || line.customization.giftCard || line.customization.giftMessage) && line.customization.approvalByEmail ? " • " : null}
+                        {line.customization.approvalByEmail ? "Approval by email" : null}
+                      </p>
                     ) : null}
                     {line.customization.whatsappNumber ? <p className="mt-1">WhatsApp: {line.customization.whatsappNumber}</p> : null}
                     {line.customization.description ? <p className="mt-1">{line.customization.description}</p> : null}

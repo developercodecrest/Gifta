@@ -6,7 +6,6 @@ import { TestimonialsSwiper } from "@/components/home/testimonials-swiper";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
 import { getGlobalCategoryOptions, getHomeData } from "@/lib/server/ecommerce-service";
-import { Play } from "lucide-react";
 import QRCode from "qrcode";
 import type { ProductListItemDto } from "@/types/api";
 
@@ -338,11 +337,12 @@ export default async function Home() {
           <div className="mx-auto flex w-full max-w-md items-center justify-center gap-3 sm:gap-4">
             <div className="flex h-44 w-44 shrink-0 flex-col items-center justify-center rounded-3xl border border-[#ffb3d1] bg-white p-4 shadow-[0_20px_42px_-30px_rgba(255,0,102,0.36)]">
               <div className="flex h-36 w-36 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#fff7fb_0%,#ffe8f4_100%)]">
-                <Play
-                  role="img"
-                  aria-label="Play Store icon"
-                  className="h-24 w-24 fill-[#ff0066] text-[#ff0066]"
-                  strokeWidth={1.6}
+                <Image
+                  src="/playstore.png"
+                  alt="Play Store icon"
+                  width={160}
+                  height={160}
+                  className="h-24 w-24 object-contain"
                 />
               </div>
             </div>

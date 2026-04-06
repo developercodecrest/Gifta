@@ -143,7 +143,7 @@ type AdminScope = {
 
 const GLOBAL_CATEGORY_SETTINGS_DOC_ID = "global-categories";
 const HOME_RANKING_SETTINGS_DOC_ID = "home-ranking";
-const FALLBACK_PRODUCT_IMAGE = "/products/placeholder.png";
+const FALLBACK_PRODUCT_IMAGE = "/products/placeholder-product.svg";
 const DEFAULT_SHORT_DESCRIPTION_MAX_LENGTH = 180;
 
 const DEFAULT_HOME_RANKING_CONFIG: HomeRankingConfig = {

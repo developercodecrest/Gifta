@@ -42,6 +42,10 @@ export type CartItemCustomization = {
   images?: string[];
   description?: string;
   whatsappNumber?: string;
+  giftWrap?: boolean;
+  giftCard?: boolean;
+  giftMessage?: boolean;
+  approvalByEmail?: boolean;
 };
 
 export type Product = {

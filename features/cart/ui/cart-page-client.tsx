@@ -9,6 +9,7 @@ import { Gift, Minus, Plus, ShieldCheck, Sparkles, Store, Trash2, Truck } from "
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCartStore } from "@/features/cart/store";
+import { resolveProductImage } from "@/lib/product-image";
 import { CartSnapshot } from "@/lib/server/cart-service";
 import { formatCurrency } from "@/lib/utils";
 
@@ -177,7 +178,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 <CardContent className="grid grid-cols-[96px_1fr] gap-3 p-3 sm:grid-cols-[128px_minmax(0,1fr)_auto] sm:gap-5 sm:p-5 sm:items-center">
                   <div className="relative aspect-square overflow-hidden rounded-3xl bg-[#fff2e8]">
                     <Image
-                      src={line.product.images[0]}
+                      src={resolveProductImage(line.product.images[0])}
                       alt={line.product.name}
                       fill
                       className="object-cover"
@@ -208,6 +209,17 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                         ) : null}
                         {line.customization.images && line.customization.images.length > 5 ? (
                           <p className="mt-1 text-[11px] text-[#74655c]">+{line.customization.images.length - 5} more image(s)</p>
+                        ) : null}
+                        {line.customization.giftWrap || line.customization.giftCard || line.customization.giftMessage || line.customization.approvalByEmail ? (
+                          <p className="mt-1">
+                            {line.customization.giftWrap ? "Gift Wrap" : null}
+                            {line.customization.giftWrap && line.customization.giftCard ? " • " : null}
+                            {line.customization.giftCard ? "Gift Card" : null}
+                            {(line.customization.giftWrap || line.customization.giftCard) && line.customization.giftMessage ? " • " : null}
+                            {line.customization.giftMessage ? "Gift Message" : null}
+                            {(line.customization.giftWrap || line.customization.giftCard || line.customization.giftMessage) && line.customization.approvalByEmail ? " • " : null}
+                            {line.customization.approvalByEmail ? "Approval by email" : null}
+                          </p>
                         ) : null}
                         {line.customization.whatsappNumber ? <p>WhatsApp: {line.customization.whatsappNumber}</p> : null}
                         {line.customization.description ? <p className="line-clamp-2">{line.customization.description}</p> : null}

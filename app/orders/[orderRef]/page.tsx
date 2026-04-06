@@ -7,6 +7,7 @@ import { OrdersAuthGuard } from "@/app/orders/orders-auth-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { resolveProductImage } from "@/lib/product-image";
 import { getUserOrderDetails } from "@/lib/server/ecommerce-service";
 import { getAuthUserById } from "@/lib/server/otp-service";
 import { formatCurrency } from "@/lib/utils";
@@ -122,9 +123,7 @@ export default async function OrderDetailsPage({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
                       <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-border/70 bg-muted/20">
-                        {item.productImage ? (
-                          <Image src={item.productImage} alt={item.productName} fill className="object-cover" sizes="56px" />
-                        ) : null}
+                        <Image src={resolveProductImage(item.productImage)} alt={item.productName} fill className="object-cover" sizes="56px" />
                       </div>
                       <div className="space-y-1 text-sm text-[#5f5047]">
                         <p className="font-semibold text-foreground">{item.productName}</p>
@@ -289,6 +288,17 @@ function CustomizationBlock({
       ) : null}
       {customization.images && customization.images.length > 5 ? (
         <p className="mt-1 text-xs text-[#74655c]">+{customization.images.length - 5} more image(s)</p>
+      ) : null}
+      {customization.giftWrap || customization.giftCard || customization.giftMessage || customization.approvalByEmail ? (
+        <p className="mt-1">
+          {customization.giftWrap ? "Gift Wrap" : null}
+          {customization.giftWrap && customization.giftCard ? " • " : null}
+          {customization.giftCard ? "Gift Card" : null}
+          {(customization.giftWrap || customization.giftCard) && customization.giftMessage ? " • " : null}
+          {customization.giftMessage ? "Gift Message" : null}
+          {(customization.giftWrap || customization.giftCard || customization.giftMessage) && customization.approvalByEmail ? " • " : null}
+          {customization.approvalByEmail ? "Approval by email" : null}
+        </p>
       ) : null}
       {customization.whatsappNumber ? <p className="mt-1">WhatsApp: {customization.whatsappNumber}</p> : null}
       {customization.description ? <p className="mt-1">{customization.description}</p> : null}

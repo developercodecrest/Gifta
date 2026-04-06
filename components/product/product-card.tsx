@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Heart, Minus, Play, Plus, ShoppingCart, Star, Store, Trash2 } from "lucide-react";
 import { Product } from "@/types/ecommerce";
 import { ProductListItemDto } from "@/types/api";
+import { resolveProductImage } from "@/lib/product-image";
 import { formatCurrency } from "@/lib/utils";
 import { useWishlistStore } from "@/features/wishlist/store";
 import { useCartStore } from "@/features/cart/store";
@@ -65,14 +66,16 @@ export function ProductCard({
   const minQty = product.minOrderQty ?? 1;
   const maxQty = product.maxOrderQty ?? 10;
   const outOfStock = !product.inStock || maxQty === 0;
+  const primaryImage = resolveProductImage(product.images[0]);
   const firstMedia = product.media?.[0] ?? {
-    type: inferMediaTypeFromUrl(product.images[0] ?? ""),
-    url: product.images[0],
-    thumbnailUrl: product.images[0],
+    type: inferMediaTypeFromUrl(primaryImage),
+    url: primaryImage,
+    thumbnailUrl: primaryImage,
   };
-  const mediaPreview = firstMedia.type === "video"
+  const mediaPreviewRaw = firstMedia.type === "video"
     ? (firstMedia.thumbnailUrl || deriveCloudinaryVideoThumbnail(firstMedia.url) || product.images[0])
     : firstMedia.url;
+  const mediaPreview = resolveProductImage(mediaPreviewRaw);
 
   const baseLineIdentity = getCartLineIdentity({
     productId: product.id,
