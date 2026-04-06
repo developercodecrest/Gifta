@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCartStore } from "@/features/cart/store";
 import { CartSnapshot } from "@/lib/server/cart-service";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 declare global {
   interface Window {
@@ -650,21 +650,42 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
                 <div className="space-y-2">
                   <Label className="mb-0 block text-xs uppercase tracking-wide text-[#74655c]">Payment method</Label>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Button
-                      type="button"
-                      variant={paymentMethod === "razorpay" ? "default" : "outline"}
-                      onClick={() => setPaymentMethod("razorpay")}
-                    >
-                      Online Payment
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={paymentMethod === "cod" ? "default" : "outline"}
-                      onClick={() => setPaymentMethod("cod")}
-                    >
-                      Cash on Delivery
-                    </Button>
+                  <div role="radiogroup" aria-label="Payment method" className="grid gap-2 sm:grid-cols-2">
+                    {[
+                      {
+                        value: "razorpay" as const,
+                        title: "Online Payment",
+                        subtitle: "UPI, cards, netbanking",
+                      },
+                      {
+                        value: "cod" as const,
+                        title: "Cash on Delivery",
+                        subtitle: "Pay at your doorstep",
+                      },
+                    ].map((option) => {
+                      const active = paymentMethod === option.value;
+                      return (
+                        <label
+                          key={option.value}
+                          className={cn(
+                            "cursor-pointer rounded-2xl border px-4 py-3 transition",
+                            active
+                              ? "border-[#cd9933] bg-[#cd9933] text-white"
+                              : "border-[#e4d4c6] bg-white text-[#5f5047]",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="paymentMethod"
+                            className="sr-only"
+                            checked={active}
+                            onChange={() => setPaymentMethod(option.value)}
+                          />
+                          <p className="text-sm font-semibold">{option.title}</p>
+                          <p className={cn("text-xs", active ? "text-white/90" : "text-[#74655c]")}>{option.subtitle}</p>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 

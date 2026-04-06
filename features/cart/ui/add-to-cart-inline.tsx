@@ -67,7 +67,7 @@ export function AddToCartInline({
           router.push(`/auth/sign-in?callbackUrl=${encodeURIComponent(pathname || "/")}`);
           return;
         }
-        addItem(productId, minQty, offerId, minQty, maxQty, variantId, variantOptions, customization);
+        addItem(productId, 1, offerId, minQty, maxQty, variantId, variantOptions, customization);
       }}
       disabled={outOfStock}
       className="h-11 w-full sm:w-auto"

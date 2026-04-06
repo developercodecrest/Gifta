@@ -4,9 +4,25 @@ import { useState } from "react";
 import Link from "next/link";
 import { ProductCard } from "@/components/product/product-card";
 import { Button } from "@/components/ui/button";
-import { giftCategories } from "@/components/home/gift-category-icons";
 import type { ProductListItemDto } from "@/types/api";
 import { ChevronRight } from "lucide-react";
+
+type RecipientCategory = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+const giftCategories: RecipientCategory[] = [
+  { id: "wife", name: "Wife", slug: "wife" },
+  { id: "mom", name: "Mom", slug: "mom" },
+  { id: "girlfriend", name: "Girlfriend", slug: "girlfriend" },
+  { id: "sister", name: "Sister", slug: "sister" },
+  { id: "dad", name: "Dad", slug: "dad" },
+  { id: "husband", name: "Husband", slug: "husband" },
+  { id: "boyfriend", name: "Boyfriend", slug: "boyfriend" },
+  { id: "couple", name: "Couple", slug: "couple" },
+];
 
 // Sample product data - in production, fetch from your API based on the slug
 const getProductsForCategory = (slug: string): ProductListItemDto[] => {

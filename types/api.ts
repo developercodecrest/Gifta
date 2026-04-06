@@ -190,11 +190,28 @@ export type AdminOrderDto = {
 export type UserOrderDto = {
   orderRef: string;
   placedAt: string;
+  lastUpdatedAt: string;
   status: AdminOrderDto["status"];
   totalAmount: number;
   itemsSummary: string;
   itemCount: number;
   deliveryAddressLabel?: string;
+  paymentMethod?: PaymentMethod;
+  transactionStatus?: TransactionStatus;
+  transactionId?: string;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  promoCode?: string;
+  discountAmount?: number;
+  deliveryFee?: number;
+  shippingProvider?: ShippingProvider;
+  shippingProviderStatus?: string;
+  shippingAwb?: string;
+  shippingShipmentId?: string;
+  shippingPickupRequestId?: string;
+  shippingError?: string;
+  shippingLastSyncedAt?: string;
+  items: UserOrderItemDto[];
 };
 
 export type OrderTrackingStep = {
@@ -208,6 +225,7 @@ export type UserOrderItemDto = {
   id: string;
   productId: string;
   productName: string;
+  productImage?: string;
   storeId: string;
   storeName?: string;
   quantity: number;
@@ -215,6 +233,25 @@ export type UserOrderItemDto = {
   customization?: CartItemCustomization;
   customizationSignature?: string;
   status: AdminOrderDto["status"];
+  paymentMethod?: PaymentMethod;
+  transactionStatus?: TransactionStatus;
+  transactionId?: string;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  promoCode?: string;
+  discountAmount?: number;
+  deliveryFee?: number;
+  shippingProvider?: ShippingProvider;
+  shippingProviderStatus?: string;
+  shippingAwb?: string;
+  shippingShipmentId?: string;
+  shippingPickupRequestId?: string;
+  shippingError?: string;
+  shippingLastSyncedAt?: string;
+  deliveryAddress?: ShippingAddressSnapshot;
+  pickupAddress?: ShippingAddressSnapshot;
+  shippingPackage?: ShippingPackageSnapshot;
+  shippingEvents?: ShippingEvent[];
   riderId?: string;
   riderName?: string;
   createdAt: string;
@@ -236,12 +273,21 @@ export type UserOrderDetailsDto = {
   transactionStatus?: TransactionStatus;
   transactionId?: string;
   paymentId?: string;
+  razorpayOrderId?: string;
+  promoCode?: string;
+  discountAmount?: number;
+  deliveryFee?: number;
   shippingProvider?: ShippingProvider;
   shippingProviderStatus?: string;
   shippingAwb?: string;
   shippingShipmentId?: string;
+  shippingPickupRequestId?: string;
   shippingError?: string;
   shippingLastSyncedAt?: string;
+  deliveryAddress?: ShippingAddressSnapshot;
+  pickupAddress?: ShippingAddressSnapshot;
+  shippingPackage?: ShippingPackageSnapshot;
+  shippingEvents?: ShippingEvent[];
   items: UserOrderItemDto[];
   tracking: OrderTrackingStep[];
 };
@@ -459,7 +505,37 @@ export type SearchMeta = {
 export type HomePayload = {
   featured: ProductListItemDto[];
   topRated: ProductListItemDto[];
+  trending: ProductListItemDto[];
+  bestSellers: ProductListItemDto[];
+  signaturePicks: ProductListItemDto[];
   categories: string[];
+};
+
+export type HomeRankingConfig = {
+  trending: {
+    recentQuantityWeight: number;
+    recentOrdersWeight: number;
+    ratingWeight: number;
+    reviewsWeight: number;
+    offerWeight: number;
+    featuredBoost: number;
+  };
+  bestSellers: {
+    totalQuantityWeight: number;
+    totalOrdersWeight: number;
+    revenueWeight: number;
+    ratingWeight: number;
+    reviewsWeight: number;
+  };
+  signaturePicks: {
+    premiumSignalWeight: number;
+    qualityWeight: number;
+    discountWeight: number;
+    trustWeight: number;
+    demandWeight: number;
+    signaturePriceThreshold: number;
+    highPriceThreshold: number;
+  };
 };
 
 export type AdminDashboardPayload = {

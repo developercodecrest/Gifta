@@ -5,12 +5,9 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
-  Gift,
   Heart,
   ShoppingCart,
   Sparkles,
-  Tag,
-  Truck,
   UserCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,14 +32,6 @@ const navItems = [
   { href: "/wishlist", label: "Wishlist" },
   { href: "/cart", label: "Cart" },
   { href: "/account", label: "Account" },
-];
-
-const featureLinks = [
-  { href: "/products?tag=same-day", label: "Same Day" },
-  { href: "/products?tag=personalized", label: "Personalized" },
-  { href: "/products?category=Birthday", label: "Birthday" },
-  { href: "/products?category=Anniversary", label: "Anniversary" },
-  { href: "/products?tag=luxury", label: "Premium" },
 ];
 
 function isActiveLink(pathname: string, href: string) {
@@ -137,11 +126,12 @@ export function Header() {
           <IconLink href="/wishlist" label="Wishlist" icon={Heart} count={wishlistCount} />
           <IconLink href="/cart" label="Cart" icon={ShoppingCart} count={cartCount} />
           {status === "authenticated" ? <IconLink href="/account" label="Account" icon={UserCircle2} /> : null}
-          {status !== "authenticated" ? (
+          {status === "unauthenticated" ? (
             <Button asChild size="sm" className="hidden text-white [&_a]:text-white sm:inline-flex">
               <Link href="/auth/sign-in">Sign in</Link>
             </Button>
-          ) : (
+          ) : null}
+          {status === "authenticated" ? (
             <Button
               type="button"
               size="sm"
@@ -150,30 +140,10 @@ export function Header() {
             >
               Sign out
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {pathname !== "/" ? (
-        <div className="page-gutter hidden items-center justify-between gap-4 py-1.5 lg:flex">
-          <nav className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-700" aria-label="Featured categories">
-            {featureLinks.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="rounded-full px-3 py-1 transition hover:bg-[#fbf0d6] hover:text-slate-900"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-5 text-xs font-medium text-slate-600">
-            <span className="flex items-center gap-1.5"><Truck className="h-3.5 w-3.5 text-primary" /> Same-day in selected cities</span>
-            <span className="flex items-center gap-1.5"><Gift className="h-3.5 w-3.5 text-primary" /> Custom gifting studio</span>
-            <span className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5 text-primary" /> Premium festive offers</span>
-          </div>
-        </div>
-      ) : null}
     </header>
   );
 }

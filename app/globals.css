@@ -269,6 +269,57 @@ h4 {
   display: none;
 }
 
+.testimonials-swiper {
+  padding-inline: 0.25rem;
+}
+
+.testimonials-swiper .swiper-slide {
+  height: auto;
+}
+
+.testimonials-swiper .swiper-button-next,
+.testimonials-swiper .swiper-button-prev {
+  color: #cd9933;
+  background: #ffffff;
+  border: 1px solid #ecd9bc;
+  border-radius: 9999px;
+  width: 2.25rem;
+  height: 2.25rem;
+  box-shadow: 0 12px 26px -22px rgba(64, 38, 16, 0.55);
+  transition: all 180ms ease;
+}
+
+.testimonials-swiper .swiper-button-next:hover,
+.testimonials-swiper .swiper-button-prev:hover {
+  background: #cd9933;
+  color: #ffffff;
+  border-color: #cd9933;
+}
+
+.testimonials-swiper .swiper-button-next::after,
+.testimonials-swiper .swiper-button-prev::after {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.testimonials-swiper .swiper-pagination-bullet {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: #d6c5b4;
+  opacity: 1;
+}
+
+.testimonials-swiper .swiper-pagination-bullet-active {
+  background: #cd9933;
+}
+
+@media (max-width: 640px) {
+  .testimonials-swiper .swiper-button-next,
+  .testimonials-swiper .swiper-button-prev {
+    display: none;
+  }
+}
+
 @keyframes float-soft {
   0%,
   100% {

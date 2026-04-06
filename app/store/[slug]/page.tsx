@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight, Gift, ShieldCheck, Sparkles, Star, Store, Truck } from "lucide-react";
 import { ProductMediaGallery } from "@/components/product/product-media-gallery";
 import { ProductCard } from "@/components/product/product-card";
+import { ProductContentTabs } from "@/components/product/product-content-tabs";
 import { TrackRecent } from "@/components/product/track-recent";
 import { ProductOrderPanel } from "@/features/cart/ui/product-order-panel";
 import { RecentlyViewed } from "@/features/recent/ui/recently-viewed";
@@ -132,6 +133,19 @@ export default async function ProductPage({
         </div>
       </section>
 
+      <section className="space-y-3">
+        <div className="flex items-center gap-3">
+          <h2 className="font-display text-3xl font-semibold tracking-tight">Product details</h2>
+          <Separator className="flex-1" />
+        </div>
+        <ProductContentTabs
+          descriptionHtml={currentProduct.description}
+          howToPersonaliseHtml={currentProduct.howToPersonaliseHtml}
+          brandDetailsHtml={currentProduct.brandDetailsHtml}
+          disclaimerHtml={currentProduct.disclaimerHtml}
+        />
+      </section>
+
       {product?.offers?.length && !hasVariants ? (
         <section className="space-y-4">
           <div className="flex items-center gap-3">
@@ -192,12 +206,6 @@ export default async function ProductPage({
         </Card>
 
         <div className="space-y-4">
-          <Card className="glass-panel rounded-4xl border-white/60">
-            <CardContent className="p-6 sm:p-8">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Description</p>
-              <p className="mt-3 text-sm leading-7 text-[#5f5047] sm:text-base">{currentProduct.description}</p>
-            </CardContent>
-          </Card>
           <Card className="glass-panel rounded-4xl border-white/60">
             <CardContent className="p-6 sm:p-8">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Shipping and Returns</p>

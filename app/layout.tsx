@@ -3,6 +3,9 @@ import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import { SiteShell } from "@/components/layout/site-shell";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 

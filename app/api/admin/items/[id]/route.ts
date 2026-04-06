@@ -1,7 +1,13 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { deleteAdminItemScoped, getMergedCategoryValuesForStoreScoped, updateAdminItemScoped } from "@/lib/server/ecommerce-service";
-import { ProductAttribute, ProductMediaItem, ProductVariant, ProductVariantUnit } from "@/types/ecommerce";
+import { deleteAdminItemScoped, updateAdminItemScoped } from "@/lib/server/ecommerce-service";
+import {
+  ProductAttribute,
+  ProductMediaItem,
+  ProductVariant,
+  ProductVariantDimensionUnit,
+  ProductVariantUnit,
+} from "@/types/ecommerce";
 
 export const runtime = "nodejs";
 
@@ -20,7 +26,11 @@ export async function PATCH(
       name?: string;
       shortDescription?: string;
       description?: string;
+      disclaimerHtml?: string;
+      howToPersonaliseHtml?: string;
+      brandDetailsHtml?: string;
       category?: string;
+      subcategory?: string;
       price?: number;
       inStock?: boolean;
       featured?: boolean;
@@ -40,7 +50,11 @@ export async function PATCH(
       typeof body.name !== "string" &&
       typeof body.shortDescription !== "string" &&
       typeof body.description !== "string" &&
+      typeof body.disclaimerHtml !== "string" &&
+      typeof body.howToPersonaliseHtml !== "string" &&
+      typeof body.brandDetailsHtml !== "string" &&
       typeof body.category !== "string" &&
+      typeof body.subcategory !== "string" &&
       typeof body.price !== "number" &&
       typeof body.inStock !== "boolean" &&
       typeof body.featured !== "boolean" &&
@@ -68,19 +82,6 @@ export async function PATCH(
       return badRequest(parsedAttributeAndVariant.error);
     }
 
-    if (typeof body.category === "string" && body.category.trim() && typeof body.offerStoreId === "string" && body.offerStoreId.trim()) {
-      const categoryScope = await getMergedCategoryValuesForStoreScoped({
-        storeId: body.offerStoreId,
-        scope: identity,
-      });
-
-      const allowedCategories = new Set<string>(categoryScope.mergedCategoryValues.map((entry) => entry.trim()).filter(Boolean));
-      if (!allowedCategories.has(body.category.trim())) {
-        return badRequest("Category must match global or vendor category mapping for the selected vendor");
-      }
-      body.category = body.category.trim();
-    }
-
     const updated = await updateAdminItemScoped({
       itemId: id,
       updates: {
@@ -102,6 +103,12 @@ export async function PATCH(
     }
     if (error instanceof Error && error.message === "ITEM_NOT_FOUND") {
       return badRequest("Item not found");
+    }
+    if (error instanceof Error && error.message === "INVALID_GLOBAL_CATEGORY") {
+      return badRequest("Category must be selected from global categories");
+    }
+    if (error instanceof Error && error.message === "INVALID_GLOBAL_SUBCATEGORY") {
+      return badRequest("Subcategory must belong to the selected global category");
     }
     if (error instanceof Error && error.message === "OFFER_NOT_FOUND") {
       return badRequest("Offer not found for selected store");
@@ -221,6 +228,10 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
       regularPrice?: unknown;
       weight?: unknown;
       weightUnit?: unknown;
+      size?: unknown;
+      width?: unknown;
+      height?: unknown;
+      dimensionUnit?: unknown;
       inStock?: unknown;
     };
 
@@ -229,6 +240,10 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
     const regularPrice = source.regularPrice === undefined ? undefined : (typeof source.regularPrice === "number" ? source.regularPrice : Number(source.regularPrice));
     const weight = source.weight === undefined ? undefined : (typeof source.weight === "number" ? source.weight : Number(source.weight));
     const weightUnit = source.weightUnit === "g" || source.weightUnit === "kg" ? (source.weightUnit as ProductVariantUnit) : undefined;
+    const size = typeof source.size === "string" ? source.size.trim() : "";
+    const width = source.width === undefined ? undefined : (typeof source.width === "number" ? source.width : Number(source.width));
+    const height = source.height === undefined ? undefined : (typeof source.height === "number" ? source.height : Number(source.height));
+    const dimensionUnit = source.dimensionUnit === "cm" ? (source.dimensionUnit as ProductVariantDimensionUnit) : undefined;
     const inStock = source.inStock === undefined ? true : Boolean(source.inStock);
 
     if (!variantId) {
@@ -245,6 +260,14 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
 
     if (weight !== undefined && !Number.isFinite(weight)) {
       return { attributes: undefined, variants: undefined, error: `Variant ${variantId} weight must be numeric` };
+    }
+
+    if (width !== undefined && !Number.isFinite(width)) {
+      return { attributes: undefined, variants: undefined, error: `Variant ${variantId} width must be numeric` };
+    }
+
+    if (height !== undefined && !Number.isFinite(height)) {
+      return { attributes: undefined, variants: undefined, error: `Variant ${variantId} height must be numeric` };
     }
 
     if (!source.options || typeof source.options !== "object" || Array.isArray(source.options)) {
@@ -289,6 +312,10 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
     }
     signatureSet.add(signature);
 
+    const normalizedWidth = width === undefined ? undefined : Math.max(0, width);
+    const normalizedHeight = height === undefined ? undefined : Math.max(0, height);
+    const hasDimensions = normalizedWidth !== undefined || normalizedHeight !== undefined;
+
     variants.push({
       id: variantId,
       options,
@@ -296,6 +323,10 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
       regularPrice: regularPrice === undefined ? undefined : Math.max(0, regularPrice),
       weight: weight === undefined ? undefined : Math.max(0, weight),
       weightUnit,
+      ...(size ? { size } : {}),
+      ...(normalizedWidth !== undefined ? { width: normalizedWidth } : {}),
+      ...(normalizedHeight !== undefined ? { height: normalizedHeight } : {}),
+      ...(hasDimensions ? { dimensionUnit: dimensionUnit ?? "cm" } : {}),
       inStock,
     });
   }

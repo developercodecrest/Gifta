@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, LayoutGrid, List, Pencil, Table2, Trash2 } from "lucide-react";
 import { AdminEmptyState } from "@/app/admin/_components/admin-surface";
 import { Badge } from "@/components/ui/badge";
@@ -18,17 +18,83 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AdminOrderDto } from "@/types/api";
+import { AdminOrderDto, ProfileDto } from "@/types/api";
 
 type AdminOrder = AdminOrderDto;
 
 type ViewMode = "grid" | "list" | "table";
 const statuses: AdminOrder["status"][] = ["placed", "packed", "out-for-delivery", "delivered", "cancelled"];
 
+function formatAddress(value?: {
+  line1?: string;
+  city?: string;
+  state?: string;
+  pinCode?: string;
+  country?: string;
+}): string | undefined {
+  if (!value) return undefined;
+  const formatted = [value.line1, value.city, value.state, value.pinCode, value.country]
+    .map((entry) => entry?.trim())
+    .filter(Boolean)
+    .join(", ");
+  return formatted || undefined;
+}
+
+function getCustomerDetails(order: AdminOrder, profile?: ProfileDto): {
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+} {
+  const primaryAddress = profile?.addresses?.[0];
+  return {
+    name: profile?.fullName || order.customerName || order.deliveryAddress?.receiverName || "Unknown customer",
+    email: profile?.email || order.customerEmail,
+    phone:
+      profile?.phone ||
+      order.customerPhone ||
+      primaryAddress?.receiverPhone ||
+      primaryAddress?.receiverPhones?.[0] ||
+      order.deliveryAddress?.receiverPhone,
+    address: formatAddress(primaryAddress) || formatAddress(order.deliveryAddress),
+  };
+}
+
 export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | AdminOrder["status"]>("all");
+  const [userProfilesById, setUserProfilesById] = useState<Record<string, ProfileDto>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/admin/users")
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          data?: ProfileDto[];
+        };
+
+        if (!response.ok || !payload.success || !Array.isArray(payload.data) || cancelled) {
+          return;
+        }
+
+        const mapped = payload.data.reduce<Record<string, ProfileDto>>((acc, profile) => {
+          if (profile.userId?.trim()) {
+            acc[profile.userId.trim()] = profile;
+          }
+          return acc;
+        }, {});
+
+        setUserProfilesById(mapped);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const sorted = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -83,6 +149,7 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                 <tr>
                   <th className="px-3 py-2.5">Order</th>
                   <th className="px-3 py-2.5">Customer</th>
+                  <th className="px-3 py-2.5">Customization</th>
                   <th className="px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Payment</th>
                   <th className="px-3 py-2.5">Amount</th>
@@ -91,65 +158,126 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((order) => (
-                  <tr key={order.id} className="border-t border-border">
-                    <td className="px-3 py-2.5 font-medium">{order.id}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{order.customerName}</td>
-                    <td className="px-3 py-2.5"><Badge variant="secondary">{order.status}</Badge></td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                      {(order.paymentMethod ?? "razorpay").toUpperCase()} · {order.transactionStatus ?? "pending"}
-                      <br />
-                      {(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}
-                    </td>
-                    <td className="px-3 py-2.5">₹{order.totalAmount}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{new Date(order.createdAt).toLocaleDateString()}</td>
-                    <td className="px-3 py-2.5"><div className="flex justify-end"><OrderRowActions order={order} /></div></td>
-                  </tr>
-                ))}
+                {sorted.map((order) => {
+                  const profile = order.customerUserId ? userProfilesById[order.customerUserId] : undefined;
+                  const customer = getCustomerDetails(order, profile);
+                  return (
+                    <tr key={order.id} className="border-t border-border align-top">
+                      <td className="px-3 py-2.5 font-medium">
+                        <p>{order.id}</p>
+                        <p className="text-xs font-normal text-muted-foreground">Qty {order.quantity}</p>
+                        <p className="text-xs font-normal text-muted-foreground">Store {order.storeId}</p>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                        <p className="text-sm font-medium text-foreground">{customer.name}</p>
+                        <p>{customer.email ?? "No email"}</p>
+                        <p>{customer.phone ?? "No phone"}</p>
+                        {order.customerUserId ? <p>User {order.customerUserId}</p> : null}
+                        {customer.address ? <p className="line-clamp-2">{customer.address}</p> : null}
+                      </td>
+                      <td className="px-3 py-2.5"><CustomizationPreview customization={order.customization} /></td>
+                      <td className="px-3 py-2.5"><Badge variant="secondary">{order.status}</Badge></td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                        {(order.paymentMethod ?? "razorpay").toUpperCase()} · {order.transactionStatus ?? "pending"}
+                        <br />
+                        {(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}
+                        <br />
+                        AWB {order.shippingAwb ?? "-"}
+                      </td>
+                      <td className="px-3 py-2.5">₹{order.totalAmount}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{new Date(order.createdAt).toLocaleString()}</td>
+                      <td className="px-3 py-2.5"><div className="flex justify-end"><OrderRowActions order={order} /></div></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       ) : viewMode === "list" ? (
         <div className="space-y-3">
-          {sorted.map((order) => (
-            <Card key={order.id} className="border-border/70 bg-background/80"><CardContent className="flex min-h-32 items-start justify-between gap-3 p-3.5">
-              <div className="space-y-1.5">
-                <p className="font-semibold">{order.id}</p>
-                <p className="text-sm text-[#5f5047]">{order.customerName} • Qty {order.quantity}</p>
-                <p className="text-xs text-[#74655c]">Store {order.storeId} • Product {order.productId}</p>
-                <p className="text-xs text-[#74655c]">{(order.paymentMethod ?? "razorpay").toUpperCase()} • {order.transactionStatus ?? "pending"}</p>
-                <p className="text-xs text-[#74655c]">{(order.shippingProvider ?? "delhivery").toUpperCase()} • {order.shippingProviderStatus ?? "pending-shipment"}</p>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <Badge variant="secondary">{order.status}</Badge>
-                <p className="font-semibold">₹{order.totalAmount}</p>
-                <OrderRowActions order={order} />
-              </div>
-            </CardContent></Card>
-          ))}
+          {sorted.map((order) => {
+            const profile = order.customerUserId ? userProfilesById[order.customerUserId] : undefined;
+            const customer = getCustomerDetails(order, profile);
+            return (
+              <Card key={order.id} className="border-border/70 bg-background/80">
+                <CardContent className="flex min-h-32 items-start justify-between gap-3 p-3.5">
+                  <div className="space-y-1.5">
+                    <p className="font-semibold">{order.id}</p>
+                    <p className="text-sm text-[#5f5047]">{customer.name} • Qty {order.quantity}</p>
+                    <p className="text-xs text-[#74655c]">{customer.email ?? "No email"} • {customer.phone ?? "No phone"}</p>
+                    <p className="text-xs text-[#74655c]">Store {order.storeId} • Product {order.productId}</p>
+                    <p className="text-xs text-[#74655c]">{(order.paymentMethod ?? "razorpay").toUpperCase()} • {order.transactionStatus ?? "pending"}</p>
+                    <p className="text-xs text-[#74655c]">{(order.shippingProvider ?? "delhivery").toUpperCase()} • {order.shippingProviderStatus ?? "pending-shipment"}</p>
+                    {customer.address ? <p className="text-xs text-[#74655c] line-clamp-2">{customer.address}</p> : null}
+                    <CustomizationPreview customization={order.customization} />
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge variant="secondary">{order.status}</Badge>
+                    <p className="font-semibold">₹{order.totalAmount}</p>
+                    <OrderRowActions order={order} />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {sorted.map((order) => (
-            <Card key={order.id} className="border-border/70 bg-background/80"><CardContent className="flex min-h-44 flex-col space-y-2 p-4">
-              <p className="font-semibold">{order.id}</p>
-              <p className="text-sm text-[#5f5047]">{order.customerName}</p>
-              <p className="text-sm text-[#5f5047]">{order.status}</p>
-              <p className="text-xs text-[#74655c]">{(order.paymentMethod ?? "razorpay").toUpperCase()} · {order.transactionStatus ?? "pending"}</p>
-              <p className="text-xs text-[#74655c]">{(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}</p>
-              <p className="font-semibold">₹{order.totalAmount}</p>
-              <div className="mt-auto"><OrderRowActions order={order} /></div>
-            </CardContent></Card>
-          ))}
+          {sorted.map((order) => {
+            const profile = order.customerUserId ? userProfilesById[order.customerUserId] : undefined;
+            const customer = getCustomerDetails(order, profile);
+            return (
+              <Card key={order.id} className="border-border/70 bg-background/80">
+                <CardContent className="flex min-h-44 flex-col space-y-2 p-4">
+                  <p className="font-semibold">{order.id}</p>
+                  <p className="text-sm text-[#5f5047]">{customer.name}</p>
+                  <p className="text-xs text-[#74655c]">{customer.email ?? "No email"}</p>
+                  <p className="text-xs text-[#74655c]">{customer.phone ?? "No phone"}</p>
+                  <p className="text-sm text-[#5f5047]">{order.status}</p>
+                  <p className="text-xs text-[#74655c]">{(order.paymentMethod ?? "razorpay").toUpperCase()} · {order.transactionStatus ?? "pending"}</p>
+                  <p className="text-xs text-[#74655c]">{(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}</p>
+                  <CustomizationPreview customization={order.customization} />
+                  <p className="font-semibold">₹{order.totalAmount}</p>
+                  <div className="mt-auto"><OrderRowActions order={order} /></div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
+function CustomizationPreview({ customization }: { customization?: AdminOrder["customization"] }) {
+  const images = customization?.images ?? [];
+  if (!images.length) {
+    return <p className="text-xs text-muted-foreground">No customization media</p>;
+  }
+
+  const preview = images.slice(0, 3);
+  const remaining = images.length - preview.length;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {preview.map((image, index) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={`${image}-${index}`}
+          src={image}
+          alt={`Customization ${index + 1}`}
+          className="h-9 w-9 rounded border border-border object-cover"
+        />
+      ))}
+      {remaining > 0 ? (
+        <span className="rounded border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">+{remaining}</span>
+      ) : null}
+    </div>
+  );
+}
+
 function OrderRowActions({ order }: { order: AdminOrder }) {
-  const [viewOpen, setViewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [status, setStatus] = useState<AdminOrder["status"]>(order.status);
@@ -220,40 +348,11 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogTrigger asChild><Button size="sm" variant="outline"><Eye className="h-4 w-4" /> View</Button></DialogTrigger>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{order.id}</DialogTitle><DialogDescription>Order details</DialogDescription></DialogHeader>
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <p>Customer: {order.customerName}</p>
-            <p>Status: {order.status}</p>
-            <p>Amount: ₹{order.totalAmount}</p>
-            <p>Qty: {order.quantity}</p>
-            <p>Payment method: {(order.paymentMethod ?? "razorpay").toUpperCase()}</p>
-            <p>Transaction status: {order.transactionStatus ?? "pending"}</p>
-            <p>Transaction ID: {order.transactionId ?? "-"}</p>
-            <p>Shipping provider: {(order.shippingProvider ?? "delhivery").toUpperCase()}</p>
-            <p>Shipping status: {order.shippingProviderStatus ?? "pending-shipment"}</p>
-            <p>AWB: {order.shippingAwb ?? "-"}</p>
-            {order.shippingAwb ? (
-              <div className="pt-1">
-                <Button asChild size="sm" variant="outline">
-                  <Link
-                    href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Track on Delhivery
-                  </Link>
-                </Button>
-              </div>
-            ) : null}
-            {order.shippingError ? <p className="text-destructive">Shipping error: {order.shippingError}</p> : null}
-            <p>Store: {order.storeId}</p>
-            <p>Product: {order.productId}</p>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <Button asChild size="sm" variant="outline">
+        <Link href={`/admin/orders/${encodeURIComponent(order.id)}`}>
+          <Eye className="h-4 w-4" /> View
+        </Link>
+      </Button>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogTrigger asChild><Button size="sm" variant="outline"><Pencil className="h-4 w-4" /> Edit</Button></DialogTrigger>

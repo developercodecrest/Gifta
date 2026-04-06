@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, LayoutGrid, List, Pencil, Plus, Store, Table2, Trash2, Truck, UploadCloud, X } from "lucide-react";
+import { Eye, FileUp, LayoutGrid, List, Pencil, Plus, Store, Table2, Trash2, Truck, UploadCloud, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { AdminEmptyState, AdminSection } from "@/app/admin/_components/admin-surface";
 import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
 import { ProductMediaItem } from "@/types/ecommerce";
@@ -46,6 +47,10 @@ type AdminItemVariant = {
   regularPrice?: number;
   weight?: number;
   weightUnit?: "g" | "kg";
+  size?: string;
+  width?: number;
+  height?: number;
+  dimensionUnit?: "cm";
   inStock: boolean;
 };
 
@@ -55,7 +60,11 @@ type AdminItem = {
   slug: string;
   shortDescription?: string;
   description: string;
+  disclaimerHtml?: string;
+  howToPersonaliseHtml?: string;
+  brandDetailsHtml?: string;
   category: string;
+  subcategory?: string;
   tags: string[];
   media?: ProductMediaItem[];
   images: string[];
@@ -85,8 +94,113 @@ type VariantInputRow = {
   regularPrice: string;
   weight: string;
   weightUnit: "g" | "kg";
+  size: string;
+  width: string;
+  height: string;
+  dimensionUnit: "cm";
   inStock: boolean;
 };
+
+type CsvCanonicalField =
+  | "storeId"
+  | "name"
+  | "shortDescription"
+  | "description"
+  | "disclaimerHtml"
+  | "howToPersonaliseHtml"
+  | "brandDetailsHtml"
+  | "category"
+  | "subcategory"
+  | "price"
+  | "originalPrice"
+  | "deliveryEtaHours"
+  | "minOrderQty"
+  | "maxOrderQty"
+  | "tags"
+  | "featured"
+  | "inStock"
+  | "media"
+  | "variantId"
+  | "variantSize"
+  | "variantSalePrice"
+  | "variantRegularPrice"
+  | "variantWeight"
+  | "variantWeightUnit"
+  | "variantWidth"
+  | "variantHeight";
+
+type CsvColumnMapping = Partial<Record<CsvCanonicalField, string>>;
+
+type CsvFieldDefinition = {
+  key: CsvCanonicalField;
+  label: string;
+  aliases: string[];
+};
+
+type CsvImportRow = Record<string, string>;
+
+type CsvImportFailure = {
+  rowNumber: number;
+  message: string;
+};
+
+type AdminItemCreatePayload = {
+  storeId: string;
+  name: string;
+  shortDescription?: string;
+  description?: string;
+  disclaimerHtml?: string;
+  howToPersonaliseHtml?: string;
+  brandDetailsHtml?: string;
+  category: string;
+  subcategory?: string;
+  price: number;
+  originalPrice?: number;
+  deliveryEtaHours?: number;
+  minOrderQty?: number;
+  maxOrderQty?: number;
+  tags?: string[];
+  media?: ProductMediaItem[];
+  featured?: boolean;
+  inStock?: boolean;
+  attributes?: AdminItemAttribute[];
+  variants?: AdminItemVariant[];
+};
+
+type CsvPreparedItem = {
+  key: string;
+  rowNumbers: number[];
+  payload: AdminItemCreatePayload;
+};
+
+const CSV_FIELD_DEFINITIONS: CsvFieldDefinition[] = [
+  { key: "storeId", label: "Store ID", aliases: ["storeid", "store", "vendorid", "vendor", "shopid"] },
+  { key: "name", label: "Item Name", aliases: ["name", "itemname", "productname", "title"] },
+  { key: "shortDescription", label: "Short Description", aliases: ["shortdescription", "shortdesc", "summary", "snippet"] },
+  { key: "description", label: "Description", aliases: ["description", "desc", "details"] },
+  { key: "disclaimerHtml", label: "Disclaimer (HTML)", aliases: ["disclaimerhtml", "disclaimer", "terms"] },
+  { key: "howToPersonaliseHtml", label: "How To Personalise (HTML)", aliases: ["howtopersonalisehtml", "howtopersonalizehtml", "howtopersonalise", "personalisation", "personalization"] },
+  { key: "brandDetailsHtml", label: "Brand Details (HTML)", aliases: ["branddetailshtml", "branddetails", "brandstory"] },
+  { key: "category", label: "Category", aliases: ["category", "cat"] },
+  { key: "subcategory", label: "Subcategory", aliases: ["subcategory", "subcat"] },
+  { key: "price", label: "Price", aliases: ["price", "saleprice", "itemprice", "mrpprice"] },
+  { key: "originalPrice", label: "Original Price", aliases: ["originalprice", "mrp", "regularprice", "listprice"] },
+  { key: "deliveryEtaHours", label: "Delivery ETA (hours)", aliases: ["deliveryetahours", "eta", "deliveryhours"] },
+  { key: "minOrderQty", label: "Min Order Qty", aliases: ["minorderqty", "minqty", "minimumqty"] },
+  { key: "maxOrderQty", label: "Max Order Qty", aliases: ["maxorderqty", "maxqty", "maximumqty"] },
+  { key: "tags", label: "Tags", aliases: ["tags", "tag", "keywords"] },
+  { key: "featured", label: "Featured", aliases: ["featured", "isfeatured", "highlighted"] },
+  { key: "inStock", label: "In Stock", aliases: ["instock", "stock", "active", "available"] },
+  { key: "media", label: "Media URLs", aliases: ["media", "mediaurls", "images", "imageurls", "assets"] },
+  { key: "variantId", label: "Variant ID", aliases: ["variantid", "sku", "variationid"] },
+  { key: "variantSize", label: "Variant Size", aliases: ["variantsize", "size", "dimensionname"] },
+  { key: "variantSalePrice", label: "Variant Sale Price", aliases: ["variantsaleprice", "variantsale", "variantprice"] },
+  { key: "variantRegularPrice", label: "Variant Regular Price", aliases: ["variantregularprice", "variantmrp", "variantoriginalprice"] },
+  { key: "variantWeight", label: "Variant Weight", aliases: ["variantweight", "weight"] },
+  { key: "variantWeightUnit", label: "Variant Weight Unit", aliases: ["variantweightunit", "weightunit"] },
+  { key: "variantWidth", label: "Variant Width", aliases: ["variantwidth", "width"] },
+  { key: "variantHeight", label: "Variant Height", aliases: ["variantheight", "height"] },
+];
 
 function formatCurrency(value?: number) {
   if (typeof value !== "number") return "--";
@@ -153,6 +267,33 @@ function parseMediaInputLines(value: string): ProductMediaItem[] {
   });
 }
 
+function toNormalizedGlobalCategoryOptions(categories: StoreCategoryOption[]) {
+  const map = new Map<string, { name: string; subcategories: string[] }>();
+
+  for (const category of categories) {
+    const name = category.name.trim();
+    if (!name) {
+      continue;
+    }
+
+    const key = name.toLowerCase();
+    const existing = map.get(key);
+    const subcategories = Array.from(new Set((category.subcategories ?? []).map((entry) => entry.trim()).filter(Boolean)));
+
+    if (!existing) {
+      map.set(key, { name, subcategories });
+      continue;
+    }
+
+    map.set(key, {
+      name: existing.name,
+      subcategories: Array.from(new Set([...existing.subcategories, ...subcategories])),
+    });
+  }
+
+  return Array.from(map.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function ItemsClient({
   items,
   vendors,
@@ -208,7 +349,12 @@ export function ItemsClient({
       <AdminSection
         title={isVendorLocked ? `${lockedVendor?.name ?? "Vendor"} catalog` : "Catalog workspace"}
         description={isVendorLocked ? "Manage items mapped to this vendor only and keep category mapping aligned to vendor taxonomy." : "Search by category or store, inspect offer coverage, and create product records that are linked to a specific vendor offer from the start."}
-        actions={<CreateItemDialog vendors={vendors} lockedStoreId={lockedStoreId} categoryOptions={categories} />}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <ImportItemsDialog vendors={vendors} lockedStoreId={lockedStoreId} />
+            <CreateItemDialog vendors={vendors} lockedStoreId={lockedStoreId} globalCategories={globalCategories} />
+          </div>
+        )}
       >
         <div className="flex flex-col gap-3.5">
           <div className={isVendorLocked ? "grid gap-2.5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_auto]" : "grid gap-2.5 lg:grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,0.75fr))_auto]"}>
@@ -280,7 +426,7 @@ export function ItemsClient({
                         <td className="px-3 py-3 text-[#5f5047]">{item.minOrderQty ?? 1} to {item.maxOrderQty ?? 10}</td>
                         <td className="px-3 py-3">
                           <div className="flex justify-end">
-                            <ItemRowActions item={item} vendors={vendors} categoryOptions={categories} />
+                            <ItemRowActions item={item} vendors={vendors} globalCategories={globalCategories} />
                           </div>
                         </td>
                       </tr>
@@ -317,7 +463,7 @@ export function ItemsClient({
                         {item.bestOffer?.store?.name ?? "No store linked"} • ETA {item.bestOffer?.deliveryEtaHours ?? "--"} hrs
                       </div>
                     </div>
-                    <div className="mt-auto"><ItemRowActions item={item} vendors={vendors} categoryOptions={categories} /></div>
+                    <div className="mt-auto"><ItemRowActions item={item} vendors={vendors} globalCategories={globalCategories} /></div>
                   </CardContent>
                 </Card>
               ))}
@@ -341,7 +487,7 @@ export function ItemsClient({
                           <Badge variant="outline">{item.offerCount} linked offers</Badge>
                         </div>
                       </div>
-                      <ItemRowActions item={item} vendors={vendors} categoryOptions={categories} />
+                      <ItemRowActions item={item} vendors={vendors} globalCategories={globalCategories} />
                     </div>
 
                     <div className="grid gap-2.5 md:grid-cols-2">
@@ -372,26 +518,335 @@ export function ItemsClient({
   );
 }
 
-function CreateItemDialog({
+function ImportItemsDialog({
   vendors,
   lockedStoreId,
-  categoryOptions,
 }: {
   vendors: VendorSummaryDto[];
   lockedStoreId?: string;
-  categoryOptions: string[];
 }) {
   const router = useRouter();
-  const safeCategoryOptions = useMemo(() => {
-    const normalized = Array.from(new Set(categoryOptions.map((entry) => entry.trim()).filter(Boolean)));
-    return normalized.length ? normalized.sort((left, right) => left.localeCompare(right)) : ["Birthday"];
-  }, [categoryOptions]);
+  const [open, setOpen] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rows, setRows] = useState<CsvImportRow[]>([]);
+  const [mapping, setMapping] = useState<CsvColumnMapping>({});
+  const [step, setStep] = useState<"upload" | "map" | "result">("upload");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ successCount: number; skippedCount: number; failures: CsvImportFailure[] } | null>(null);
+
+  const requiredFields = useMemo<CsvCanonicalField[]>(
+    () => (lockedStoreId ? ["name", "category", "price"] : ["storeId", "name", "category", "price"]),
+    [lockedStoreId],
+  );
+
+  const missingRequiredMapping = useMemo(
+    () => requiredFields.filter((field) => !mapping[field]),
+    [mapping, requiredFields],
+  );
+
+  const resetDialogState = () => {
+    setFileName("");
+    setHeaders([]);
+    setRows([]);
+    setMapping({});
+    setStep("upload");
+    setSaving(false);
+    setError(null);
+    setResult(null);
+  };
+
+  const handleFileSelection = async (file: File) => {
+    setError(null);
+    setResult(null);
+    try {
+      const parsed = parseCsvContent(await file.text());
+      if (parsed.error) {
+        setError(parsed.error);
+        return;
+      }
+
+      const autoMapping = buildAutoCsvMapping(parsed.headers);
+
+      if (lockedStoreId) {
+        delete autoMapping.storeId;
+      }
+
+      setFileName(file.name);
+      setHeaders(parsed.headers);
+      setRows(parsed.rows);
+      setMapping(autoMapping);
+      setStep("map");
+    } catch {
+      setError("Unable to parse CSV file");
+    }
+  };
+
+  const runImport = async () => {
+    setSaving(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const prepared = toCsvImportItems({ rows, mapping, lockedStoreId });
+      const failures: CsvImportFailure[] = [...prepared.failures];
+      let successCount = 0;
+
+      if (!prepared.items.length) {
+        setResult({
+          successCount,
+          skippedCount: prepared.failures.length,
+          failures,
+        });
+        setStep("result");
+        return;
+      }
+
+      for (const item of prepared.items) {
+        try {
+          const response = await fetch("/api/admin/items", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(item.payload),
+          });
+
+          const payload = (await response.json().catch(() => ({}))) as {
+            success?: boolean;
+            error?: { message?: string };
+          };
+
+          if (!response.ok || !payload.success) {
+            const firstRow = item.rowNumbers[0] ?? 0;
+            failures.push({
+              rowNumber: firstRow,
+              message: `Rows ${item.rowNumbers.join(", ")}: ${payload.error?.message ?? "Unable to import item"}`,
+            });
+            continue;
+          }
+
+          successCount += 1;
+        } catch {
+          const firstRow = item.rowNumbers[0] ?? 0;
+          failures.push({
+            rowNumber: firstRow,
+            message: `Rows ${item.rowNumbers.join(", ")}: Unable to import item`,
+          });
+        }
+      }
+
+      setResult({
+        successCount,
+        skippedCount: prepared.failures.length,
+        failures,
+      });
+      setStep("result");
+
+      if (successCount > 0) {
+        router.refresh();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) {
+          resetDialogState();
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline"><FileUp className="h-4 w-4" /> Import CSV</Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Import catalog via CSV</DialogTitle>
+          <DialogDescription>
+            Upload a CSV file, verify auto-mapped columns, adjust manually where needed, then import with partial success handling.
+          </DialogDescription>
+        </DialogHeader>
+
+        {step === "upload" ? (
+          <div className="space-y-4">
+            <div className="rounded-[1.25rem] border border-dashed border-border p-5">
+              <Label htmlFor="items-csv-file">CSV file</Label>
+              <Input
+                id="items-csv-file"
+                type="file"
+                accept=".csv,text/csv"
+                className="mt-2"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+                  void handleFileSelection(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Required fields: {lockedStoreId ? "name, category, price" : "storeId, name, category, price"}.
+              </p>
+            </div>
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          </div>
+        ) : null}
+
+        {step === "map" ? (
+          <div className="space-y-4">
+            <div className="rounded-[1.25rem] border border-border/70 bg-card/40 p-4 text-sm">
+              <p className="font-medium text-foreground">{fileName}</p>
+              <p className="text-muted-foreground">{rows.length} data row(s) detected</p>
+              {lockedStoreId ? <p className="text-muted-foreground">Store is locked to {lockedStoreId}</p> : null}
+            </div>
+
+            <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4">
+              <p className="text-sm font-semibold">Column mapping</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {CSV_FIELD_DEFINITIONS.map((definition) => {
+                  const isRequired = requiredFields.includes(definition.key);
+                  const isStoreLockedField = definition.key === "storeId" && Boolean(lockedStoreId);
+                  return (
+                    <div key={definition.key} className="space-y-1.5">
+                      <Label>{definition.label}{isRequired ? " *" : ""}</Label>
+                      <select
+                        value={isStoreLockedField ? "" : mapping[definition.key] ?? ""}
+                        onChange={(event) =>
+                          setMapping((current) => ({
+                            ...current,
+                            [definition.key]: event.target.value || undefined,
+                          }))
+                        }
+                        className="min-h-11 w-full rounded-[1.25rem] border border-input bg-background px-4 py-2 text-sm"
+                        disabled={isStoreLockedField}
+                      >
+                        <option value="">{isStoreLockedField ? "Locked by vendor page" : "Ignore field"}</option>
+                        {headers.map((header) => (
+                          <option key={`${definition.key}-${header}`} value={header}>{header}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {rows.length ? (
+              <div className="space-y-2 rounded-[1.25rem] border border-border/70 bg-card/40 p-4">
+                <p className="text-sm font-semibold">Preview (first 5 rows)</p>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        {headers.map((header) => (
+                          <th key={`preview-${header}`} className="px-2 py-2 font-semibold text-foreground">{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 5).map((row, index) => (
+                        <tr key={`preview-row-${index}`} className="border-b border-border/70">
+                          {headers.map((header) => (
+                            <td key={`preview-row-${index}-${header}`} className="max-w-56 truncate px-2 py-2 text-muted-foreground">{row[header]}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {missingRequiredMapping.length ? (
+              <p className="text-sm text-destructive">
+                Map required fields before import: {missingRequiredMapping.join(", ")}
+              </p>
+            ) : null}
+
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          </div>
+        ) : null}
+
+        {step === "result" && result ? (
+          <div className="space-y-4">
+            <div className="rounded-[1.25rem] border border-border/70 bg-card/40 p-4 text-sm">
+              <p className="font-semibold text-foreground">Import completed</p>
+              <p className="text-muted-foreground">Items imported: {result.successCount}</p>
+              <p className="text-muted-foreground">Rows skipped before request: {result.skippedCount}</p>
+              <p className="text-muted-foreground">Rows failed: {result.failures.length}</p>
+            </div>
+
+            {result.failures.length ? (
+              <div className="space-y-2 rounded-[1.25rem] border border-border/70 bg-card/40 p-4">
+                <p className="text-sm font-semibold">Failed rows</p>
+                <div className="max-h-56 space-y-2 overflow-y-auto">
+                  {result.failures.map((failure, index) => (
+                    <p key={`failure-${index}`} className="text-xs text-destructive">
+                      Row {failure.rowNumber}: {failure.message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          {step === "upload" ? (
+            <Button variant="outline" onClick={() => setOpen(false)}>Close</Button>
+          ) : null}
+
+          {step === "map" ? (
+            <>
+              <Button variant="outline" onClick={() => setStep("upload")}>Back</Button>
+              <Button onClick={() => void runImport()} disabled={saving || Boolean(missingRequiredMapping.length)}>
+                {saving ? "Importing..." : "Start import"}
+              </Button>
+            </>
+          ) : null}
+
+          {step === "result" ? (
+            <>
+              <Button variant="outline" onClick={() => setStep("map")}>Back to mapping</Button>
+              <Button onClick={() => setOpen(false)}>Done</Button>
+            </>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateItemDialog({
+  vendors,
+  lockedStoreId,
+  globalCategories,
+}: {
+  vendors: VendorSummaryDto[];
+  lockedStoreId?: string;
+  globalCategories: StoreCategoryOption[];
+}) {
+  const router = useRouter();
+  const globalCategoryOptions = useMemo(() => toNormalizedGlobalCategoryOptions(globalCategories), [globalCategories]);
+  const safeCategoryOptions = useMemo(
+    () => globalCategoryOptions.map((entry) => entry.name),
+    [globalCategoryOptions],
+  );
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState(safeCategoryOptions[0] ?? vendors[0]?.primaryCategory ?? "Birthday");
+  const [category, setCategory] = useState(safeCategoryOptions[0] ?? "");
+  const [subcategory, setSubcategory] = useState("");
   const [storeId, setStoreId] = useState(lockedStoreId ?? vendors[0]?.id ?? "");
   const [shortDescription, setShortDescription] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState("<p></p>");
+  const [disclaimerHtml, setDisclaimerHtml] = useState("<p></p>");
+  const [howToPersonaliseHtml, setHowToPersonaliseHtml] = useState("<p></p>");
+  const [brandDetailsHtml, setBrandDetailsHtml] = useState("<p></p>");
   const [price, setPrice] = useState("1000");
   const [originalPrice, setOriginalPrice] = useState("1200");
   const [deliveryEtaHours, setDeliveryEtaHours] = useState("24");
@@ -406,6 +861,11 @@ function CreateItemDialog({
   const [inStock, setInStock] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedSubcategoryOptions = useMemo(
+    () => globalCategoryOptions.find((entry) => entry.name === category)?.subcategories ?? [],
+    [category, globalCategoryOptions],
+  );
 
   const mediaList = useMemo(() => parseMediaInputLines(mediaInput), [mediaInput]);
 
@@ -437,6 +897,10 @@ function CreateItemDialog({
         regularPrice: originalPrice,
         weight: "0",
         weightUnit: "g",
+        size: "",
+        width: "",
+        height: "",
+        dimensionUnit: "cm",
         inStock,
       }),
     );
@@ -452,6 +916,10 @@ function CreateItemDialog({
         regularPrice: originalPrice,
         weight: "0",
         weightUnit: "g",
+        size: "",
+        width: "",
+        height: "",
+        dimensionUnit: "cm",
         inStock,
       });
 
@@ -463,7 +931,11 @@ function CreateItemDialog({
           name,
           shortDescription,
           category,
+          subcategory,
           description,
+          disclaimerHtml,
+          howToPersonaliseHtml,
+          brandDetailsHtml,
           price: Number(price) || 0,
           originalPrice: Number(originalPrice) || 0,
           deliveryEtaHours: Number(deliveryEtaHours) || 24,
@@ -509,9 +981,27 @@ function CreateItemDialog({
           <Field label="Short description"><Input value={shortDescription} onChange={(event) => setShortDescription(event.target.value)} placeholder="A concise one-line product summary" /></Field>
           <Field label="Slug preview"><div className="min-h-11 rounded-full border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">/{createSlugPreview(name) || "generated-from-name"}</div></Field>
           <Field label="Category">
-            <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+            <select
+              value={category}
+              onChange={(event) => {
+                const nextCategory = event.target.value;
+                setCategory(nextCategory);
+                const nextSubcategories = globalCategoryOptions.find((entry) => entry.name === nextCategory)?.subcategories ?? [];
+                setSubcategory(nextSubcategories[0] ?? "");
+              }}
+              className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm"
+            >
+              <option value="">Select category</option>
               {safeCategoryOptions.map((entry) => (
                 <option key={entry} value={entry}>{entry}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Subcategory">
+            <select value={subcategory} onChange={(event) => setSubcategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+              <option value="">Select subcategory</option>
+              {selectedSubcategoryOptions.map((entry) => (
+                <option key={`${category}-${entry}`} value={entry}>{entry}</option>
               ))}
             </select>
           </Field>
@@ -612,6 +1102,10 @@ function CreateItemDialog({
                         regularPrice: originalPrice,
                         weight: "0",
                         weightUnit: "g",
+                          size: "",
+                          width: "",
+                          height: "",
+                          dimensionUnit: "cm",
                         inStock,
                       },
                     ])
@@ -682,6 +1176,56 @@ function CreateItemDialog({
                         >
                           <option value="g">g</option>
                           <option value="kg">kg</option>
+                        </select>
+                      </div>
+                    </Field>
+
+                    <Field label="Size">
+                      <Input
+                        value={variant.size}
+                        onChange={(event) =>
+                          setVariantRows((current) =>
+                            current.map((entry) => (entry.id === variant.id ? { ...entry, size: event.target.value } : entry)),
+                          )
+                        }
+                        placeholder="S / M / L"
+                      />
+                    </Field>
+
+                    <Field label="Dimensions">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                        <Input
+                          value={variant.width}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, width: event.target.value } : entry)),
+                            )
+                          }
+                          inputMode="decimal"
+                          placeholder="Width"
+                        />
+                        <Input
+                          value={variant.height}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, height: event.target.value } : entry)),
+                            )
+                          }
+                          inputMode="decimal"
+                          placeholder="Height"
+                        />
+                        <select
+                          value={variant.dimensionUnit}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) =>
+                                entry.id === variant.id ? { ...entry, dimensionUnit: event.target.value === "cm" ? "cm" : "cm" } : entry,
+                              ),
+                            )
+                          }
+                          className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="cm">cm</option>
                         </select>
                       </div>
                     </Field>
@@ -784,8 +1328,36 @@ function CreateItemDialog({
             <Checkbox checked={inStock} onCheckedChange={(checked) => setInStock(Boolean(checked))} /> Offer is active and in stock
           </label>
           <div className="space-y-2 md:col-span-2">
-            <Label>Description</Label>
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40" placeholder="Describe packaging, contents, and gifting use case." />
+            <RichTextEditor
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              placeholder="Describe packaging, contents, and gifting use case."
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <RichTextEditor
+              label="Disclaimer"
+              value={disclaimerHtml}
+              onChange={setDisclaimerHtml}
+              placeholder="Add product-specific legal or usage disclaimer."
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <RichTextEditor
+              label="How To Personalise"
+              value={howToPersonaliseHtml}
+              onChange={setHowToPersonaliseHtml}
+              placeholder="Guide users on how to submit names, photos, or custom text."
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <RichTextEditor
+              label="Brand Details"
+              value={brandDetailsHtml}
+              onChange={setBrandDetailsHtml}
+              placeholder="Share brand story, craftsmanship, and packaging details."
+            />
           </div>
         </div>
 
@@ -793,7 +1365,7 @@ function CreateItemDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={() => void create()} disabled={saving || !storeId || !name.trim()}>{saving ? "Creating..." : "Create item"}</Button>
+          <Button onClick={() => void create()} disabled={saving || !storeId || !name.trim() || !category.trim()}>{saving ? "Creating..." : "Create item"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -803,11 +1375,11 @@ function CreateItemDialog({
 function ItemRowActions({
   item,
   vendors,
-  categoryOptions,
+  globalCategories,
 }: {
   item: AdminItem;
   vendors: VendorSummaryDto[];
-  categoryOptions: string[];
+  globalCategories: StoreCategoryOption[];
 }) {
   const router = useRouter();
   const [viewOpen, setViewOpen] = useState(false);
@@ -816,8 +1388,12 @@ function ItemRowActions({
 
   const [name, setName] = useState(item.name);
   const [category, setCategory] = useState(item.category);
+  const [subcategory, setSubcategory] = useState(item.subcategory ?? "");
   const [shortDescription, setShortDescription] = useState(item.shortDescription ?? "");
   const [description, setDescription] = useState(item.description);
+  const [disclaimerHtml, setDisclaimerHtml] = useState(item.disclaimerHtml ?? "<p></p>");
+  const [howToPersonaliseHtml, setHowToPersonaliseHtml] = useState(item.howToPersonaliseHtml ?? "<p></p>");
+  const [brandDetailsHtml, setBrandDetailsHtml] = useState(item.brandDetailsHtml ?? "<p></p>");
   const [tags, setTags] = useState((item.tags ?? []).join(", "));
   const [mediaInput, setMediaInput] = useState(() => toMediaInputLines(item.media, item.images));
   const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
@@ -846,9 +1422,12 @@ function ItemRowActions({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const safeCategoryOptions = useMemo(() => {
-    return Array.from(new Set([item.category, ...categoryOptions].map((entry) => entry.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
-  }, [categoryOptions, item.category]);
+  const globalCategoryOptions = useMemo(() => toNormalizedGlobalCategoryOptions(globalCategories), [globalCategories]);
+  const safeCategoryOptions = useMemo(() => globalCategoryOptions.map((entry) => entry.name), [globalCategoryOptions]);
+  const selectedSubcategoryOptions = useMemo(
+    () => globalCategoryOptions.find((entry) => entry.name === category)?.subcategories ?? [],
+    [category, globalCategoryOptions],
+  );
 
   const mediaList = useMemo(() => parseMediaInputLines(mediaInput), [mediaInput]);
 
@@ -880,6 +1459,10 @@ function ItemRowActions({
         regularPrice: originalPrice,
         weight: "0",
         weightUnit: "g",
+        size: "",
+        width: "",
+        height: "",
+        dimensionUnit: "cm",
         inStock: offerInStock,
       }),
     );
@@ -905,6 +1488,10 @@ function ItemRowActions({
         regularPrice: originalPrice,
         weight: "0",
         weightUnit: "g",
+        size: "",
+        width: "",
+        height: "",
+        dimensionUnit: "cm",
         inStock: offerInStock,
       });
 
@@ -915,7 +1502,11 @@ function ItemRowActions({
           name,
           shortDescription,
           description,
+          disclaimerHtml,
+          howToPersonaliseHtml,
+          brandDetailsHtml,
           category,
+          subcategory,
           price: Number(offerPrice) || 0,
           inStock: productInStock,
           featured,
@@ -1047,6 +1638,7 @@ function ItemRowActions({
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <Info label="Category" value={item.category} />
+              <Info label="Subcategory" value={item.subcategory || "--"} />
               <Info label="Qty range" value={`${item.minOrderQty ?? 1} to ${item.maxOrderQty ?? 10}`} />
               <Info label="Slug" value={item.slug} />
               <Info label="Best offer" value={formatCurrency(item.bestOffer?.price)} />
@@ -1085,9 +1677,27 @@ function ItemRowActions({
             <Field label="Item name"><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
             <Field label="Short description"><Input value={shortDescription} onChange={(event) => setShortDescription(event.target.value)} /></Field>
             <Field label="Category">
-              <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+              <select
+                value={category}
+                onChange={(event) => {
+                  const nextCategory = event.target.value;
+                  setCategory(nextCategory);
+                  const nextSubcategories = globalCategoryOptions.find((entry) => entry.name === nextCategory)?.subcategories ?? [];
+                  setSubcategory(nextSubcategories[0] ?? "");
+                }}
+                className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm"
+              >
+                <option value="">Select category</option>
                 {safeCategoryOptions.map((entry) => (
                   <option key={entry} value={entry}>{entry}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Subcategory">
+              <select value={subcategory} onChange={(event) => setSubcategory(event.target.value)} className="min-h-11 w-full rounded-full border border-input bg-background px-4 py-2 text-sm">
+                <option value="">Select subcategory</option>
+                {selectedSubcategoryOptions.map((entry) => (
+                  <option key={`${category}-${entry}`} value={entry}>{entry}</option>
                 ))}
               </select>
             </Field>
@@ -1212,6 +1822,10 @@ function ItemRowActions({
                           regularPrice: originalPrice,
                           weight: "0",
                           weightUnit: "g",
+                          size: "",
+                          width: "",
+                          height: "",
+                          dimensionUnit: "cm",
                           inStock: offerInStock,
                         },
                       ])
@@ -1282,6 +1896,56 @@ function ItemRowActions({
                           >
                             <option value="g">g</option>
                             <option value="kg">kg</option>
+                          </select>
+                        </div>
+                      </Field>
+
+                      <Field label="Size">
+                        <Input
+                          value={variant.size}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, size: event.target.value } : entry)),
+                            )
+                          }
+                          placeholder="S / M / L"
+                        />
+                      </Field>
+
+                      <Field label="Dimensions">
+                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                          <Input
+                            value={variant.width}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) => (entry.id === variant.id ? { ...entry, width: event.target.value } : entry)),
+                              )
+                            }
+                            inputMode="decimal"
+                            placeholder="Width"
+                          />
+                          <Input
+                            value={variant.height}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) => (entry.id === variant.id ? { ...entry, height: event.target.value } : entry)),
+                              )
+                            }
+                            inputMode="decimal"
+                            placeholder="Height"
+                          />
+                          <select
+                            value={variant.dimensionUnit}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) =>
+                                  entry.id === variant.id ? { ...entry, dimensionUnit: event.target.value === "cm" ? "cm" : "cm" } : entry,
+                                ),
+                              )
+                            }
+                            className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="cm">cm</option>
                           </select>
                         </div>
                       </Field>
@@ -1357,13 +2021,35 @@ function ItemRowActions({
               <Checkbox checked={offerInStock} onCheckedChange={(checked) => setOfferInStock(Boolean(checked))} /> Selected store offer is active
             </label>
             <div className="space-y-2 md:col-span-2">
-              <Label>Description</Label>
-              <textarea
+              <RichTextEditor
+                label="Description"
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-                className="min-h-28 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40"
+                onChange={setDescription}
                 placeholder="Describe packaging, contents, and gifting use case."
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <RichTextEditor
+                label="Disclaimer"
+                value={disclaimerHtml}
+                onChange={setDisclaimerHtml}
+                placeholder="Add product-specific legal or usage disclaimer."
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <RichTextEditor
+                label="How To Personalise"
+                value={howToPersonaliseHtml}
+                onChange={setHowToPersonaliseHtml}
+                placeholder="Guide users on how to submit names, photos, or custom text."
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <RichTextEditor
+                label="Brand Details"
+                value={brandDetailsHtml}
+                onChange={setBrandDetailsHtml}
+                placeholder="Share brand story, craftsmanship, and packaging details."
               />
             </div>
           </div>
@@ -1405,7 +2091,7 @@ function ItemRowActions({
               </Dialog>
               {offers.length ? <Button variant="destructive" onClick={() => void removeOffer()} disabled={saving}>Remove active offer</Button> : null}
             </div>
-            <Button onClick={() => void save()} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+            <Button onClick={() => void save()} disabled={saving || !category.trim()}>{saving ? "Saving..." : "Save changes"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1470,6 +2156,10 @@ function toVariantRows(variants: AdminItemVariant[] | undefined): VariantInputRo
     regularPrice: String(variant.regularPrice ?? ""),
     weight: String(variant.weight ?? ""),
     weightUnit: variant.weightUnit === "kg" ? "kg" : "g",
+    size: variant.size ?? (variant.options?.size ?? ""),
+    width: String(variant.width ?? ""),
+    height: String(variant.height ?? ""),
+    dimensionUnit: variant.dimensionUnit === "cm" ? "cm" : "cm",
     inStock: variant.inStock,
   }));
 }
@@ -1519,7 +2209,17 @@ function getAttributeCombinations(attributes: AdminItemAttribute[]): Array<Recor
 function syncVariantRowsWithAttributes(
   attributes: AdminItemAttribute[],
   existing: VariantInputRow[],
-  defaults: { salePrice: string; regularPrice: string; weight: string; weightUnit: "g" | "kg"; inStock: boolean },
+  defaults: {
+    salePrice: string;
+    regularPrice: string;
+    weight: string;
+    weightUnit: "g" | "kg";
+    size: string;
+    width: string;
+    height: string;
+    dimensionUnit: "cm";
+    inStock: boolean;
+  },
 ) {
   if (!attributes.length) {
     return [] as VariantInputRow[];
@@ -1539,6 +2239,10 @@ function syncVariantRowsWithAttributes(
       regularPrice: previous?.regularPrice ?? defaults.regularPrice,
       weight: previous?.weight ?? defaults.weight,
       weightUnit: previous?.weightUnit ?? defaults.weightUnit,
+      size: previous?.size ?? defaults.size,
+      width: previous?.width ?? defaults.width,
+      height: previous?.height ?? defaults.height,
+      dimensionUnit: previous?.dimensionUnit ?? defaults.dimensionUnit,
       inStock: previous?.inStock ?? defaults.inStock,
     };
   });
@@ -1581,6 +2285,12 @@ function toVariantPayload(rows: VariantInputRow[], attributes: AdminItemAttribut
 
     const regularPriceNumber = row.regularPrice.trim() ? Number(row.regularPrice) : undefined;
     const weightNumber = row.weight.trim() ? Number(row.weight) : undefined;
+    const widthNumber = row.width.trim() ? Number(row.width) : undefined;
+    const heightNumber = row.height.trim() ? Number(row.height) : undefined;
+    const size = row.size.trim();
+    const normalizedWidth = typeof widthNumber === "number" && Number.isFinite(widthNumber) ? Math.max(0, widthNumber) : undefined;
+    const normalizedHeight = typeof heightNumber === "number" && Number.isFinite(heightNumber) ? Math.max(0, heightNumber) : undefined;
+    const hasDimensions = normalizedWidth !== undefined || normalizedHeight !== undefined;
 
     output.push({
       id: row.id,
@@ -1589,9 +2299,524 @@ function toVariantPayload(rows: VariantInputRow[], attributes: AdminItemAttribut
       regularPrice: typeof regularPriceNumber === "number" && Number.isFinite(regularPriceNumber) ? Math.max(0, regularPriceNumber) : undefined,
       weight: typeof weightNumber === "number" && Number.isFinite(weightNumber) ? Math.max(0, weightNumber) : undefined,
       weightUnit: row.weightUnit,
+      ...(size ? { size } : {}),
+      ...(normalizedWidth !== undefined ? { width: normalizedWidth } : {}),
+      ...(normalizedHeight !== undefined ? { height: normalizedHeight } : {}),
+      ...(hasDimensions ? { dimensionUnit: row.dimensionUnit } : {}),
       inStock: row.inStock,
     });
   }
 
   return output;
+}
+
+function normalizeCsvToken(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function buildAutoCsvMapping(headers: string[]): CsvColumnMapping {
+  const mapped: CsvColumnMapping = {};
+  const normalizedHeaders = headers.map((header) => ({
+    header,
+    token: normalizeCsvToken(header),
+  }));
+  const usedHeaders = new Set<string>();
+
+  for (const field of CSV_FIELD_DEFINITIONS) {
+    const aliasTokens = field.aliases.map((alias) => normalizeCsvToken(alias));
+    const exact = normalizedHeaders.find((entry) => !usedHeaders.has(entry.header) && aliasTokens.includes(entry.token));
+    const loose = exact
+      ? undefined
+      : normalizedHeaders.find(
+        (entry) =>
+          !usedHeaders.has(entry.header)
+          && aliasTokens.some((token) => entry.token.startsWith(token) || entry.token.includes(token)),
+      );
+
+    const matched = exact ?? loose;
+    if (!matched) {
+      continue;
+    }
+
+    mapped[field.key] = matched.header;
+    usedHeaders.add(matched.header);
+  }
+
+  return mapped;
+}
+
+function parseCsvContent(content: string): {
+  headers: string[];
+  rows: CsvImportRow[];
+  error?: string;
+} {
+  const source = content.replace(/^\uFEFF/, "");
+  if (!source.trim()) {
+    return {
+      headers: [],
+      rows: [],
+      error: "CSV file is empty",
+    };
+  }
+
+  const records: string[][] = [];
+  let currentCell = "";
+  let currentRow: string[] = [];
+  let inQuotes = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (char === '"') {
+      const next = source[index + 1];
+      if (inQuotes && next === '"') {
+        currentCell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === ",") {
+      currentRow.push(currentCell);
+      currentCell = "";
+      continue;
+    }
+
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      if (char === "\r" && source[index + 1] === "\n") {
+        index += 1;
+      }
+      currentRow.push(currentCell);
+      records.push(currentRow);
+      currentCell = "";
+      currentRow = [];
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  if (inQuotes) {
+    return {
+      headers: [],
+      rows: [],
+      error: "CSV appears malformed due to an unclosed quoted value",
+    };
+  }
+
+  if (currentCell.length || currentRow.length) {
+    currentRow.push(currentCell);
+    records.push(currentRow);
+  }
+
+  if (!records.length) {
+    return {
+      headers: [],
+      rows: [],
+      error: "CSV file has no parsable records",
+    };
+  }
+
+  const headers = records[0].map((entry, index) => {
+    const trimmed = entry.trim();
+    return trimmed || `column_${index + 1}`;
+  });
+
+  if (!headers.some((header) => header.trim())) {
+    return {
+      headers: [],
+      rows: [],
+      error: "CSV header row is missing",
+    };
+  }
+
+  const rows: CsvImportRow[] = records
+    .slice(1)
+    .map((record) => {
+      const row: CsvImportRow = {};
+      headers.forEach((header, index) => {
+        row[header] = (record[index] ?? "").trim();
+      });
+      return row;
+    })
+    .filter((row) => Object.values(row).some((value) => value.trim().length > 0));
+
+  if (!rows.length) {
+    return {
+      headers,
+      rows: [],
+      error: "CSV contains header columns but no data rows",
+    };
+  }
+
+  return { headers, rows };
+}
+
+function getMappedCsvValue(row: CsvImportRow, mapping: CsvColumnMapping, field: CsvCanonicalField) {
+  const mappedHeader = mapping[field];
+  if (!mappedHeader) {
+    return "";
+  }
+  return (row[mappedHeader] ?? "").trim();
+}
+
+function splitDelimitedValues(value: string, splitOnComma = false) {
+  if (!value.trim()) {
+    return [] as string[];
+  }
+
+  const separator = splitOnComma ? /[\n\r|;,]+/ : /[\n\r|;]+/;
+  return value
+    .split(separator)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseNumberValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function parseBooleanValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (["1", "true", "yes", "y", "active", "live", "in-stock", "instock"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "n", "inactive", "paused", "out-of-stock", "outofstock"].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
+}
+
+function parseWeightUnit(value: string): "g" | "kg" | undefined {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "g" || normalized === "gram" || normalized === "grams") {
+    return "g";
+  }
+  if (normalized === "kg" || normalized === "kgs" || normalized === "kilogram" || normalized === "kilograms") {
+    return "kg";
+  }
+  return undefined;
+}
+
+function toCsvImportItems(input: {
+  rows: CsvImportRow[];
+  mapping: CsvColumnMapping;
+  lockedStoreId?: string;
+}): {
+  items: CsvPreparedItem[];
+  failures: CsvImportFailure[];
+} {
+  const failures: CsvImportFailure[] = [];
+  const grouped = new Map<string, {
+    key: string;
+    rowNumbers: number[];
+    payload: AdminItemCreatePayload;
+    sizeValues: Set<string>;
+    variantSignatures: Set<string>;
+    tagValues: Set<string>;
+    mediaUrlValues: Set<string>;
+  }>();
+
+  for (let index = 0; index < input.rows.length; index += 1) {
+    const row = input.rows[index];
+    const rowNumber = index + 2;
+
+    const storeId = input.lockedStoreId ?? getMappedCsvValue(row, input.mapping, "storeId");
+    const name = getMappedCsvValue(row, input.mapping, "name");
+    const category = getMappedCsvValue(row, input.mapping, "category");
+    const subcategory = getMappedCsvValue(row, input.mapping, "subcategory");
+    const shortDescription = getMappedCsvValue(row, input.mapping, "shortDescription");
+    const description = getMappedCsvValue(row, input.mapping, "description");
+    const disclaimerHtml = getMappedCsvValue(row, input.mapping, "disclaimerHtml");
+    const howToPersonaliseHtml = getMappedCsvValue(row, input.mapping, "howToPersonaliseHtml");
+    const brandDetailsHtml = getMappedCsvValue(row, input.mapping, "brandDetailsHtml");
+    const priceRaw = getMappedCsvValue(row, input.mapping, "price");
+    const originalPriceRaw = getMappedCsvValue(row, input.mapping, "originalPrice");
+    const deliveryEtaRaw = getMappedCsvValue(row, input.mapping, "deliveryEtaHours");
+    const minQtyRaw = getMappedCsvValue(row, input.mapping, "minOrderQty");
+    const maxQtyRaw = getMappedCsvValue(row, input.mapping, "maxOrderQty");
+    const featuredRaw = getMappedCsvValue(row, input.mapping, "featured");
+    const inStockRaw = getMappedCsvValue(row, input.mapping, "inStock");
+    const tagsRaw = getMappedCsvValue(row, input.mapping, "tags");
+    const mediaRaw = getMappedCsvValue(row, input.mapping, "media");
+
+    const variantIdRaw = getMappedCsvValue(row, input.mapping, "variantId");
+    const variantSize = getMappedCsvValue(row, input.mapping, "variantSize");
+    const variantSaleRaw = getMappedCsvValue(row, input.mapping, "variantSalePrice");
+    const variantRegularRaw = getMappedCsvValue(row, input.mapping, "variantRegularPrice");
+    const variantWeightRaw = getMappedCsvValue(row, input.mapping, "variantWeight");
+    const variantWeightUnitRaw = getMappedCsvValue(row, input.mapping, "variantWeightUnit");
+    const variantWidthRaw = getMappedCsvValue(row, input.mapping, "variantWidth");
+    const variantHeightRaw = getMappedCsvValue(row, input.mapping, "variantHeight");
+
+    if (!storeId) {
+      failures.push({ rowNumber, message: "Missing storeId" });
+      continue;
+    }
+
+    if (!name) {
+      failures.push({ rowNumber, message: "Missing item name" });
+      continue;
+    }
+
+    if (!category) {
+      failures.push({ rowNumber, message: "Missing category" });
+      continue;
+    }
+
+    const price = parseNumberValue(priceRaw);
+    if (price === undefined) {
+      failures.push({ rowNumber, message: "Missing or invalid price" });
+      continue;
+    }
+
+    const originalPrice = originalPriceRaw ? parseNumberValue(originalPriceRaw) : undefined;
+    if (originalPriceRaw && originalPrice === undefined) {
+      failures.push({ rowNumber, message: "Invalid originalPrice" });
+      continue;
+    }
+
+    const deliveryEtaHours = deliveryEtaRaw ? parseNumberValue(deliveryEtaRaw) : undefined;
+    if (deliveryEtaRaw && deliveryEtaHours === undefined) {
+      failures.push({ rowNumber, message: "Invalid deliveryEtaHours" });
+      continue;
+    }
+
+    const minOrderQty = minQtyRaw ? parseNumberValue(minQtyRaw) : undefined;
+    if (minQtyRaw && minOrderQty === undefined) {
+      failures.push({ rowNumber, message: "Invalid minOrderQty" });
+      continue;
+    }
+
+    const maxOrderQty = maxQtyRaw ? parseNumberValue(maxQtyRaw) : undefined;
+    if (maxQtyRaw && maxOrderQty === undefined) {
+      failures.push({ rowNumber, message: "Invalid maxOrderQty" });
+      continue;
+    }
+
+    const featured = featuredRaw ? parseBooleanValue(featuredRaw) : undefined;
+    if (featuredRaw && featured === undefined) {
+      failures.push({ rowNumber, message: "Invalid featured value" });
+      continue;
+    }
+
+    const inStock = inStockRaw ? parseBooleanValue(inStockRaw) : undefined;
+    if (inStockRaw && inStock === undefined) {
+      failures.push({ rowNumber, message: "Invalid inStock value" });
+      continue;
+    }
+
+    const mediaUrls = splitDelimitedValues(mediaRaw, true);
+
+    const hasVariantValues = Boolean(
+      variantIdRaw
+      || variantSize
+      || variantSaleRaw
+      || variantRegularRaw
+      || variantWeightRaw
+      || variantWeightUnitRaw
+      || variantWidthRaw
+      || variantHeightRaw,
+    );
+
+    if (hasVariantValues && !variantSize) {
+      failures.push({ rowNumber, message: "variantSize is required when variant fields are provided" });
+      continue;
+    }
+
+    const variantSale = hasVariantValues
+      ? (variantSaleRaw ? parseNumberValue(variantSaleRaw) : price)
+      : undefined;
+    if (hasVariantValues && variantSale === undefined) {
+      failures.push({ rowNumber, message: "Invalid variantSalePrice" });
+      continue;
+    }
+
+    const variantRegular = variantRegularRaw ? parseNumberValue(variantRegularRaw) : undefined;
+    if (variantRegularRaw && variantRegular === undefined) {
+      failures.push({ rowNumber, message: "Invalid variantRegularPrice" });
+      continue;
+    }
+
+    const variantWeight = variantWeightRaw ? parseNumberValue(variantWeightRaw) : undefined;
+    if (variantWeightRaw && variantWeight === undefined) {
+      failures.push({ rowNumber, message: "Invalid variantWeight" });
+      continue;
+    }
+
+    const variantWidth = variantWidthRaw ? parseNumberValue(variantWidthRaw) : undefined;
+    if (variantWidthRaw && variantWidth === undefined) {
+      failures.push({ rowNumber, message: "Invalid variantWidth" });
+      continue;
+    }
+
+    const variantHeight = variantHeightRaw ? parseNumberValue(variantHeightRaw) : undefined;
+    if (variantHeightRaw && variantHeight === undefined) {
+      failures.push({ rowNumber, message: "Invalid variantHeight" });
+      continue;
+    }
+
+    const variantWeightUnit = variantWeightUnitRaw ? parseWeightUnit(variantWeightUnitRaw) : undefined;
+    if (variantWeightUnitRaw && !variantWeightUnit) {
+      failures.push({ rowNumber, message: "variantWeightUnit must be g or kg" });
+      continue;
+    }
+
+    const groupKey = `${storeId.trim().toLowerCase()}|${name.trim().toLowerCase()}|${category.trim().toLowerCase()}|${subcategory.trim().toLowerCase()}`;
+    let group = grouped.get(groupKey);
+    if (!group) {
+      const payload: AdminItemCreatePayload = {
+        storeId,
+        name,
+        category,
+        price: Math.max(0, price),
+      };
+
+      if (subcategory) {
+        payload.subcategory = subcategory;
+      }
+
+      group = {
+        key: groupKey,
+        rowNumbers: [],
+        payload,
+        sizeValues: new Set<string>(),
+        variantSignatures: new Set<string>(),
+        tagValues: new Set<string>(),
+        mediaUrlValues: new Set<string>(),
+      };
+      grouped.set(groupKey, group);
+    }
+
+    group.rowNumbers.push(rowNumber);
+
+    if (shortDescription && !group.payload.shortDescription) group.payload.shortDescription = shortDescription;
+    if (description && !group.payload.description) group.payload.description = description;
+    if (disclaimerHtml && !group.payload.disclaimerHtml) group.payload.disclaimerHtml = disclaimerHtml;
+    if (howToPersonaliseHtml && !group.payload.howToPersonaliseHtml) group.payload.howToPersonaliseHtml = howToPersonaliseHtml;
+    if (brandDetailsHtml && !group.payload.brandDetailsHtml) group.payload.brandDetailsHtml = brandDetailsHtml;
+
+    if (originalPrice !== undefined) {
+      group.payload.originalPrice = Math.max(0, originalPrice);
+    }
+
+    if (deliveryEtaHours !== undefined) {
+      group.payload.deliveryEtaHours = Math.max(1, Math.floor(deliveryEtaHours));
+    }
+
+    if (minOrderQty !== undefined) {
+      group.payload.minOrderQty = Math.max(1, Math.floor(minOrderQty));
+    }
+
+    if (maxOrderQty !== undefined) {
+      group.payload.maxOrderQty = Math.max(1, Math.floor(maxOrderQty));
+    }
+
+    if (featured !== undefined) {
+      group.payload.featured = featured;
+    }
+
+    if (inStock !== undefined) {
+      group.payload.inStock = inStock;
+    }
+
+    for (const tag of splitDelimitedValues(tagsRaw, true)) {
+      group.tagValues.add(tag);
+    }
+
+    if (mediaUrls.length) {
+      const existingMedia = group.payload.media ?? [];
+      for (const url of mediaUrls) {
+        if (group.mediaUrlValues.has(url)) {
+          continue;
+        }
+        group.mediaUrlValues.add(url);
+        const mediaType = inferMediaTypeFromUrl(url);
+        existingMedia.push({
+          type: mediaType,
+          url,
+          ...(mediaType === "video" ? { thumbnailUrl: deriveCloudinaryVideoThumbnail(url) } : {}),
+        });
+      }
+      group.payload.media = existingMedia;
+    }
+
+    if (!hasVariantValues) {
+      continue;
+    }
+
+    const variantSignature = variantSize.trim().toLowerCase();
+    if (group.variantSignatures.has(variantSignature)) {
+      failures.push({ rowNumber, message: `Duplicate variant size ${variantSize} for the same item` });
+      continue;
+    }
+
+    group.variantSignatures.add(variantSignature);
+    group.sizeValues.add(variantSize);
+
+    if (!group.payload.variants) {
+      group.payload.variants = [];
+    }
+
+    const hasDimensions = variantWidth !== undefined || variantHeight !== undefined;
+    const variantId = variantIdRaw || makeLocalId("var");
+    const normalizedVariantSale = variantSale === undefined ? Math.max(0, price) : Math.max(0, variantSale);
+
+    group.payload.variants.push({
+      id: variantId,
+      options: { size: variantSize },
+      salePrice: normalizedVariantSale,
+      regularPrice: variantRegular === undefined ? undefined : Math.max(0, variantRegular),
+      weight: variantWeight === undefined ? undefined : Math.max(0, variantWeight),
+      weightUnit: variantWeight !== undefined ? (variantWeightUnit ?? "g") : undefined,
+      size: variantSize,
+      width: variantWidth === undefined ? undefined : Math.max(0, variantWidth),
+      height: variantHeight === undefined ? undefined : Math.max(0, variantHeight),
+      dimensionUnit: hasDimensions ? "cm" : undefined,
+      inStock: group.payload.inStock ?? true,
+    });
+  }
+
+  const items: CsvPreparedItem[] = [];
+  for (const entry of grouped.values()) {
+    if (entry.tagValues.size) {
+      entry.payload.tags = Array.from(entry.tagValues);
+    }
+
+    if (entry.payload.variants?.length && entry.sizeValues.size) {
+      entry.payload.attributes = [{
+        name: "size",
+        values: Array.from(entry.sizeValues),
+      }];
+    }
+
+    items.push({
+      key: entry.key,
+      rowNumbers: entry.rowNumbers,
+      payload: entry.payload,
+    });
+  }
+
+  return { items, failures };
 }

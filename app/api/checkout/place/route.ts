@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
@@ -23,6 +24,22 @@ type CheckoutPlaceRequest = {
     pinCode?: string;
     addressLabel?: string;
   };
+};
+
+type ProductRefDoc = {
+  _id: ObjectId;
+  id: string;
+};
+
+type StoreRefDoc = {
+  _id: ObjectId;
+  id: string;
+};
+
+type AdminOrderRecord = AdminOrderDto & {
+  customerUserObjectId?: ObjectId;
+  storeObjectId?: ObjectId;
+  productObjectId?: ObjectId;
 };
 
 export const runtime = "nodejs";
@@ -131,12 +148,40 @@ export async function POST(request: Request) {
         quantity: 1,
       };
 
-  const orderRows: AdminOrderDto[] = snapshot.lines.map((line, index) => ({
+  const db = await getMongoDb();
+  const orders = db.collection<AdminOrderRecord>("orders");
+  const products = db.collection<ProductRefDoc>("products");
+  const stores = db.collection<StoreRefDoc>("stores");
+
+  const productIds = Array.from(new Set(snapshot.lines.map((line) => line.product.id).filter(Boolean)));
+  const storeIds = Array.from(
+    new Set(
+      snapshot.lines
+        .map((line) => line.selectedOffer?.storeId)
+        .filter((storeId): storeId is string => Boolean(storeId && storeId !== "direct")),
+    ),
+  );
+
+  const [productDocs, storeDocs] = await Promise.all([
+    productIds.length ? products.find({ id: { $in: productIds } }, { projection: { _id: 1, id: 1 } }).toArray() : Promise.resolve([]),
+    storeIds.length ? stores.find({ id: { $in: storeIds } }, { projection: { _id: 1, id: 1 } }).toArray() : Promise.resolve([]),
+  ]);
+
+  const productObjectIdById = new Map(productDocs.map((entry) => [entry.id, entry._id]));
+  const storeObjectIdById = new Map(storeDocs.map((entry) => [entry.id, entry._id]));
+  const customerUserObjectId = ObjectId.isValid(userId) ? new ObjectId(userId) : undefined;
+
+  const orderRows: AdminOrderRecord[] = snapshot.lines.map((line, index) => ({
     id: `${orderRef}-${String(index + 1).padStart(2, "0")}`,
     orderRef,
     customerUserId: userId,
+    ...(customerUserObjectId ? { customerUserObjectId } : {}),
     storeId: line.selectedOffer?.storeId ?? "direct",
+    ...(line.selectedOffer?.storeId && storeObjectIdById.get(line.selectedOffer.storeId)
+      ? { storeObjectId: storeObjectIdById.get(line.selectedOffer.storeId) }
+      : {}),
     productId: line.product.id,
+    ...(productObjectIdById.get(line.product.id) ? { productObjectId: productObjectIdById.get(line.product.id) } : {}),
     quantity: line.quantity,
     totalAmount: line.lineSubtotal,
     customerName: payload.customer?.fullName ?? "Gifta Customer",
@@ -171,8 +216,6 @@ export async function POST(request: Request) {
     createdAt: now,
   }));
 
-  const db = await getMongoDb();
-  const orders = db.collection<AdminOrderDto>("orders");
   await orders.insertMany(orderRows);
 
   if (userId) {

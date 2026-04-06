@@ -1,9 +1,41 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
 import { deleteAdminUser, updateAdminUser } from "@/lib/server/ecommerce-service";
+import { getAuthUserById } from "@/lib/server/otp-service";
 import { parseRole } from "@/lib/roles";
 
 export const runtime = "nodejs";
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const identity = await authorizeAdminRequest(request, "users");
+    if (!identity) {
+      return unauthorized("Not allowed");
+    }
+
+    const { id } = await context.params;
+    const user = await getAuthUserById(id);
+    if (!user) {
+      return badRequest("User not found");
+    }
+
+    return ok({
+      userId: user._id?.toString() ?? id,
+      fullName: user.fullName ?? "Gifta User",
+      email: user.email,
+      phone: user.phone,
+      profileImage: user.image ?? undefined,
+      addresses: user.addresses ?? [],
+      preferences: user.preferences,
+      updatedAt: user.updatedAt,
+    });
+  } catch (error) {
+    return serverError("Unable to fetch user", error);
+  }
+}
 
 export async function PATCH(
   request: Request,

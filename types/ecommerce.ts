@@ -13,6 +13,8 @@ export type ProductAttribute = {
 
 export type ProductVariantUnit = "g" | "kg";
 
+export type ProductVariantDimensionUnit = "cm";
+
 export type ProductVariant = {
   id: string;
   options: Record<string, string>;
@@ -20,6 +22,10 @@ export type ProductVariant = {
   regularPrice?: number;
   weight?: number;
   weightUnit?: ProductVariantUnit;
+  size?: string;
+  width?: number;
+  height?: number;
+  dimensionUnit?: ProductVariantDimensionUnit;
   inStock: boolean;
 };
 
@@ -45,11 +51,15 @@ export type Product = {
   name: string;
   shortDescription?: string;
   description: string;
+  disclaimerHtml?: string;
+  howToPersonaliseHtml?: string;
+  brandDetailsHtml?: string;
   price: number;
   originalPrice?: number;
   rating: number;
   reviews: number;
   category: Category;
+  subcategory?: string;
   tags: string[];
   media?: ProductMediaItem[];
   images: string[];

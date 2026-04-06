@@ -7,6 +7,7 @@ import {
   AdminOrderDto,
   CommentDto,
   HomePayload,
+  HomeRankingConfig,
   OrderTrackingStep,
   OfferDto,
   ProductDetailsDto,
@@ -86,7 +87,12 @@ type UserDoc = {
 };
 
 type RiderDoc = RiderDto;
-type OrderDoc = AdminOrderDto;
+type OrderDoc = AdminOrderDto & {
+  _id?: ObjectId;
+  customerUserObjectId?: ObjectId;
+  storeObjectId?: ObjectId;
+  productObjectId?: ObjectId;
+};
 
 type VendorOnboardingSubmissionDoc = {
   _id?: ObjectId;
@@ -118,6 +124,13 @@ type GlobalCategorySettingsDoc = {
   updatedBy: string;
 };
 
+type HomeRankingSettingsDoc = {
+  _id: string;
+  config: HomeRankingConfig;
+  updatedAt: string;
+  updatedBy: string;
+};
+
 export type GlobalCategorySettingsDto = {
   categories: StoreCategoryOption[];
   customizableCategories: string[];
@@ -129,13 +142,62 @@ type AdminScope = {
 };
 
 const GLOBAL_CATEGORY_SETTINGS_DOC_ID = "global-categories";
+const HOME_RANKING_SETTINGS_DOC_ID = "home-ranking";
 const FALLBACK_PRODUCT_IMAGE = "/products/placeholder.png";
 const DEFAULT_SHORT_DESCRIPTION_MAX_LENGTH = 180;
+
+const DEFAULT_HOME_RANKING_CONFIG: HomeRankingConfig = {
+  trending: {
+    recentQuantityWeight: 8,
+    recentOrdersWeight: 2,
+    ratingWeight: 7,
+    reviewsWeight: 3,
+    offerWeight: 0.8,
+    featuredBoost: 4,
+  },
+  bestSellers: {
+    totalQuantityWeight: 6,
+    totalOrdersWeight: 3,
+    revenueWeight: 0.004,
+    ratingWeight: 4,
+    reviewsWeight: 2,
+  },
+  signaturePicks: {
+    premiumSignalWeight: 1,
+    qualityWeight: 1,
+    discountWeight: 5,
+    trustWeight: 1,
+    demandWeight: 1,
+    signaturePriceThreshold: 1200,
+    highPriceThreshold: 1800,
+  },
+};
 
 const DEMO_PROFILE_KEY = "demo";
 
 function toObjectId(value: string) {
   return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+
+function objectIdToString(value: unknown) {
+  if (value instanceof ObjectId) {
+    return value.toHexString();
+  }
+
+  if (typeof value === "string" && ObjectId.isValid(value)) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function mapOrderDocToDto(order: OrderDoc): AdminOrderDto {
+  const { _id, customerUserObjectId, ...rest } = order;
+  void _id;
+  return {
+    ...rest,
+    ...(rest.customerUserId ? {} : customerUserObjectId ? { customerUserId: customerUserObjectId.toHexString() } : {}),
+  };
 }
 
 function profileDocToDto(doc: UserDoc): ProfileDto {
@@ -229,6 +291,71 @@ function toShortDescription(value: string, maxLength = DEFAULT_SHORT_DESCRIPTION
   const lastSpace = slice.lastIndexOf(" ");
   const shortened = lastSpace > 80 ? slice.slice(0, lastSpace) : slice;
   return `${shortened.trim()}...`;
+}
+
+function stripHtmlToText(value: string) {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeRichHtmlField(value: string | undefined) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return stripHtmlToText(trimmed).length ? trimmed : "";
+}
+
+function normalizeDescriptionField(value: string | undefined) {
+  const normalized = normalizeRichHtmlField(value);
+  if (!normalized) {
+    return "Handpicked gift item";
+  }
+
+  return normalized;
+}
+
+function toBoundedNumber(value: number | undefined, fallback: number, min: number, max: number) {
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, value));
+}
+
+function toNormalizedHomeRankingConfig(input: HomeRankingConfig | undefined): HomeRankingConfig {
+  const source = input ?? DEFAULT_HOME_RANKING_CONFIG;
+
+  return {
+    trending: {
+      recentQuantityWeight: toBoundedNumber(source.trending?.recentQuantityWeight, DEFAULT_HOME_RANKING_CONFIG.trending.recentQuantityWeight, 0, 100),
+      recentOrdersWeight: toBoundedNumber(source.trending?.recentOrdersWeight, DEFAULT_HOME_RANKING_CONFIG.trending.recentOrdersWeight, 0, 100),
+      ratingWeight: toBoundedNumber(source.trending?.ratingWeight, DEFAULT_HOME_RANKING_CONFIG.trending.ratingWeight, 0, 100),
+      reviewsWeight: toBoundedNumber(source.trending?.reviewsWeight, DEFAULT_HOME_RANKING_CONFIG.trending.reviewsWeight, 0, 100),
+      offerWeight: toBoundedNumber(source.trending?.offerWeight, DEFAULT_HOME_RANKING_CONFIG.trending.offerWeight, 0, 100),
+      featuredBoost: toBoundedNumber(source.trending?.featuredBoost, DEFAULT_HOME_RANKING_CONFIG.trending.featuredBoost, 0, 100),
+    },
+    bestSellers: {
+      totalQuantityWeight: toBoundedNumber(source.bestSellers?.totalQuantityWeight, DEFAULT_HOME_RANKING_CONFIG.bestSellers.totalQuantityWeight, 0, 100),
+      totalOrdersWeight: toBoundedNumber(source.bestSellers?.totalOrdersWeight, DEFAULT_HOME_RANKING_CONFIG.bestSellers.totalOrdersWeight, 0, 100),
+      revenueWeight: toBoundedNumber(source.bestSellers?.revenueWeight, DEFAULT_HOME_RANKING_CONFIG.bestSellers.revenueWeight, 0, 5),
+      ratingWeight: toBoundedNumber(source.bestSellers?.ratingWeight, DEFAULT_HOME_RANKING_CONFIG.bestSellers.ratingWeight, 0, 100),
+      reviewsWeight: toBoundedNumber(source.bestSellers?.reviewsWeight, DEFAULT_HOME_RANKING_CONFIG.bestSellers.reviewsWeight, 0, 100),
+    },
+    signaturePicks: {
+      premiumSignalWeight: toBoundedNumber(source.signaturePicks?.premiumSignalWeight, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.premiumSignalWeight, 0, 100),
+      qualityWeight: toBoundedNumber(source.signaturePicks?.qualityWeight, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.qualityWeight, 0, 100),
+      discountWeight: toBoundedNumber(source.signaturePicks?.discountWeight, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.discountWeight, 0, 100),
+      trustWeight: toBoundedNumber(source.signaturePicks?.trustWeight, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.trustWeight, 0, 100),
+      demandWeight: toBoundedNumber(source.signaturePicks?.demandWeight, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.demandWeight, 0, 100),
+      signaturePriceThreshold: toBoundedNumber(source.signaturePicks?.signaturePriceThreshold, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.signaturePriceThreshold, 0, 500000),
+      highPriceThreshold: toBoundedNumber(source.signaturePicks?.highPriceThreshold, DEFAULT_HOME_RANKING_CONFIG.signaturePicks.highPriceThreshold, 0, 500000),
+    },
+  };
 }
 
 function inferMediaTypeFromUrl(url: string): "image" | "video" {
@@ -345,12 +472,11 @@ function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
   const maxOrderQty = hiddenByQty ? 0 : Math.max(minOrderQty, rawMax);
   const normalizedMedia = toNormalizedProductMedia(product.media, product.images);
   const normalizedImages = toDisplayImagesFromMedia(normalizedMedia);
-  const normalizedDescription = typeof product.description === "string" && product.description.trim()
-    ? product.description.trim()
-    : "Handpicked gift item";
+  const normalizedDescription = normalizeDescriptionField(product.description);
+  const descriptionText = stripHtmlToText(normalizedDescription);
   const normalizedShortDescription = typeof product.shortDescription === "string" && product.shortDescription.trim()
     ? toShortDescription(product.shortDescription)
-    : toShortDescription(normalizedDescription);
+    : toShortDescription(descriptionText || normalizedDescription);
 
   return {
     ...rest,
@@ -444,6 +570,16 @@ function normalizeProductVariants(variants: ProductVariant[] | undefined, attrib
     }
     signatures.add(signature);
 
+    const size = typeof variant.size === "string" ? variant.size.trim() : "";
+    const width = typeof variant.width === "number" && Number.isFinite(variant.width)
+      ? Math.max(0, variant.width)
+      : undefined;
+    const height = typeof variant.height === "number" && Number.isFinite(variant.height)
+      ? Math.max(0, variant.height)
+      : undefined;
+    const hasDimensions = width !== undefined || height !== undefined;
+    const dimensionUnit = variant.dimensionUnit === "cm" ? "cm" : undefined;
+
     normalized.push({
       id,
       options,
@@ -451,6 +587,10 @@ function normalizeProductVariants(variants: ProductVariant[] | undefined, attrib
       regularPrice: typeof variant.regularPrice === "number" ? Math.max(0, variant.regularPrice) : undefined,
       weight: typeof variant.weight === "number" ? Math.max(0, variant.weight) : undefined,
       weightUnit: variant.weightUnit === "kg" ? "kg" : variant.weightUnit === "g" ? "g" : undefined,
+      ...(size ? { size } : {}),
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+      ...(hasDimensions ? { dimensionUnit: dimensionUnit ?? "cm" } : {}),
       inStock: variant.inStock ?? true,
     });
   }
@@ -573,6 +713,7 @@ async function getCollections() {
     orders: db.collection<OrderDoc>("orders"),
     vendorOnboardingSubmissions: db.collection<VendorOnboardingSubmissionDoc>("vendor_onboarding_submissions"),
     globalCategorySettings: db.collection<GlobalCategorySettingsDoc>("global_category_settings"),
+    homeRankingSettings: db.collection<HomeRankingSettingsDoc>("home_ranking_settings"),
   };
 }
 
@@ -672,28 +813,310 @@ function buildComparator(sort: SortOption) {
   return (left: ProductListItemDto, right: ProductListItemDto) => Number(right.featured) - Number(left.featured) || right.rating - left.rating;
 }
 
+type ProductSalesSignal = {
+  totalOrders: number;
+  totalQuantity: number;
+  totalRevenue: number;
+  recent30Orders: number;
+  recent30Quantity: number;
+  recent14Quantity: number;
+  recent7Quantity: number;
+  lastOrderedAt?: string;
+};
+
+function toPositiveNumber(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.max(0, parsed);
+}
+
+function toEmptySalesSignal(): ProductSalesSignal {
+  return {
+    totalOrders: 0,
+    totalQuantity: 0,
+    totalRevenue: 0,
+    recent30Orders: 0,
+    recent30Quantity: 0,
+    recent14Quantity: 0,
+    recent7Quantity: 0,
+  };
+}
+
+async function getSalesSignalsByProduct(productIds: string[]) {
+  if (!productIds.length) {
+    return new Map<string, ProductSalesSignal>();
+  }
+
+  const { orders } = await getCollections();
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const before7Days = new Date(now - 7 * day).toISOString();
+  const before14Days = new Date(now - 14 * day).toISOString();
+  const before30Days = new Date(now - 30 * day).toISOString();
+
+  const rows = await orders.aggregate<{
+    _id: string;
+    totalOrders: number;
+    totalQuantity: number;
+    totalRevenue: number;
+    recent30Orders: number;
+    recent30Quantity: number;
+    recent14Quantity: number;
+    recent7Quantity: number;
+    lastOrderedAt?: string;
+  }>([
+    {
+      $match: {
+        productId: { $in: productIds },
+        status: { $ne: "cancelled" },
+      },
+    },
+    {
+      $group: {
+        _id: "$productId",
+        totalOrders: { $sum: 1 },
+        totalQuantity: { $sum: { $ifNull: ["$quantity", 0] } },
+        totalRevenue: { $sum: { $ifNull: ["$totalAmount", 0] } },
+        recent30Orders: {
+          $sum: {
+            $cond: [{ $gte: ["$createdAt", before30Days] }, 1, 0],
+          },
+        },
+        recent30Quantity: {
+          $sum: {
+            $cond: [{ $gte: ["$createdAt", before30Days] }, { $ifNull: ["$quantity", 0] }, 0],
+          },
+        },
+        recent14Quantity: {
+          $sum: {
+            $cond: [{ $gte: ["$createdAt", before14Days] }, { $ifNull: ["$quantity", 0] }, 0],
+          },
+        },
+        recent7Quantity: {
+          $sum: {
+            $cond: [{ $gte: ["$createdAt", before7Days] }, { $ifNull: ["$quantity", 0] }, 0],
+          },
+        },
+        lastOrderedAt: { $max: "$createdAt" },
+      },
+    },
+  ]).toArray();
+
+  const signals = new Map<string, ProductSalesSignal>();
+  for (const row of rows) {
+    const productId = typeof row._id === "string" ? row._id.trim() : "";
+    if (!productId) {
+      continue;
+    }
+
+    signals.set(productId, {
+      totalOrders: toPositiveNumber(row.totalOrders),
+      totalQuantity: toPositiveNumber(row.totalQuantity),
+      totalRevenue: toPositiveNumber(row.totalRevenue),
+      recent30Orders: toPositiveNumber(row.recent30Orders),
+      recent30Quantity: toPositiveNumber(row.recent30Quantity),
+      recent14Quantity: toPositiveNumber(row.recent14Quantity),
+      recent7Quantity: toPositiveNumber(row.recent7Quantity),
+      ...(typeof row.lastOrderedAt === "string" && row.lastOrderedAt.trim() ? { lastOrderedAt: row.lastOrderedAt } : {}),
+    });
+  }
+
+  return signals;
+}
+
+function getEffectiveProductPrice(product: ProductListItemDto) {
+  return product.bestOffer?.price ?? product.price;
+}
+
+function hasSignatureTag(product: ProductListItemDto) {
+  const signatureTokens = ["signature", "premium", "luxury", "exclusive", "artisan", "handmade", "custom"];
+  return product.tags.some((tag) => signatureTokens.some((token) => tag.toLowerCase().includes(token)));
+}
+
+function rankHomeSectionProducts(input: {
+  candidates: ProductListItemDto[];
+  salesSignals: Map<string, ProductSalesSignal>;
+  limit: number;
+  scorer: (product: ProductListItemDto, signal: ProductSalesSignal) => number;
+  filter?: (product: ProductListItemDto, signal: ProductSalesSignal) => boolean;
+}) {
+  const seen = new Set<string>();
+  const rows = input.candidates
+    .filter((product) => {
+      if (seen.has(product.id)) {
+        return false;
+      }
+
+      seen.add(product.id);
+      return true;
+    })
+    .map((product) => {
+      const signal = input.salesSignals.get(product.id) ?? toEmptySalesSignal();
+      if (input.filter && !input.filter(product, signal)) {
+        return null;
+      }
+
+      return {
+        product,
+        score: input.scorer(product, signal),
+      };
+    })
+    .filter((entry): entry is { product: ProductListItemDto; score: number } => Boolean(entry && Number.isFinite(entry.score)))
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+
+      if (right.product.rating !== left.product.rating) {
+        return right.product.rating - left.product.rating;
+      }
+
+      if (right.product.reviews !== left.product.reviews) {
+        return right.product.reviews - left.product.reviews;
+      }
+
+      return left.product.name.localeCompare(right.product.name);
+    });
+
+  return rows.slice(0, input.limit).map((entry) => entry.product);
+}
+
 export async function getHomeData(): Promise<HomePayload> {
   const { products } = await getCollections();
-  const featuredDocs = (await products.find({ featured: true }).limit(20).toArray())
+  const productDocs = (await products.find().toArray())
     .map(normalizeInventoryProduct)
-    .filter(isPurchasableProduct)
-    .slice(0, 6);
-  const topRatedDocs = (await products.find().sort({ rating: -1 }).limit(20).toArray())
-    .map(normalizeInventoryProduct)
-    .filter(isPurchasableProduct)
-    .slice(0, 6);
+    .filter(isPurchasableProduct);
+  const productIds = productDocs.map((entry) => entry.id);
+  const [offersData, salesSignals, rankingConfig] = await Promise.all([
+    getOffersForProducts(productIds),
+    getSalesSignalsByProduct(productIds),
+    getHomeRankingConfig(),
+  ]);
 
-  const allIds = Array.from(new Set([...featuredDocs, ...topRatedDocs].map((entry) => entry.id)));
-  const { offersByProduct } = await getOffersForProducts(allIds);
+  const realStoreProducts: ProductListItemDto[] = [];
+  for (const product of productDocs) {
+    const offers = (offersData.offersByProduct.get(product.id) ?? []).filter(
+      (offer) => offer.inStock && Boolean(offer.store?.id) && Boolean(offer.store?.active),
+    );
 
-  const toListItem = (product: ProductDoc): ProductListItemDto => {
-    const offers = offersByProduct.get(product.id) ?? [];
-    return {
-      ...normalizeInventoryProduct(product),
+    if (!offers.length) {
+      continue;
+    }
+
+    realStoreProducts.push({
+      ...product,
       bestOffer: offers[0],
       offerCount: offers.length,
-    };
-  };
+    });
+  }
+
+  const trending = rankHomeSectionProducts({
+    candidates: realStoreProducts,
+    salesSignals,
+    limit: 8,
+    filter: (_product, signal) => signal.recent30Orders > 0 || signal.recent30Quantity > 0,
+    scorer: (product, signal) => {
+      const momentum = signal.recent7Quantity * rankingConfig.trending.recentQuantityWeight
+        + signal.recent14Quantity * (rankingConfig.trending.recentQuantityWeight / 2)
+        + signal.recent30Orders * rankingConfig.trending.recentOrdersWeight;
+      const socialProof = product.rating * rankingConfig.trending.ratingWeight
+        + Math.log1p(product.reviews) * rankingConfig.trending.reviewsWeight;
+      const merchandising = product.offerCount * rankingConfig.trending.offerWeight
+        + (product.featured ? rankingConfig.trending.featuredBoost : 0);
+      return momentum + socialProof + merchandising;
+    },
+  });
+
+  const trendingFallback = trending.length
+    ? trending
+    : rankHomeSectionProducts({
+      candidates: realStoreProducts,
+      salesSignals,
+      limit: 8,
+      scorer: (product, signal) => {
+        const socialProof = product.rating * 8 + Math.log1p(product.reviews) * 2;
+        const demand = signal.recent30Orders * 4 + signal.totalOrders * 1.5;
+        return socialProof + demand;
+      },
+    });
+
+  const bestSellers = rankHomeSectionProducts({
+    candidates: realStoreProducts,
+    salesSignals,
+    limit: 8,
+    filter: (_product, signal) => signal.totalQuantity > 0,
+    scorer: (product, signal) => {
+      const sellThrough = signal.totalQuantity * rankingConfig.bestSellers.totalQuantityWeight
+        + signal.totalOrders * rankingConfig.bestSellers.totalOrdersWeight;
+      const revenueWeight = signal.totalRevenue * rankingConfig.bestSellers.revenueWeight;
+      const quality = product.rating * rankingConfig.bestSellers.ratingWeight
+        + Math.log1p(product.reviews) * rankingConfig.bestSellers.reviewsWeight;
+      return sellThrough + revenueWeight + quality;
+    },
+  });
+
+  const bestSellerFallback = bestSellers.length
+    ? bestSellers
+    : rankHomeSectionProducts({
+      candidates: realStoreProducts,
+      salesSignals,
+      limit: 8,
+      scorer: (product, signal) => {
+        const demand = signal.totalOrders * 3 + signal.recent30Orders * 4;
+        const quality = product.rating * 6 + Math.log1p(product.reviews) * 2;
+        return demand + quality;
+      },
+    });
+
+  const signatureCandidates = realStoreProducts.filter((product) => {
+    if (product.featured) {
+      return true;
+    }
+
+    if (hasSignatureTag(product)) {
+      return true;
+    }
+
+    return getEffectiveProductPrice(product) >= 1200 || product.rating >= 4.4;
+  });
+
+  const signaturePicks = rankHomeSectionProducts({
+    candidates: signatureCandidates.length ? signatureCandidates : realStoreProducts,
+    salesSignals,
+    limit: 5,
+    scorer: (product, signal) => {
+      const bestPrice = getEffectiveProductPrice(product);
+      const listPrice = product.bestOffer?.originalPrice ?? product.originalPrice ?? bestPrice;
+      const discountRate = listPrice > 0 ? Math.max(0, Math.min(1, (listPrice - bestPrice) / listPrice)) : 0;
+      const premiumSignals = (hasSignatureTag(product) ? 10 : 0)
+        + (product.featured ? 8 : 0)
+        + (bestPrice >= rankingConfig.signaturePicks.highPriceThreshold
+          ? 4
+          : bestPrice >= rankingConfig.signaturePicks.signaturePriceThreshold
+            ? 2
+            : 0);
+      const quality = product.rating * 10 + Math.log1p(product.reviews) * 4;
+      const trust = (product.bestOffer?.store?.rating ?? 0) * 2 + ((product.bestOffer?.deliveryEtaHours ?? 24) <= 6 ? 2 : 0);
+      const demand = signal.recent30Orders * 1.5 + signal.totalOrders * 0.5;
+      return premiumSignals * rankingConfig.signaturePicks.premiumSignalWeight
+        + quality * rankingConfig.signaturePicks.qualityWeight
+        + discountRate * rankingConfig.signaturePicks.discountWeight
+        + trust * rankingConfig.signaturePicks.trustWeight
+        + demand * rankingConfig.signaturePicks.demandWeight;
+    },
+  });
+
+  const topRated = rankHomeSectionProducts({
+    candidates: realStoreProducts,
+    salesSignals,
+    limit: 6,
+    scorer: (product) => product.rating * 10 + Math.log1p(product.reviews) * 3 + product.offerCount,
+  });
+
+  const featured = (trendingFallback.length ? trendingFallback : topRated).slice(0, 6);
 
   const rawCategories = await products.distinct("category");
   const dbCategories = Array.from(
@@ -705,8 +1128,11 @@ export async function getHomeData(): Promise<HomePayload> {
   ).sort((left, right) => left.localeCompare(right));
 
   return {
-    featured: featuredDocs.map(toListItem),
-    topRated: topRatedDocs.map(toListItem),
+    featured,
+    topRated,
+    trending: trendingFallback,
+    bestSellers: bestSellerFallback,
+    signaturePicks,
     categories: dbCategories,
   };
 }
@@ -1291,6 +1717,75 @@ export async function getMergedCategoryValuesForStoreScoped(input: {
   };
 }
 
+function toValidatedGlobalCategorySelection(input: {
+  globalCategoryOptions: StoreCategoryOption[];
+  category: string;
+  subcategory?: string;
+}) {
+  const requestedCategory = input.category.trim();
+  if (!requestedCategory) {
+    throw new Error("INVALID_GLOBAL_CATEGORY");
+  }
+
+  const normalizedGlobalOptions = toNormalizedStoreCategoryOptions(input.globalCategoryOptions);
+  const matchedCategory = normalizedGlobalOptions.find(
+    (entry) => entry.name.toLowerCase() === requestedCategory.toLowerCase(),
+  );
+
+  if (!matchedCategory) {
+    throw new Error("INVALID_GLOBAL_CATEGORY");
+  }
+
+  const requestedSubcategory = (input.subcategory ?? "").trim();
+  if (!requestedSubcategory) {
+    return {
+      category: matchedCategory.name,
+      subcategory: "",
+    };
+  }
+
+  const matchedSubcategory = matchedCategory.subcategories.find(
+    (entry) => entry.toLowerCase() === requestedSubcategory.toLowerCase(),
+  );
+
+  if (!matchedSubcategory) {
+    throw new Error("INVALID_GLOBAL_SUBCATEGORY");
+  }
+
+  return {
+    category: matchedCategory.name,
+    subcategory: matchedSubcategory,
+  };
+}
+
+export async function getHomeRankingConfig(): Promise<HomeRankingConfig> {
+  const { homeRankingSettings } = await getCollections();
+  const settings = await homeRankingSettings.findOne({ _id: HOME_RANKING_SETTINGS_DOC_ID });
+  return toNormalizedHomeRankingConfig(settings?.config);
+}
+
+export async function updateHomeRankingConfig(input: {
+  config: HomeRankingConfig;
+  updatedBy: string;
+}) {
+  const { homeRankingSettings } = await getCollections();
+  const normalizedConfig = toNormalizedHomeRankingConfig(input.config);
+
+  await homeRankingSettings.updateOne(
+    { _id: HOME_RANKING_SETTINGS_DOC_ID },
+    {
+      $set: {
+        config: normalizedConfig,
+        updatedAt: new Date().toISOString(),
+        updatedBy: input.updatedBy,
+      },
+    },
+    { upsert: true },
+  );
+
+  return normalizedConfig;
+}
+
 function mapVendorOnboardingSubmission(doc: VendorOnboardingSubmissionDoc): VendorOnboardingSubmissionDto {
   return {
     id: doc.id,
@@ -1748,7 +2243,8 @@ export async function getAdminOrders() {
 export async function getAdminOrdersScoped(scope: AdminScope) {
   const { orders } = await getCollections();
   if (scope.role === "SADMIN") {
-    return orders.find().sort({ createdAt: -1 }).limit(200).toArray();
+    const rows = await orders.find().sort({ createdAt: -1 }).limit(200).toArray();
+    return rows.map(mapOrderDocToDto);
   }
 
   const scopedStoreIds = await getStoreIdsForScope(scope);
@@ -1756,7 +2252,105 @@ export async function getAdminOrdersScoped(scope: AdminScope) {
     return [];
   }
 
-  return orders.find({ storeId: { $in: scopedStoreIds } }).sort({ createdAt: -1 }).limit(200).toArray();
+  const rows = await orders.find({ storeId: { $in: scopedStoreIds } }).sort({ createdAt: -1 }).limit(200).toArray();
+  return rows.map(mapOrderDocToDto);
+}
+
+export async function getAdminOrderDetailsScoped(input: {
+  orderId: string;
+  scope: AdminScope;
+}) {
+  const { orders, products, stores, users, riders } = await getCollections();
+  const seedOrder = await orders.findOne({ id: input.orderId });
+
+  if (!seedOrder) {
+    throw new Error("ORDER_NOT_FOUND");
+  }
+
+  const scopedStoreIds = input.scope.role === "STORE_OWNER" ? await getStoreIdsForScope(input.scope) : null;
+  if (scopedStoreIds && !scopedStoreIds.includes(seedOrder.storeId)) {
+    throw new Error("FORBIDDEN_ORDER_SCOPE");
+  }
+
+  const orderRef = seedOrder.orderRef?.trim();
+  const baseQuery: Record<string, unknown> = orderRef ? { orderRef } : { id: seedOrder.id };
+  if (scopedStoreIds) {
+    baseQuery.storeId = { $in: scopedStoreIds };
+  }
+
+  const rows = await orders.find(baseQuery).sort({ createdAt: -1 }).toArray();
+  if (!rows.length) {
+    throw new Error("FORBIDDEN_ORDER_SCOPE");
+  }
+
+  const productIds = Array.from(new Set(rows.map((entry) => entry.productId).filter(Boolean)));
+  const storeIds = Array.from(new Set(rows.map((entry) => entry.storeId).filter((entry) => Boolean(entry) && entry !== "direct")));
+  const riderIds = Array.from(new Set(rows.map((entry) => entry.riderId).filter(Boolean))) as string[];
+
+  const [productDocs, storeDocs, riderDocs] = await Promise.all([
+    productIds.length ? products.find({ id: { $in: productIds } }).toArray() : Promise.resolve([]),
+    storeIds.length ? stores.find({ id: { $in: storeIds } }).toArray() : Promise.resolve([]),
+    riderIds.length ? riders.find({ id: { $in: riderIds } }).toArray() : Promise.resolve([]),
+  ]);
+
+  const productsById = toMap(productDocs);
+  const storesById = toMap(storeDocs);
+  const ridersById = toMap(riderDocs);
+
+  const customerUserObjectId = rows
+    .map((entry) => objectIdToString(entry.customerUserObjectId))
+    .find(Boolean)
+    ?? rows.map((entry) => entry.customerUserId?.trim()).find((entry): entry is string => Boolean(entry));
+
+  const customerObjectId = customerUserObjectId ? toObjectId(customerUserObjectId) : null;
+  const customerDoc = customerObjectId ? await users.findOne({ _id: customerObjectId }) : null;
+  const customerProfile = customerDoc ? profileDocToDto(customerDoc) : undefined;
+
+  const sortedByTime = [...rows].sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+  const latestStatus = [...rows]
+    .sort((left, right) => statusPriority[right.status] - statusPriority[left.status])[0]?.status ?? "placed";
+
+  const totalAmount = rows.reduce((sum, entry) => sum + entry.totalAmount, 0);
+  const itemCount = rows.reduce((sum, entry) => sum + entry.quantity, 0);
+
+  const lineItems = rows.map((entry) => {
+    const product = productsById.get(entry.productId);
+    const store = storesById.get(entry.storeId);
+    const rider = entry.riderId ? ridersById.get(entry.riderId) : undefined;
+
+    return {
+      ...mapOrderDocToDto(entry),
+      productName: product?.name ?? entry.productId,
+      productImage: product?.images?.[0],
+      storeName: store?.name,
+      riderName: rider?.fullName,
+      customerUserObjectId: objectIdToString(entry.customerUserObjectId),
+      storeObjectId: objectIdToString(entry.storeObjectId),
+      productObjectId: objectIdToString(entry.productObjectId),
+    };
+  });
+
+  const primary = lineItems[0];
+
+  return {
+    orderRef: orderRef || seedOrder.id,
+    orderId: seedOrder.id,
+    status: latestStatus,
+    createdAt: sortedByTime[0]?.createdAt ?? seedOrder.createdAt,
+    lastUpdatedAt: sortedByTime[sortedByTime.length - 1]?.createdAt ?? seedOrder.createdAt,
+    totalAmount,
+    itemCount,
+    lineCount: lineItems.length,
+    customer: {
+      userId: primary?.customerUserId,
+      userObjectId: primary?.customerUserObjectId,
+      name: primary?.customerName,
+      email: primary?.customerEmail,
+      phone: primary?.customerPhone,
+      profile: customerProfile,
+    },
+    lines: lineItems,
+  };
 }
 
 const statusPriority: Record<AdminOrderDto["status"], number> = {
@@ -1768,25 +2362,34 @@ const statusPriority: Record<AdminOrderDto["status"], number> = {
 };
 
 export async function getUserOrders(userId: string, customerEmail?: string): Promise<UserOrderDto[]> {
-  const { orders, products } = await getCollections();
+  const { orders, products, stores, riders } = await getCollections();
   const objectId = toObjectId(userId);
 
   const query: Record<string, unknown> = {};
   if (objectId) {
     query.$or = [
+      { customerUserObjectId: objectId },
       { customerUserId: objectId.toString() },
+      { customerUserId: userId },
       ...(customerEmail ? [{ customerEmail }] : []),
     ];
-  } else if (customerEmail) {
-    query.customerEmail = customerEmail;
+  } else {
+    query.$or = [
+      { customerUserId: userId },
+      ...(customerEmail ? [{ customerEmail }] : []),
+    ];
   }
 
-  const [orderDocs, productDocs] = await Promise.all([
+  const [orderDocs, productDocs, storeDocs, riderDocs] = await Promise.all([
     orders.find(query).sort({ createdAt: -1 }).limit(200).toArray(),
     products.find().toArray(),
+    stores.find().toArray(),
+    riders.find().toArray(),
   ]);
 
   const productsById = toMap(productDocs);
+  const storesById = toMap(storeDocs);
+  const ridersById = toMap(riderDocs);
   const grouped = new Map<string, AdminOrderDto[]>();
 
   for (const order of orderDocs) {
@@ -1797,11 +2400,13 @@ export async function getUserOrders(userId: string, customerEmail?: string): Pro
   }
 
   const output: UserOrderDto[] = Array.from(grouped.entries()).map(([orderRef, entries]) => {
-    const sorted = [...entries].sort((left, right) =>
-      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    const sortedByTime = [...entries].sort((left, right) =>
+      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
     );
+    const latestByTime = sortedByTime[sortedByTime.length - 1] ?? entries[0];
 
-    const placedAt = sorted[0]?.createdAt ?? new Date().toISOString();
+    const placedAt = sortedByTime[0]?.createdAt ?? new Date().toISOString();
+    const lastUpdatedAt = latestByTime?.createdAt ?? placedAt;
     const totalAmount = entries.reduce((total, entry) => total + entry.totalAmount, 0);
     const itemCount = entries.reduce((total, entry) => total + entry.quantity, 0);
     const topStatus = [...entries]
@@ -1811,16 +2416,78 @@ export async function getUserOrders(userId: string, customerEmail?: string): Pro
       .map((entry) => productsById.get(entry.productId)?.name)
       .filter((value): value is string => Boolean(value));
 
+    const items = entries.map((entry) => {
+      const rider = entry.riderId ? ridersById.get(entry.riderId) : undefined;
+      return {
+        id: entry.id,
+        productId: entry.productId,
+        productName: productsById.get(entry.productId)?.name ?? entry.productId,
+        productImage: productsById.get(entry.productId)?.images?.[0],
+        storeId: entry.storeId,
+        storeName: storesById.get(entry.storeId)?.name,
+        quantity: entry.quantity,
+        totalAmount: entry.totalAmount,
+        customization: entry.customization,
+        customizationSignature: entry.customizationSignature,
+        status: entry.status,
+        paymentMethod: entry.paymentMethod,
+        transactionStatus: entry.transactionStatus,
+        transactionId: entry.transactionId,
+        paymentId: entry.paymentId,
+        razorpayOrderId: entry.razorpayOrderId,
+        promoCode: entry.promoCode,
+        discountAmount: entry.discountAmount,
+        deliveryFee: entry.deliveryFee,
+        shippingProvider: entry.shippingProvider,
+        shippingProviderStatus: entry.shippingProviderStatus,
+        shippingAwb: entry.shippingAwb,
+        shippingShipmentId: entry.shippingShipmentId,
+        shippingPickupRequestId: entry.shippingPickupRequestId,
+        shippingError: entry.shippingError,
+        shippingLastSyncedAt: entry.shippingLastSyncedAt,
+        deliveryAddress: entry.deliveryAddress,
+        pickupAddress: entry.pickupAddress,
+        shippingPackage: entry.shippingPackage,
+        shippingEvents: entry.shippingEvents,
+        riderId: entry.riderId,
+        riderName: rider?.fullName,
+        createdAt: entry.createdAt,
+      };
+    });
+
+    const summaryNames = productNames.length
+      ? productNames
+      : items.map((item) => item.productName).filter(Boolean);
+
+    const itemsSummary = summaryNames.length
+      ? summaryNames.slice(0, 2).join(", ") + (summaryNames.length > 2 ? ` +${summaryNames.length - 2} more` : "")
+      : `${itemCount} item(s)`;
+
     return {
       orderRef,
       placedAt,
+      lastUpdatedAt,
       status: topStatus,
       totalAmount,
       itemCount,
-      deliveryAddressLabel: entries[0]?.deliveryAddressLabel,
-      itemsSummary:
-        productNames.slice(0, 2).join(", ") +
-        (productNames.length > 2 ? ` +${productNames.length - 2} more` : ""),
+      deliveryAddressLabel: latestByTime?.deliveryAddressLabel ?? entries[0]?.deliveryAddressLabel,
+      paymentMethod: latestByTime?.paymentMethod,
+      transactionStatus: latestByTime?.transactionStatus,
+      transactionId: latestByTime?.transactionId,
+      paymentId: latestByTime?.paymentId,
+      razorpayOrderId: latestByTime?.razorpayOrderId,
+      promoCode: latestByTime?.promoCode,
+      discountAmount: latestByTime?.discountAmount,
+      deliveryFee: latestByTime?.deliveryFee,
+      shippingProvider: latestByTime?.shippingProvider,
+      shippingProviderStatus: latestByTime?.shippingProviderStatus,
+      shippingAwb: latestByTime?.shippingAwb,
+      shippingShipmentId: latestByTime?.shippingShipmentId,
+      shippingPickupRequestId: latestByTime?.shippingPickupRequestId,
+      shippingError: latestByTime?.shippingError,
+      shippingLastSyncedAt: latestByTime?.shippingLastSyncedAt,
+      itemsSummary,
+      items,
     } satisfies UserOrderDto;
   });
 
@@ -1843,29 +2510,35 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
     return null;
   }
 
-  const { orders, products, stores } = await getCollections();
+  const { orders, products, stores, riders } = await getCollections();
 
   const query: Record<string, unknown> = {
     $or: [{ orderRef: trimmedOrderRef }, { id: trimmedOrderRef }],
   };
   const objectId = toObjectId(userId);
-  if (objectId) {
-    query.$and = [
-      {
-        $or: [
-          { customerUserId: objectId.toString() },
-          ...(customerEmail ? [{ customerEmail }] : []),
-        ],
-      },
-    ];
-  } else if (customerEmail) {
-    query.customerEmail = customerEmail;
-  }
+  const customerScope = objectId
+    ? [
+        { customerUserObjectId: objectId },
+        { customerUserId: objectId.toString() },
+        { customerUserId: userId },
+        ...(customerEmail ? [{ customerEmail }] : []),
+      ]
+    : [
+        { customerUserId: userId },
+        ...(customerEmail ? [{ customerEmail }] : []),
+      ];
 
-  const [orderDocs, productDocs, storeDocs] = await Promise.all([
+  query.$and = [
+    {
+      $or: customerScope,
+    },
+  ];
+
+  const [orderDocs, productDocs, storeDocs, riderDocs] = await Promise.all([
     orders.find(query).sort({ createdAt: -1 }).toArray(),
     products.find().toArray(),
     stores.find().toArray(),
+    riders.find().toArray(),
   ]);
 
   if (!orderDocs.length) {
@@ -1874,6 +2547,7 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
 
   const productsById = toMap(productDocs);
   const storesById = toMap(storeDocs);
+  const ridersById = toMap(riderDocs);
 
   const sortedByTime = [...orderDocs].sort((left, right) =>
     new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
@@ -1914,36 +2588,71 @@ export async function getUserOrderDetails(orderRef: string, userId: string, cust
     id: entry.id,
     productId: entry.productId,
     productName: productsById.get(entry.productId)?.name ?? entry.productId,
+    productImage: productsById.get(entry.productId)?.images?.[0],
     storeId: entry.storeId,
     storeName: storesById.get(entry.storeId)?.name,
     quantity: entry.quantity,
     totalAmount: entry.totalAmount,
+    customization: entry.customization,
+    customizationSignature: entry.customizationSignature,
     status: entry.status,
+    paymentMethod: entry.paymentMethod,
+    transactionStatus: entry.transactionStatus,
+    transactionId: entry.transactionId,
+    paymentId: entry.paymentId,
+    razorpayOrderId: entry.razorpayOrderId,
+    promoCode: entry.promoCode,
+    discountAmount: entry.discountAmount,
+    deliveryFee: entry.deliveryFee,
+    shippingProvider: entry.shippingProvider,
+    shippingProviderStatus: entry.shippingProviderStatus,
+    shippingAwb: entry.shippingAwb,
+    shippingShipmentId: entry.shippingShipmentId,
+    shippingPickupRequestId: entry.shippingPickupRequestId,
+    shippingError: entry.shippingError,
+    shippingLastSyncedAt: entry.shippingLastSyncedAt,
+    deliveryAddress: entry.deliveryAddress,
+    pickupAddress: entry.pickupAddress,
+    shippingPackage: entry.shippingPackage,
+    shippingEvents: entry.shippingEvents,
+    riderId: entry.riderId,
+    riderName: entry.riderId ? ridersById.get(entry.riderId)?.fullName : undefined,
     createdAt: entry.createdAt,
   }));
 
+  const primaryOrder = orderDocs[0];
+
   return {
-    orderRef: orderDocs[0]?.orderRef ?? orderDocs[0]?.id ?? trimmedOrderRef,
+    orderRef: primaryOrder?.orderRef ?? primaryOrder?.id ?? trimmedOrderRef,
     placedAt: sortedByTime[0]?.createdAt ?? new Date().toISOString(),
     lastUpdatedAt: sortedByTime[sortedByTime.length - 1]?.createdAt ?? new Date().toISOString(),
     status: latestStatus,
     totalAmount,
     itemCount,
     itemsSummary,
-    deliveryAddressLabel: orderDocs[0]?.deliveryAddressLabel,
-    customerName: orderDocs[0]?.customerName,
-    customerEmail: orderDocs[0]?.customerEmail,
-    customerPhone: orderDocs[0]?.customerPhone,
-    paymentMethod: orderDocs[0]?.paymentMethod,
-    transactionStatus: orderDocs[0]?.transactionStatus,
-    transactionId: orderDocs[0]?.transactionId,
-    paymentId: orderDocs[0]?.paymentId,
-    shippingProvider: orderDocs[0]?.shippingProvider,
-    shippingProviderStatus: orderDocs[0]?.shippingProviderStatus,
-    shippingAwb: orderDocs[0]?.shippingAwb,
-    shippingShipmentId: orderDocs[0]?.shippingShipmentId,
-    shippingError: orderDocs[0]?.shippingError,
-    shippingLastSyncedAt: orderDocs[0]?.shippingLastSyncedAt,
+    deliveryAddressLabel: primaryOrder?.deliveryAddressLabel,
+    customerName: primaryOrder?.customerName,
+    customerEmail: primaryOrder?.customerEmail,
+    customerPhone: primaryOrder?.customerPhone,
+    paymentMethod: primaryOrder?.paymentMethod,
+    transactionStatus: primaryOrder?.transactionStatus,
+    transactionId: primaryOrder?.transactionId,
+    paymentId: primaryOrder?.paymentId,
+    razorpayOrderId: primaryOrder?.razorpayOrderId,
+    promoCode: primaryOrder?.promoCode,
+    discountAmount: primaryOrder?.discountAmount,
+    deliveryFee: primaryOrder?.deliveryFee,
+    shippingProvider: primaryOrder?.shippingProvider,
+    shippingProviderStatus: primaryOrder?.shippingProviderStatus,
+    shippingAwb: primaryOrder?.shippingAwb,
+    shippingShipmentId: primaryOrder?.shippingShipmentId,
+    shippingPickupRequestId: primaryOrder?.shippingPickupRequestId,
+    shippingError: primaryOrder?.shippingError,
+    shippingLastSyncedAt: primaryOrder?.shippingLastSyncedAt,
+    deliveryAddress: primaryOrder?.deliveryAddress,
+    pickupAddress: primaryOrder?.pickupAddress,
+    shippingPackage: primaryOrder?.shippingPackage,
+    shippingEvents: primaryOrder?.shippingEvents,
     items,
     tracking,
   } satisfies UserOrderDetailsDto;
@@ -1956,11 +2665,16 @@ async function buildNotificationSeed(userId: string, customerEmail?: string): Pr
   const query: Record<string, unknown> = {};
   if (objectId) {
     query.$or = [
+      { customerUserObjectId: objectId },
       { customerUserId: objectId.toString() },
+      { customerUserId: userId },
       ...(customerEmail ? [{ customerEmail }] : []),
     ];
-  } else if (customerEmail) {
-    query.customerEmail = customerEmail;
+  } else {
+    query.$or = [
+      { customerUserId: userId },
+      ...(customerEmail ? [{ customerEmail }] : []),
+    ];
   }
 
   const orderDocs = await orders.find(query).sort({ createdAt: -1 }).limit(250).toArray();
@@ -2199,10 +2913,14 @@ export async function createAdminItemScoped(input: {
     name: string;
     shortDescription?: string;
     category: string;
+    subcategory?: string;
     price: number;
     originalPrice?: number;
     deliveryEtaHours?: number;
     description?: string;
+    disclaimerHtml?: string;
+    howToPersonaliseHtml?: string;
+    brandDetailsHtml?: string;
     images?: string[];
     media?: ProductMediaItem[];
     tags?: string[];
@@ -2239,6 +2957,13 @@ export async function createAdminItemScoped(input: {
     throw new Error("FORBIDDEN_STORE_SCOPE");
   }
 
+  const globalCategoryOptions = await getGlobalCategoryOptions();
+  const normalizedCategorySelection = toValidatedGlobalCategorySelection({
+    globalCategoryOptions,
+    category: input.payload.category,
+    subcategory: input.payload.subcategory,
+  });
+
   const id = `it-${new ObjectId().toHexString().slice(-10)}`;
   const slug =
     input.payload.name
@@ -2247,11 +2972,15 @@ export async function createAdminItemScoped(input: {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "") || id;
 
-  const normalizedDescription = input.payload.description?.trim() || "Handpicked gift item";
+  const normalizedDescription = normalizeDescriptionField(input.payload.description);
+  const descriptionText = stripHtmlToText(normalizedDescription);
   const normalizedShortDescription = input.payload.shortDescription?.trim()
     ? toShortDescription(input.payload.shortDescription)
-    : toShortDescription(normalizedDescription);
+    : toShortDescription(descriptionText || normalizedDescription);
   const normalizedMedia = toNormalizedProductMedia(input.payload.media, input.payload.images);
+  const normalizedDisclaimerHtml = normalizeRichHtmlField(input.payload.disclaimerHtml);
+  const normalizedHowToPersonaliseHtml = normalizeRichHtmlField(input.payload.howToPersonaliseHtml);
+  const normalizedBrandDetailsHtml = normalizeRichHtmlField(input.payload.brandDetailsHtml);
 
   const doc: ProductDoc = {
     id,
@@ -2266,8 +2995,12 @@ export async function createAdminItemScoped(input: {
         : Math.max(0, Math.round(input.payload.price * 1.15)),
     rating: 4.5,
     reviews: 0,
-    category: (input.payload.category as ProductDoc["category"]) ?? "Birthday",
+    category: normalizedCategorySelection.category as ProductDoc["category"],
+    ...(normalizedCategorySelection.subcategory ? { subcategory: normalizedCategorySelection.subcategory } : {}),
     tags: input.payload.tags?.length ? input.payload.tags : ["gift"],
+    ...(normalizedDisclaimerHtml ? { disclaimerHtml: normalizedDisclaimerHtml } : {}),
+    ...(normalizedHowToPersonaliseHtml ? { howToPersonaliseHtml: normalizedHowToPersonaliseHtml } : {}),
+    ...(normalizedBrandDetailsHtml ? { brandDetailsHtml: normalizedBrandDetailsHtml } : {}),
     media: normalizedMedia,
     images: toDisplayImagesFromMedia(normalizedMedia),
     inStock: input.payload.inStock ?? true,
@@ -2308,7 +3041,11 @@ export async function updateAdminItemScoped(input: {
     name?: string;
     shortDescription?: string;
     description?: string;
+    disclaimerHtml?: string;
+    howToPersonaliseHtml?: string;
+    brandDetailsHtml?: string;
     category?: string;
+    subcategory?: string;
     price?: number;
     inStock?: boolean;
     featured?: boolean;
@@ -2342,6 +3079,25 @@ export async function updateAdminItemScoped(input: {
 
   const existingOffers = await offers.find({ productId: input.itemId }).toArray();
   const patch: Record<string, unknown> = {};
+
+  const hasCategoryUpdate = typeof input.updates.category === "string";
+  const hasSubcategoryUpdate = typeof input.updates.subcategory === "string";
+  if (hasCategoryUpdate || hasSubcategoryUpdate) {
+    const globalCategoryOptions = await getGlobalCategoryOptions();
+    const validatedCategorySelection = toValidatedGlobalCategorySelection({
+      globalCategoryOptions,
+      category: hasCategoryUpdate ? (input.updates.category ?? "") : existingProduct.category,
+      subcategory: hasSubcategoryUpdate
+        ? input.updates.subcategory
+        : hasCategoryUpdate
+          ? ""
+          : existingProduct.subcategory,
+    });
+
+    patch.category = validatedCategorySelection.category;
+    patch.subcategory = validatedCategorySelection.subcategory || "";
+  }
+
   if (typeof input.updates.name === "string" && input.updates.name.trim()) {
     patch.name = input.updates.name.trim();
     patch.slug = input.updates.name
@@ -2353,8 +3109,23 @@ export async function updateAdminItemScoped(input: {
   if (typeof input.updates.shortDescription === "string") {
     patch.shortDescription = toShortDescription(input.updates.shortDescription);
   }
-  if (typeof input.updates.description === "string") patch.description = input.updates.description.trim();
-  if (typeof input.updates.category === "string" && input.updates.category.trim()) patch.category = input.updates.category.trim();
+  if (typeof input.updates.description === "string") {
+    const normalizedDescription = normalizeDescriptionField(input.updates.description);
+    patch.description = normalizedDescription;
+    if (input.updates.shortDescription === undefined) {
+      const descriptionText = stripHtmlToText(normalizedDescription);
+      patch.shortDescription = toShortDescription(descriptionText || normalizedDescription);
+    }
+  }
+  if (typeof input.updates.disclaimerHtml === "string") {
+    patch.disclaimerHtml = normalizeRichHtmlField(input.updates.disclaimerHtml) || "";
+  }
+  if (typeof input.updates.howToPersonaliseHtml === "string") {
+    patch.howToPersonaliseHtml = normalizeRichHtmlField(input.updates.howToPersonaliseHtml) || "";
+  }
+  if (typeof input.updates.brandDetailsHtml === "string") {
+    patch.brandDetailsHtml = normalizeRichHtmlField(input.updates.brandDetailsHtml) || "";
+  }
   if (typeof input.updates.price === "number") patch.price = Math.max(0, input.updates.price);
   if (typeof input.updates.inStock === "boolean") patch.inStock = input.updates.inStock;
   if (typeof input.updates.featured === "boolean") patch.featured = input.updates.featured;
@@ -2371,10 +3142,6 @@ export async function updateAdminItemScoped(input: {
     const mergedMedia = toNormalizedProductMedia([...existingVideoMedia, ...normalizedImageMedia], undefined);
     patch.media = mergedMedia;
     patch.images = toDisplayImagesFromMedia(mergedMedia);
-  }
-
-  if (typeof input.updates.description === "string" && input.updates.shortDescription === undefined) {
-    patch.shortDescription = toShortDescription(input.updates.description);
   }
 
   const hasAttributesUpdate = input.updates.attributes !== undefined;
@@ -2794,6 +3561,9 @@ export async function seedDemoData() {
   await reviews.createIndex({ productId: 1, createdAt: -1 });
   await comments.createIndex({ productId: 1, createdAt: -1 });
   await orders.createIndex({ storeId: 1, createdAt: -1 });
+  await orders.createIndex({ customerUserObjectId: 1, createdAt: -1 });
+  await orders.createIndex({ storeObjectId: 1, createdAt: -1 });
+  await orders.createIndex({ productObjectId: 1, createdAt: -1 });
   await riders.createIndex({ status: 1, zone: 1 });
 
   return {

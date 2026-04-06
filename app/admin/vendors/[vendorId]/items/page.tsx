@@ -52,7 +52,7 @@ export default async function AdminVendorItemsPage({ params }: { params: Promise
       <AdminHero
         eyebrow="Vendor items"
         title={`${vendor.name} catalog workspace`}
-        description="Create and manage items mapped to this vendor only. Category validation accepts the merged global taxonomy and this vendor's categories."
+        description="Create and manage items mapped to this vendor only. Item category and subcategory selection must match globally configured categories."
         actions={
           <>
             <Link href="/admin/vendors" className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-[#cd9933] bg-[#cd9933] px-2.5 py-1.5 text-sm font-medium text-white hover:bg-[#b8872d]">

@@ -17,8 +17,9 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { status } = useSession();
-  const { items, hydrateFromCookie, removeItem, updateQty, setOffer, setVariant, clear } = useCartStore();
+  const { items, hydrateFromCookie, removeItem, updateQty, setOffer, clear } = useCartStore();
   const [dismissedCheckoutReadyNotice, setDismissedCheckoutReadyNotice] = useState(false);
+  const [proceedingCheckout, setProceedingCheckout] = useState(false);
   const checkoutReadyParam = searchParams.get("checkoutReady");
 
   useEffect(() => {
@@ -79,9 +80,38 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   const hasItems = liveLines.length > 0;
   const showCheckoutReadyNotice = status === "authenticated" && checkoutReadyParam === "1" && !dismissedCheckoutReadyNotice;
-  const checkoutHref = status === "authenticated"
-    ? "/checkout"
-    : "/auth/sign-in?callbackUrl=%2Fcart%3FcheckoutReady%3D1";
+  const signInCheckoutHref = "/auth/sign-in?callbackUrl=%2Fcart%3FcheckoutReady%3D1";
+
+  const checkoutCartPayload = liveLines.map((line) => ({
+    productId: line.product.id,
+    quantity: line.quantity,
+    offerId: line.selectedOffer?.id,
+    variantId: line.selectedVariant?.id,
+    variantOptions: line.selectedVariant?.options,
+    customization: line.customization,
+    customizationSignature: line.customizationSignature,
+  }));
+
+  const proceedToCheckout = async () => {
+    if (!hasItems || status !== "authenticated") {
+      router.push(signInCheckoutHref);
+      return;
+    }
+
+    setProceedingCheckout(true);
+    try {
+      await fetch("/api/cart", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: checkoutCartPayload }),
+      });
+    } catch {
+      // Best-effort cart flush before checkout navigation.
+    } finally {
+      setProceedingCheckout(false);
+      router.push("/checkout");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -166,7 +196,19 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                     {line.customization ? (
                       <div className="rounded-xl border border-[#e4cf9e] bg-[#fffaf0] px-3 py-2 text-xs text-[#5f5047]">
                         <p className="font-medium text-[#3c2a25]">Customized item</p>
-                        {line.customization.images?.length ? <p>Images: {line.customization.images.length}</p> : null}
+                        {line.customization.images?.length ? (
+                          <div className="mt-2 grid grid-cols-5 gap-1.5">
+                            {line.customization.images.slice(0, 5).map((imageUrl, index) => (
+                              <div key={`${line.product.id}-${line.customizationSignature ?? "custom"}-${index}`} className="aspect-square overflow-hidden rounded-md border border-[#ead7cb] bg-white">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={imageUrl} alt={`Customization ${index + 1}`} className="h-full w-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {line.customization.images && line.customization.images.length > 5 ? (
+                          <p className="mt-1 text-[11px] text-[#74655c]">+{line.customization.images.length - 5} more image(s)</p>
+                        ) : null}
                         {line.customization.whatsappNumber ? <p>WhatsApp: {line.customization.whatsappNumber}</p> : null}
                         {line.customization.description ? <p className="line-clamp-2">{line.customization.description}</p> : null}
                       </div>
@@ -197,33 +239,6 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                       <p className="text-sm text-[#5f5047]">{formatCurrency(line.product.price)} each</p>
                     )}
 
-                    {(line.product.variants?.length ?? 0) > 0 ? (
-                      <select
-                        className="app-input-surface min-h-11 w-full rounded-full px-3 py-2 text-sm"
-                        value={line.selectedVariant?.id ?? ""}
-                        onChange={(event) => {
-                          const nextVariant = line.product.variants?.find((variant) => variant.id === event.target.value);
-                          setVariant(
-                            line.product.id,
-                            nextVariant?.id,
-                            nextVariant?.options,
-                            line.selectedVariant?.id,
-                            line.customizationSignature,
-                          );
-                        }}
-                      >
-                        {(line.product.variants ?? []).map((variant) => {
-                          const optionLabel = Object.entries(variant.options)
-                            .map(([name, value]) => `${name}: ${value}`)
-                            .join(" | ");
-                          return (
-                            <option key={variant.id} value={variant.id}>
-                              {optionLabel} • {formatCurrency(variant.salePrice)}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    ) : null}
                   </div>
 
                   <div className="col-span-2 flex flex-col space-y-3 sm:col-span-1 sm:items-end">
@@ -343,9 +358,21 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               </div>
             </dl>
 
-            <Button asChild className="w-full" disabled={!hasItems}>
-              <Link href={hasItems ? checkoutHref : "/store"}>{hasItems ? "Proceed to checkout" : "Browse products"}</Link>
-            </Button>
+            {hasItems ? (
+              status === "authenticated" ? (
+                <Button className="w-full" disabled={proceedingCheckout} onClick={() => void proceedToCheckout()}>
+                  {proceedingCheckout ? "Syncing cart..." : "Proceed to checkout"}
+                </Button>
+              ) : (
+                <Button asChild className="w-full">
+                  <Link href={signInCheckoutHref}>Proceed to checkout</Link>
+                </Button>
+              )
+            ) : (
+              <Button asChild className="w-full">
+                <Link href="/store">Browse products</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
         </aside>

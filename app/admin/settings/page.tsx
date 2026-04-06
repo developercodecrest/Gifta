@@ -1,10 +1,38 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 import { IntegrationTestCard } from "@/app/admin/settings/integration-test-card";
+import { HomeRankingSettingsCard } from "@/app/admin/settings/home-ranking-settings-card";
 import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
+import { getHomeRankingConfig } from "@/lib/server/ecommerce-service";
 
 export default async function AdminSettingsPage() {
   const identity = await ensureAdminAccess("settings");
+  const rankingConfig = await getHomeRankingConfig().catch(() => ({
+    trending: {
+      recentQuantityWeight: 8,
+      recentOrdersWeight: 2,
+      ratingWeight: 7,
+      reviewsWeight: 3,
+      offerWeight: 0.8,
+      featuredBoost: 4,
+    },
+    bestSellers: {
+      totalQuantityWeight: 6,
+      totalOrdersWeight: 3,
+      revenueWeight: 0.004,
+      ratingWeight: 4,
+      reviewsWeight: 2,
+    },
+    signaturePicks: {
+      premiumSignalWeight: 1,
+      qualityWeight: 1,
+      discountWeight: 5,
+      trustWeight: 1,
+      demandWeight: 1,
+      signaturePriceThreshold: 1200,
+      highPriceThreshold: 1800,
+    },
+  }));
 
   return (
     <div className="space-y-6">
@@ -51,6 +79,10 @@ export default async function AdminSettingsPage() {
 
       <AdminSection title="Integration diagnostics" description="Run live checks against payment and shipping setup from one admin card.">
         <IntegrationTestCard />
+      </AdminSection>
+
+      <AdminSection title="Home ranking controls" description="Adjust weighting signals used to rank Trending, Best Sellers, and Signature Picks.">
+        <HomeRankingSettingsCard initialConfig={rankingConfig} />
       </AdminSection>
     </div>
   );

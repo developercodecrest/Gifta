@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductListItemDto, SearchMeta, SortOption } from "@/types/api";
+import { LayoutGrid, List } from "lucide-react";
 
 type ProductFilters = {
   q: string;
@@ -54,6 +55,7 @@ export function ProductsInfiniteResults({ initialItems, initialMeta, filters }: 
   const [meta, setMeta] = useState(initialMeta);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const hasMore = meta.page < meta.totalPages;
@@ -130,12 +132,34 @@ export function ProductsInfiniteResults({ initialItems, initialMeta, filters }: 
       <div className="flex flex-col gap-3 rounded-[1.4rem] border border-[#ead7cb] bg-white/82 px-4 py-3.5 text-slate-900 shadow-[0_20px_48px_-38px_rgba(113,52,39,0.28)] sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-slate-700">Showing {items.length} of {meta.total} products</p>
-          <p className="mt-1 text-xs text-slate-500">Scroll to load more products automatically.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{sortLabel}</Badge>
-          {filters.category ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{filters.category}</Badge> : null}
-          {filters.tag ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{filters.tag}</Badge> : null}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{sortLabel}</Badge>
+            {filters.category ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{filters.category}</Badge> : null}
+            {filters.tag ? <Badge variant="outline" className="border-[#efc9ba] bg-[#fff7f1] text-slate-700">{filters.tag}</Badge> : null}
+          </div>
+          
+          <div className="hidden sm:flex items-center gap-1 rounded-lg border border-[#ead7cb] bg-transparent p-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 rounded-md border ${viewMode === "list" ? "border-[#cd9933] bg-[#cd9933] text-white hover:bg-[#b9882f] hover:text-white" : "border-[#e5d7cc] bg-white text-slate-900 hover:bg-white hover:text-slate-900"}`}
+              onClick={() => setViewMode("list")}
+              title="List view"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 rounded-md border ${viewMode === "grid" ? "border-[#cd9933] bg-[#cd9933] text-white hover:bg-[#b9882f] hover:text-white" : "border-[#e5d7cc] bg-white text-slate-900 hover:bg-white hover:text-slate-900"}`}
+              onClick={() => setViewMode("grid")}
+              title="Grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -150,9 +174,9 @@ export function ProductsInfiniteResults({ initialItems, initialMeta, filters }: 
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className={viewMode === "grid" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" : "flex flex-col gap-4"}>
           {items.map((item) => (
-            <ProductCard key={item.id} product={item} />
+            <ProductCard key={item.id} product={item} layout={viewMode} />
           ))}
         </div>
       )}

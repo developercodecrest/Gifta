@@ -119,7 +119,7 @@ export async function mergeUserCart(userId: string, localItems: CartItem[]): Pro
 
     map.set(key, {
       ...existing,
-      quantity: existing.quantity + normalized.quantity,
+      quantity: normalized.quantity,
       offerId: normalized.offerId ?? existing.offerId,
       variantId: normalized.variantId ?? existing.variantId,
       variantOptions: normalized.variantOptions ?? existing.variantOptions,

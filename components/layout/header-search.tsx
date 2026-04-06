@@ -32,6 +32,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
   const [query, setQuery] = useState(initialQ);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
     setQuery(initialQ);
@@ -75,7 +76,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
         if (!cancelled) {
           const items = response.ok && payload.success && payload.data ? payload.data : [];
           setSuggestions(items);
-          setOpen(items.length > 0);
+          setOpen(isFocused && items.length > 0);
         }
       })
       .catch(() => {
@@ -88,7 +89,7 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, pathname, router, searchParams]);
+  }, [debouncedQuery, isFocused, pathname, router, searchParams]);
 
   const hasText = useMemo(() => query.trim().length > 0, [query]);
 
@@ -124,8 +125,14 @@ function HeaderSearchContent({ mobile = false, compact = false }: { mobile?: boo
           id="header-search-input"
           name="q"
           value={query}
-          onFocus={() => setOpen(suggestions.length > 0)}
-          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          onFocus={() => {
+            setIsFocused(true);
+            setOpen(suggestions.length > 0);
+          }}
+          onBlur={() => {
+            setIsFocused(false);
+            setTimeout(() => setOpen(false), 120);
+          }}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search gifts by keyword"
           autoComplete="off"

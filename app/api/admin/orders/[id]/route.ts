@@ -1,8 +1,34 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { deleteAdminOrderScoped, updateAdminOrderScoped } from "@/lib/server/ecommerce-service";
+import { deleteAdminOrderScoped, getAdminOrderDetailsScoped, updateAdminOrderScoped } from "@/lib/server/ecommerce-service";
 
 export const runtime = "nodejs";
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const identity = await authorizeAdminRequest(request, "orders");
+    if (!identity) {
+      return unauthorized("Not allowed");
+    }
+
+    const { id } = await context.params;
+    const details = await getAdminOrderDetailsScoped({
+      orderId: id,
+      scope: identity,
+    });
+
+    return ok(details);
+  } catch (error) {
+    if (error instanceof Error && (error.message === "FORBIDDEN_ORDER_SCOPE" || error.message === "ORDER_NOT_FOUND")) {
+      return unauthorized("Not allowed");
+    }
+
+    return serverError("Unable to fetch order details", error);
+  }
+}
 
 export async function PATCH(
   request: Request,

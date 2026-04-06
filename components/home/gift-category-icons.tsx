@@ -61,7 +61,6 @@ export function GiftCategoryHeroSection({ categories }: { categories: HomeCatego
         <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl md:text-4xl">
           Explore real categories
         </h2>
-        <p className="text-sm text-muted-foreground sm:text-base">Tap a category to open products filtered by that category</p>
       </div>
 
       <div className="rounded-3xl border border-red-200/40 bg-linear-to-b from-red-50/50 to-orange-50/30 px-4 py-7 shadow-sm sm:px-6 sm:py-8 lg:px-8">
