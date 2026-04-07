@@ -72,6 +72,12 @@ export default async function ProductPage({
               {currentProduct.featured ? <Badge className="border-0 bg-white/92 text-slate-900">Featured</Badge> : null}
               {currentProduct.inStock ? <Badge variant="secondary" className="border-0 bg-[#fff0e5] text-[#7b3d15]">Ready to ship</Badge> : null}
             </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <InfoTile icon={Star} label="Ratings" value={`${product?.reviewSummary.averageRating ?? currentProduct.rating} from ${product?.reviewSummary.totalReviews ?? currentProduct.reviews} reviews`} />
+              <InfoTile icon={Truck} label="Delivery" value="24-48 hours in major cities" />
+              <InfoTile icon={Gift} label="Gift finish" value="Premium wrapping on select offers" />
+              <InfoTile icon={ShieldCheck} label="Checkout" value="Verified vendors and secure payment" />
+            </div>
           </div>
 
           <Card className="glass-panel rounded-4xl border-white/60 soft-shadow">
@@ -122,13 +128,6 @@ export default async function ProductPage({
                   variants={currentProduct.variants}
                   customizable={isCustomizable}
                 />
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <InfoTile icon={Star} label="Ratings" value={`${product?.reviewSummary.averageRating ?? currentProduct.rating} from ${product?.reviewSummary.totalReviews ?? currentProduct.reviews} reviews`} />
-                <InfoTile icon={Truck} label="Delivery" value="24-48 hours in major cities" />
-                <InfoTile icon={Gift} label="Gift finish" value="Premium wrapping on select offers" />
-                <InfoTile icon={ShieldCheck} label="Checkout" value="Verified vendors and secure payment" />
               </div>
 
               <div>

@@ -111,11 +111,11 @@ async function ProductsContent({ searchParams }: { searchParams: Promise<SearchP
     <div className="space-y-4 sm:space-y-5 py-3 sm:py-4 lg:py-5">
 
       <section className="grid gap-3 xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start">
-        <Card className="sticky top-24 rounded-3xl border-[#e8d9cf] bg-white/95 text-slate-900 shadow-[0_16px_34px_-28px_rgba(113,52,39,0.28)] backdrop-blur">
+        <Card className="sticky top-24 flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-3xl border-[#e8d9cf] bg-white/95 text-slate-900 shadow-[0_16px_34px_-28px_rgba(113,52,39,0.28)] backdrop-blur">
           <CardHeader className="space-y-1 pb-2">
             <CardTitle className="flex items-center gap-2 text-base text-slate-950"><Filter className="h-4 w-4" /> Filters</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0 pr-1">
             <form className="grid gap-2.5" action="/products" method="get">
               <div className="space-y-1.5">
                 <Label htmlFor="products-q" className="text-slate-800">Search query</Label>

@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useMemo, useState } from "react";
-import { Minus, Plus, ShoppingBag, Trash2, UploadCloud, Zap, X } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { ChevronDown, Minus, Plus, ShoppingBag, Trash2, UploadCloud, Zap, X } from "lucide-react";
 import { useCartStore } from "@/features/cart/store";
 import { getCartLineIdentity } from "@/lib/cart-customization";
 import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
@@ -13,6 +13,7 @@ import { ProductAttribute, ProductVariant } from "@/types/ecommerce";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function ProductOrderPanel({
   productId,
@@ -62,6 +63,8 @@ export function ProductOrderPanel({
   const [customImages, setCustomImages] = useState<string[]>([]);
   const [customUploadProgress, setCustomUploadProgress] = useState(0);
   const [customError, setCustomError] = useState<string | null>(null);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const customizePanelId = useId();
 
   const selectedVariant = useMemo(() => {
     if (!hasVariants) {
@@ -176,64 +179,168 @@ export function ProductOrderPanel({
 
   return (
     <div className="space-y-4">
-      {hasVariants ? (
-        <div className="space-y-3 rounded-3xl border border-border/70 bg-background/60 p-4">
-          {(attributes ?? []).map((attribute) => (
-            <div key={attribute.name} className="space-y-2">
-              <Label>{attribute.name}</Label>
-              <select
-                className="min-h-11 w-full rounded-[1.25rem] border border-input bg-background px-4 py-2 text-sm"
-                value={selectedOptions[attribute.name] ?? ""}
-                onChange={(event) =>
-                  setSelectedOptions((current) => ({
-                    ...current,
-                    [attribute.name]: event.target.value,
-                  }))
-                }
+      <div className="flex flex-row items-center gap-10">
+        {hasVariants ? (
+          <div className="flex-1 space-y-3 rounded-3xl border border-border/70 bg-background/60 p-4">
+            {(attributes ?? []).map((attribute) => (
+              <div key={attribute.name} className="space-y-2">
+                <Label>{attribute.name}</Label>
+                <select
+                  className="min-h-11 w-full rounded-[1.25rem] border border-input bg-background px-4 py-2 text-sm"
+                  value={selectedOptions[attribute.name] ?? ""}
+                  onChange={(event) =>
+                    setSelectedOptions((current) => ({
+                      ...current,
+                      [attribute.name]: event.target.value,
+                    }))
+                  }
+                >
+                  {attribute.values.map((value) => (
+                    <option key={`${attribute.name}-${value}`} value={value}>{value}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            {selectedVariant?.weight ? (
+              <p className="text-sm text-[#5f5047]">
+                Variant weight: {selectedVariant.weight} {selectedVariant.weightUnit ?? "g"}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="flex-1 rounded-3xl border border-[#ddcfc5] bg-white/85 p-3.5">
+          <p className="text-sm font-semibold text-foreground">Quantity</p>
+          <div className="mt-2 flex items-center justify-between">
+            <div className="inline-flex h-12 items-center rounded-full border border-[#ddcfc5] bg-white px-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedQty((current) => Math.max(qtyMin, current - 1))}
+                disabled={selectedQty <= qtyMin || outOfStock}
+                className="h-10 w-10 rounded-full"
               >
-                {attribute.values.map((value) => (
-                  <option key={`${attribute.name}-${value}`} value={value}>{value}</option>
-                ))}
-              </select>
+                <Minus className="h-4 w-4" />
+              </Button>
+              <span className="min-w-10 px-2 text-center text-base font-semibold">{selectedQty}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedQty((current) => Math.min(qtyMax, current + 1))}
+                disabled={selectedQty >= qtyMax || outOfStock}
+                className="h-10 w-10 rounded-full"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
-          ))}
-          {selectedVariant?.weight ? (
-            <p className="text-sm text-[#5f5047]">
-              Variant weight: {selectedVariant.weight} {selectedVariant.weightUnit ?? "g"}
-            </p>
+            <p className="text-xs text-[#74655c]">Min {qtyMin} • Max {qtyMax}</p>
+          </div>
+        </div>
+      </div>
+
+      {customizable ? (
+        <div className="space-y-3">
+          <Button
+            type="button"
+            onClick={() => setCustomizeOpen((current) => !current)}
+            aria-expanded={customizeOpen}
+            aria-controls={customizePanelId}
+            className="h-12 w-full rounded-2xl px-4 text-base font-semibold text-white"
+          >
+            <span>Customize</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", customizeOpen ? "rotate-180" : "rotate-0")} />
+          </Button>
+
+          {customizeOpen ? (
+            <div id={customizePanelId} className="space-y-3 rounded-3xl border border-[#ddcfc5] bg-white/85 p-4">
+              <p className="text-sm font-semibold">Image upload and customization</p>
+              <div className="space-y-2">
+                <Label>Customization description</Label>
+                <textarea
+                  value={customDescription}
+                  onChange={(event) => setCustomDescription(event.target.value)}
+                  rows={3}
+                  className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40"
+                  placeholder="Tell us what to print, engrave, or compose"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>WhatsApp number</Label>
+                <Input
+                  value={customWhatsapp}
+                  onChange={(event) => setCustomWhatsapp(event.target.value)}
+                  placeholder="+91XXXXXXXXXX"
+                  inputMode="tel"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reference images ({customImages.length}/15)</Label>
+                <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#cdbeb1] bg-white px-4 py-4 text-center text-sm text-[#5f5047] hover:bg-[#fff8ef]">
+                  <span className="inline-flex items-center gap-2 rounded-md bg-[#edf3ff] px-3 py-1 text-sm font-medium text-[#2554b0]">
+                    <UploadCloud className="h-4 w-4" /> Choose file
+                  </span>
+                  <span className="text-xs">or drop file to upload</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      void uploadCustomizationImage(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${customUploadProgress}%` }} />
+                </div>
+                {customImages.length ? (
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    {customImages.map((url) => (
+                      <div key={url} className="relative overflow-hidden rounded-xl border border-border">
+                        <div className="relative h-20 w-full bg-muted/20">
+                          <Image src={url} alt="Customization reference" fill className="object-cover" sizes="120px" />
+                        </div>
+                        <button
+                          type="button"
+                          className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
+                          onClick={() => setCustomImages((current) => current.filter((entry) => entry !== url))}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 pt-1 sm:grid-cols-3">
+                <GiftToggle label="Gift Wrap" checked={giftWrap} onChange={setGiftWrap} />
+                <GiftToggle label="Gift Card" checked={giftCard} onChange={setGiftCard} />
+                <GiftToggle label="Gift Message" checked={giftMessage} onChange={setGiftMessage} />
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[#ddcfc5] bg-white px-3 py-2 text-sm text-[#3c2a25]">
+                <input
+                  type="checkbox"
+                  checked={approvalByEmail}
+                  onChange={(event) => setApprovalByEmail(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-[#bda992]"
+                />
+                <span>
+                  Yes send approval copy to email
+                  <span className="block text-xs text-[#74655c]">Delay in approval can delay delivery.</span>
+                </span>
+              </label>
+
+              {customError ? <p className="text-sm text-destructive">{customError}</p> : null}
+            </div>
           ) : null}
         </div>
       ) : null}
-
-      <div className="rounded-3xl border border-[#ddcfc5] bg-white/85 p-3.5">
-        <p className="text-sm font-semibold text-foreground">Quantity</p>
-        <div className="mt-2 flex items-center justify-between">
-          <div className="inline-flex h-12 items-center rounded-full border border-[#ddcfc5] bg-white px-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setSelectedQty((current) => Math.max(qtyMin, current - 1))}
-              disabled={selectedQty <= qtyMin || outOfStock}
-              className="h-10 w-10 rounded-full"
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-            <span className="min-w-10 px-2 text-center text-base font-semibold">{selectedQty}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setSelectedQty((current) => Math.min(qtyMax, current + 1))}
-              disabled={selectedQty >= qtyMax || outOfStock}
-              className="h-10 w-10 rounded-full"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <p className="text-xs text-[#74655c]">Min {qtyMin} • Max {qtyMax}</p>
-        </div>
-      </div>
 
       <div className={`grid gap-3 ${lineInCart ? "grid-cols-[1fr_1fr_auto]" : "grid-cols-2"}`}>
         <Button
@@ -268,92 +375,7 @@ export function ProductOrderPanel({
         ) : null}
       </div>
 
-      {customizable ? (
-        <div className="space-y-3 rounded-3xl border border-[#ddcfc5] bg-white/85 p-4">
-          <p className="text-sm font-semibold">Image upload and customization</p>
-          <div className="space-y-2">
-            <Label>Customization description</Label>
-            <textarea
-              value={customDescription}
-              onChange={(event) => setCustomDescription(event.target.value)}
-              rows={3}
-              className="min-h-24 w-full rounded-[1.25rem] border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/40"
-              placeholder="Tell us what to print, engrave, or compose"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>WhatsApp number</Label>
-            <Input
-              value={customWhatsapp}
-              onChange={(event) => setCustomWhatsapp(event.target.value)}
-              placeholder="+91XXXXXXXXXX"
-              inputMode="tel"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Reference images ({customImages.length}/15)</Label>
-            <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#cdbeb1] bg-white px-4 py-4 text-center text-sm text-[#5f5047] hover:bg-[#fff8ef]">
-              <span className="inline-flex items-center gap-2 rounded-md bg-[#edf3ff] px-3 py-1 text-sm font-medium text-[#2554b0]">
-                <UploadCloud className="h-4 w-4" /> Choose file
-              </span>
-              <span className="text-xs">or drop file to upload</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  void uploadCustomizationImage(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
-            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-              <div className="h-full bg-primary transition-all" style={{ width: `${customUploadProgress}%` }} />
-            </div>
-            {customImages.length ? (
-              <div className="grid gap-2 sm:grid-cols-4">
-                {customImages.map((url) => (
-                  <div key={url} className="relative overflow-hidden rounded-xl border border-border">
-                    <div className="relative h-20 w-full bg-muted/20">
-                      <Image src={url} alt="Customization reference" fill className="object-cover" sizes="120px" />
-                    </div>
-                    <button
-                      type="button"
-                      className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
-                      onClick={() => setCustomImages((current) => current.filter((entry) => entry !== url))}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
 
-          <div className="grid gap-3 pt-1 sm:grid-cols-3">
-            <GiftToggle label="Gift Wrap" checked={giftWrap} onChange={setGiftWrap} />
-            <GiftToggle label="Gift Card" checked={giftCard} onChange={setGiftCard} />
-            <GiftToggle label="Gift Message" checked={giftMessage} onChange={setGiftMessage} />
-          </div>
-
-          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[#ddcfc5] bg-white px-3 py-2 text-sm text-[#3c2a25]">
-            <input
-              type="checkbox"
-              checked={approvalByEmail}
-              onChange={(event) => setApprovalByEmail(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-[#bda992]"
-            />
-            <span>
-              Yes send approval copy to email
-              <span className="block text-xs text-[#74655c]">Delay in approval can delay delivery.</span>
-            </span>
-          </label>
-
-          {customError ? <p className="text-sm text-destructive">{customError}</p> : null}
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -447,7 +447,7 @@ export function ItemsClient({
                       </div>
                       {item.featured ? <Badge>Featured</Badge> : <Badge variant="secondary">Standard</Badge>}
                     </div>
-                    <p className="line-clamp-3 text-sm leading-6 text-[#5f5047]">{item.description}</p>
+                    <RichTextPreview value={item.description} />
                     <div className="flex flex-wrap gap-2">
                       {(item.tags ?? []).slice(0, 4).map((tag) => (
                         <Badge key={`${item.id}-${tag}`} variant="outline">{tag}</Badge>
@@ -480,7 +480,7 @@ export function ItemsClient({
                           {item.featured ? <Badge>Featured</Badge> : null}
                           <Badge variant={item.inStock ? "success" : "warning"}>{item.inStock ? "In stock" : "Inventory off"}</Badge>
                         </div>
-                        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{item.description}</p>
+                        <RichTextPreview value={item.description} />
                         <div className="flex flex-wrap gap-2">
                           <Badge variant="secondary">{item.category}</Badge>
                           <Badge variant="outline">Qty {item.minOrderQty ?? 1}-{item.maxOrderQty ?? 10}</Badge>
@@ -1629,11 +1629,11 @@ function ItemRowActions({
   return (
     <div className="flex flex-wrap gap-2">
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogTrigger asChild><Button size="sm" variant="outline"><Eye className="h-4 w-4" /> View</Button></DialogTrigger>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogTrigger asChild><Button size="sm" variant="outline"><Eye className="h-4 w-4" /> Show more</Button></DialogTrigger>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{item.name}</DialogTitle>
-            <DialogDescription>Catalog record and linked store offers.</DialogDescription>
+            <DialogDescription>Catalog record, all product text fields, and linked store offers.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1643,7 +1643,15 @@ function ItemRowActions({
               <Info label="Slug" value={item.slug} />
               <Info label="Best offer" value={formatCurrency(item.bestOffer?.price)} />
             </div>
-            <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
+
+            <div className="space-y-3">
+              <TextSection label="Short description" value={item.shortDescription} />
+              <RichTextSection label="Description" value={item.description} />
+              <RichTextSection label="How To Personalise" value={item.howToPersonaliseHtml ?? ""} />
+              <RichTextSection label="Brand Details" value={item.brandDetailsHtml ?? ""} />
+              <RichTextSection label="Disclaimer" value={item.disclaimerHtml ?? ""} />
+            </div>
+
             <div className="flex flex-wrap gap-2">
               {(item.tags ?? []).map((tag) => <Badge key={`${item.id}-${tag}`} variant="outline">{tag}</Badge>)}
             </div>
@@ -2130,6 +2138,70 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="mt-2 font-medium text-foreground">{value}</p>
     </div>
   );
+}
+
+function TextSection({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-border/70 bg-background/60 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-sm leading-6 text-foreground">{value?.trim() ? value : "Not provided."}</p>
+    </div>
+  );
+}
+
+function RichTextSection({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-border/70 bg-background/60 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <div
+        className="prose prose-sm mt-3 max-w-none text-[#1f1f1f] leading-7 prose-p:text-[#5f5047] prose-li:text-[#5f5047] prose-strong:text-[#3a2a22]"
+        dangerouslySetInnerHTML={{ __html: renderRichHtml(value) }}
+      />
+    </div>
+  );
+}
+
+function RichTextPreview({ value }: { value: string }) {
+  return (
+    <div
+      className="prose prose-sm line-clamp-10 max-w-none text-sm leading-6 text-[#5f5047] prose-p:text-[#5f5047] prose-li:text-[#5f5047] prose-strong:text-[#3a2a22]"
+      dangerouslySetInnerHTML={{ __html: renderRichHtml(value) }}
+    />
+  );
+}
+
+function renderRichHtml(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '<p class="text-sm text-muted-foreground">Not provided.</p>';
+  }
+
+  if (/[<>]/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `<p>${escapeHtml(trimmed)}</p>`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function makeLocalId(prefix: string) {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type ProductContentTabsProps = {
@@ -94,10 +95,72 @@ export function ProductContentTabs({
         })}
       </div>
 
+      <ExpandableRichText html={activeContent.html} />
+    </div>
+  );
+}
+
+function ExpandableRichText({ html }: { html: string }) {
+  const contentId = useId();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [canToggle, setCanToggle] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [html]);
+
+  useEffect(() => {
+    const node = contentRef.current;
+    if (!node) {
+      setCanToggle(false);
+      return;
+    }
+
+    const updateToggleState = () => {
+      const lineHeightValue = window.getComputedStyle(node).lineHeight;
+      const parsedLineHeight = Number.parseFloat(lineHeightValue);
+      const lineHeight = Number.isFinite(parsedLineHeight) && parsedLineHeight > 0 ? parsedLineHeight : 28;
+      const maxHeight = lineHeight * 10;
+      setCanToggle(node.scrollHeight > maxHeight + 2);
+    };
+
+    updateToggleState();
+
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateToggleState);
+    observer?.observe(node);
+    window.addEventListener("resize", updateToggleState);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateToggleState);
+    };
+  }, [html]);
+
+  return (
+    <div>
       <div
-        className="prose prose-sm mt-4 max-w-none text-[#1f1f1f] leading-7 prose-p:text-[#5f5047] prose-li:text-[#5f5047] prose-strong:text-[#3a2a22]"
-        dangerouslySetInnerHTML={{ __html: activeContent.html }}
+        id={contentId}
+        ref={contentRef}
+        className={cn(
+          "prose prose-sm mt-4 max-w-none text-[#1f1f1f] leading-7 prose-p:text-[#5f5047] prose-li:text-[#5f5047] prose-strong:text-[#3a2a22]",
+          expanded ? "" : "line-clamp-10 overflow-hidden",
+        )}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
+
+      {canToggle ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          className="mt-4 h-10 rounded-full px-4 text-sm font-semibold"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </Button>
+      ) : null}
     </div>
   );
 }
