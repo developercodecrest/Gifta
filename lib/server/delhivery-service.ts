@@ -8,12 +8,18 @@ type DelhiveryMode = "test" | "live";
 type DelhiveryConfig = {
   mode: DelhiveryMode;
   baseUrl: string;
+  expectedTatBaseUrl: string;
   token: string;
   pincodePath: string;
   shipmentCreatePath: string;
   pickupRequestPath: string;
   waybillPath: string;
   trackPath: string;
+  expectedTatPath: string;
+  expectedTatModeOfTransport: string;
+  expectedTatProductType: string;
+  defaultOriginPin?: string;
+  defaultPickupLocationName?: string;
   webhookSecret?: string;
   defaultPackage: ShippingPackageSnapshot;
 };
@@ -30,6 +36,26 @@ export type DeliveryFeeEstimate = {
   estimatedFee: number;
   source: "delhivery" | "fallback";
   serviceable: boolean;
+  remark?: string;
+  expectedTat?: DelhiveryExpectedTatSummary;
+};
+
+export type DelhiveryExpectedTatEstimate = {
+  originPin: string;
+  destinationPin: string;
+  expectedDays?: number;
+  expectedDeliveryDate?: string;
+  pickupDate: string;
+  raw: unknown;
+};
+
+export type DelhiveryExpectedTatSummary = {
+  source: "delhivery" | "fallback";
+  estimates: DelhiveryExpectedTatEstimate[];
+  minimumDays?: number;
+  maximumDays?: number;
+  earliestDeliveryDate?: string;
+  latestDeliveryDate?: string;
   remark?: string;
 };
 
@@ -53,8 +79,12 @@ type ShipmentCreateInput = {
   amount: number;
   paymentMethod: PaymentMethod;
   pickup: ShippingAddressSnapshot;
+  pickupLocationName: string;
   destination: ShippingAddressSnapshot;
   packageDetails: ShippingPackageSnapshot;
+  productsDescription?: string;
+  sellerName?: string;
+  sellerAddress?: string;
 };
 
 type ShipmentCreateResult = {
@@ -127,8 +157,6 @@ type StoreDoc = {
   };
 };
 
-const TEMPORARY_DELHIVERY_BASE_URL = "https://staging-express.delhivery.com";
-
 export function isDelhiveryConfigured() {
   try {
     getDelhiveryConfig();
@@ -148,7 +176,10 @@ export function getDelhiveryConfig(): DelhiveryConfig {
     throw new Error(`Delhivery token missing for mode: ${mode}. Set DELHIVERY_API_TOKEN_${mode.toUpperCase()}.`);
   }
 
-  const baseUrl = TEMPORARY_DELHIVERY_BASE_URL.trim();
+  const testBaseUrl = normalizeBaseUrl(process.env.DELHIVERY_TEST_BASE_URL, "https://staging-express.delhivery.com");
+  const liveBaseUrl = normalizeBaseUrl(process.env.DELHIVERY_LIVE_BASE_URL, "https://track.delhivery.com");
+  const expectedTatTestBaseUrl = normalizeBaseUrl(process.env.DELHIVERY_EXPECTED_TAT_TEST_BASE_URL, "https://express-dev-test.delhivery.com");
+  const expectedTatLiveBaseUrl = normalizeBaseUrl(process.env.DELHIVERY_EXPECTED_TAT_LIVE_BASE_URL, liveBaseUrl);
 
   const defaultPackage = {
     deadWeightKg: Number(process.env.DELHIVERY_DEFAULT_WEIGHT_KG ?? "0.5"),
@@ -160,13 +191,19 @@ export function getDelhiveryConfig(): DelhiveryConfig {
 
   return {
     mode,
-    baseUrl: baseUrl.replace(/\/$/, ""),
+    baseUrl: mode === "live" ? liveBaseUrl : testBaseUrl,
+    expectedTatBaseUrl: mode === "live" ? expectedTatLiveBaseUrl : expectedTatTestBaseUrl,
     token,
     pincodePath: (process.env.DELHIVERY_PINCODE_PATH ?? "/c/api/pin-codes/json/").trim(),
     shipmentCreatePath: (process.env.DELHIVERY_SHIPMENT_CREATE_PATH ?? "/api/cmu/create.json").trim(),
     pickupRequestPath: (process.env.DELHIVERY_PICKUP_REQUEST_PATH ?? "/fm/request/new/").trim(),
     waybillPath: (process.env.DELHIVERY_WAYBILL_PATH ?? "/waybill/api/bulk/json/").trim(),
     trackPath: (process.env.DELHIVERY_TRACK_PATH ?? "/api/v1/packages/json/").trim(),
+    expectedTatPath: (process.env.DELHIVERY_EXPECTED_TAT_PATH ?? "/api/dc/expected_tat").trim(),
+    expectedTatModeOfTransport: (process.env.DELHIVERY_EXPECTED_TAT_MOT ?? "S").trim().toUpperCase() || "S",
+    expectedTatProductType: (process.env.DELHIVERY_EXPECTED_TAT_PDT ?? "B2C").trim().toUpperCase() || "B2C",
+    defaultOriginPin: process.env.DELHIVERY_DEFAULT_ORIGIN_PIN?.trim() || undefined,
+    defaultPickupLocationName: process.env.DELHIVERY_DEFAULT_PICKUP_LOCATION_NAME?.trim() || undefined,
     webhookSecret: process.env.DELHIVERY_WEBHOOK_SECRET,
     defaultPackage,
   };
@@ -186,7 +223,7 @@ export async function checkDelhiveryServiceability(pinCode: string): Promise<Ser
     },
   });
 
-  const body = await response.json().catch(() => ({}));
+  const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
     if (response.status === 401 && shouldBypassServiceabilityAuthFailure()) {
       return {
@@ -336,6 +373,163 @@ function parseDeliveryEstimateFee(payload: unknown): number | null {
   return null;
 }
 
+export async function getDelhiveryOriginPins(storeIds: string[]): Promise<string[]> {
+  const config = getDelhiveryConfig();
+  const uniqueStoreIds = Array.from(new Set(storeIds.map((value) => value.trim()).filter(Boolean)));
+
+  if (!uniqueStoreIds.length) {
+    return config.defaultOriginPin ? [config.defaultOriginPin] : [];
+  }
+
+  const db = await getMongoDb();
+  const stores = db.collection<StoreDoc>("stores");
+  const storeDocs = await stores
+    .find(
+      { id: { $in: uniqueStoreIds } },
+      {
+        projection: {
+          id: 1,
+          name: 1,
+          "details.location.pincode": 1,
+        },
+      },
+    )
+    .toArray();
+
+  const originPins = Array.from(
+    new Set(
+      storeDocs
+        .map((entry) => entry.details?.location?.pincode?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  if (originPins.length) {
+    return originPins;
+  }
+
+  return config.defaultOriginPin ? [config.defaultOriginPin] : [];
+}
+
+export async function getDelhiveryExpectedTatSummary(input: {
+  originPins: string[];
+  destinationPin: string;
+  expectedPickupDate?: string;
+}): Promise<DelhiveryExpectedTatSummary> {
+  const config = getDelhiveryConfig();
+  const destinationPin = input.destinationPin.trim();
+  const originPins = Array.from(new Set(input.originPins.map((value) => value.trim()).filter(Boolean)));
+
+  if (!originPins.length || !destinationPin) {
+    return {
+      source: "fallback",
+      estimates: [],
+      remark: "Origin pin unavailable for expected delivery estimate.",
+    };
+  }
+
+  const expectedPickupDate = input.expectedPickupDate?.trim() || buildExpectedTatPickupDate();
+  const settled = await Promise.allSettled(
+    originPins.map((originPin) =>
+      getExpectedTatForLane({
+        config,
+        originPin,
+        destinationPin,
+        expectedPickupDate,
+      }),
+    ),
+  );
+
+  const estimates = settled
+    .filter((entry): entry is PromiseFulfilledResult<DelhiveryExpectedTatEstimate> => entry.status === "fulfilled")
+    .map((entry) => entry.value);
+
+  if (!estimates.length) {
+    const firstFailure = settled.find((entry): entry is PromiseRejectedResult => entry.status === "rejected");
+    if (firstFailure?.reason instanceof Error) {
+      throw firstFailure.reason;
+    }
+    throw new Error("Unable to fetch Delhivery expected delivery timeline.");
+  }
+
+  const dayValues = estimates
+    .map((entry) => entry.expectedDays)
+    .filter((value): value is number => Number.isFinite(value));
+  const deliveryDates = estimates
+    .map((entry) => entry.expectedDeliveryDate)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+
+  return {
+    source: "delhivery",
+    estimates,
+    ...(dayValues.length
+      ? {
+          minimumDays: Math.min(...dayValues),
+          maximumDays: Math.max(...dayValues),
+        }
+      : {}),
+    ...(deliveryDates.length
+      ? {
+          earliestDeliveryDate: deliveryDates[0],
+          latestDeliveryDate: deliveryDates[deliveryDates.length - 1],
+        }
+      : {}),
+    ...(settled.some((entry) => entry.status === "rejected")
+      ? { remark: "Some vendor delivery lanes could not be estimated right now." }
+      : {}),
+  };
+}
+
+async function getExpectedTatForLane(input: {
+  config: DelhiveryConfig;
+  originPin: string;
+  destinationPin: string;
+  expectedPickupDate: string;
+}): Promise<DelhiveryExpectedTatEstimate> {
+  const params = new URLSearchParams({
+    origin_pin: input.originPin,
+    destination_pin: input.destinationPin,
+    mot: input.config.expectedTatModeOfTransport,
+  });
+
+  if (input.config.expectedTatProductType) {
+    params.set("pdt", input.config.expectedTatProductType);
+  }
+
+  if (input.expectedPickupDate) {
+    params.set("expected_pickup_date", input.expectedPickupDate);
+  }
+
+  const response = await fetch(`${input.config.expectedTatBaseUrl}${input.config.expectedTatPath}?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Token ${input.config.token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+  });
+
+  const body = await parseDelhiveryResponseBody(response);
+  if (!response.ok) {
+    throw new DelhiveryApiError(`Delhivery expected TAT failed (${response.status}).`, {
+      status: response.status,
+      body,
+      code: response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_EXPECTED_TAT_FAILED",
+    });
+  }
+
+  const parsed = parseExpectedTatResponse(body);
+  return {
+    originPin: input.originPin,
+    destinationPin: input.destinationPin,
+    expectedDays: parsed.expectedDays,
+    expectedDeliveryDate: parsed.expectedDeliveryDate,
+    pickupDate: input.expectedPickupDate,
+    raw: body,
+  };
+}
+
 export async function createShipmentForOrderRef(orderRef: string): Promise<FulfillmentResult> {
   const db = await getMongoDb();
   const orders = db.collection<AdminOrderDto>("orders");
@@ -384,6 +578,7 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
 
     const store = storeId === "direct" ? null : await stores.findOne({ id: storeId });
     const pickup = resolvePickupAddress(store);
+    const pickupLocationName = resolvePickupLocationName(store, storeId);
 
     if (!pickup) {
       await applyShipmentFailure(rows, "Missing vendor pickup address for Delhivery fulfillment.");
@@ -406,8 +601,12 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
         amount,
         paymentMethod: first.paymentMethod ?? "cod",
         pickup,
+        pickupLocationName,
         destination,
         packageDetails,
+        productsDescription: rows.map((row) => row.productId).filter(Boolean).join(", "),
+        sellerName: store?.name ?? pickup.receiverName,
+        sellerAddress: pickup.line1,
       });
 
       await orders.updateMany(
@@ -493,7 +692,7 @@ export async function trackDelhiveryShipment(input: { awb?: string; orderRef?: s
     },
   });
 
-  const body = await response.json().catch(() => ({}));
+  const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
     throw new Error(`Delhivery tracking API failed (${response.status}).`);
   }
@@ -645,6 +844,9 @@ async function createDelhiveryShipment(input: ShipmentCreateInput): Promise<Ship
   const waybill = await fetchWaybill().catch(() => undefined);
 
   const paymentMode = input.paymentMethod === "cod" ? "COD" : "Prepaid";
+  const shippingMode = (process.env.DELHIVERY_SHIPPING_MODE ?? "Surface").trim() || "Surface";
+  const addressType = (process.env.DELHIVERY_ADDRESS_TYPE ?? "home").trim();
+  const shipmentWeightGrams = Math.max(1, Math.round(input.packageDetails.deadWeightKg * 1000));
   const shipment = {
     order: input.orderRef,
     waybill,
@@ -656,20 +858,33 @@ async function createDelhiveryShipment(input: ShipmentCreateInput): Promise<Ship
     country: input.destination.country || "India",
     phone: input.destination.receiverPhone ?? "",
     payment_mode: paymentMode,
+    return_name: input.pickup.receiverName ?? input.sellerName ?? "Gifta Warehouse",
+    return_add: input.pickup.line1,
+    return_city: input.pickup.city,
+    return_state: input.pickup.state,
+    return_country: input.pickup.country || "India",
+    return_pin: input.pickup.pinCode,
+    return_phone: input.pickup.receiverPhone ?? "",
+    products_desc: input.productsDescription ?? "",
     total_amount: Number(input.amount.toFixed(2)),
     cod_amount: input.paymentMethod === "cod" ? Number(input.amount.toFixed(2)) : 0,
-    quantity: input.packageDetails.quantity,
+    seller_add: input.sellerAddress ?? input.pickup.line1,
+    seller_name: input.sellerName ?? input.pickup.receiverName ?? "Gifta",
+    quantity: String(input.packageDetails.quantity),
+    order_date: new Date().toISOString().slice(0, 10),
     shipment_width: input.packageDetails.breadthCm,
     shipment_height: input.packageDetails.heightCm,
     shipment_length: input.packageDetails.lengthCm,
-    weight: input.packageDetails.deadWeightKg,
-    pickup_location: `${input.storeId}-pickup`,
+    weight: shipmentWeightGrams,
+    shipping_mode: shippingMode,
+    address_type: addressType,
+    pickup_location: input.pickupLocationName,
   };
 
   const payload = {
     shipments: [shipment],
     pickup_location: {
-      name: `${input.storeId}-pickup`,
+      name: input.pickupLocationName,
       add: input.pickup.line1,
       city: input.pickup.city,
       state: input.pickup.state,
@@ -692,7 +907,7 @@ async function createDelhiveryShipment(input: ShipmentCreateInput): Promise<Ship
     }),
   });
 
-  const data = await response.json().catch(() => ({}));
+  const data = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
     throw new Error(`Delhivery shipment API failed (${response.status}).`);
   }
@@ -707,7 +922,7 @@ async function createDelhiveryShipment(input: ShipmentCreateInput): Promise<Ship
     ?? extractFirstString(data, ["reference"]);
 
   const pickupRequestId = await createPickupRequest({
-    pickupLocation: `${input.storeId}-pickup`,
+    pickupLocation: input.pickupLocationName,
     expectedPackageCount: input.packageDetails.quantity,
   }).catch(() => undefined);
 
@@ -732,7 +947,7 @@ async function fetchWaybill() {
     },
   });
 
-  const data = await response.json().catch(() => ({}));
+  const data = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
     throw new Error(`Unable to fetch Delhivery waybill (${response.status}).`);
   }
@@ -762,7 +977,7 @@ async function createPickupRequest(input: { pickupLocation: string; expectedPack
     }),
   });
 
-  const data = await response.json().catch(() => ({}));
+  const data = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
     throw new Error(`Unable to create Delhivery pickup request (${response.status}).`);
   }
@@ -813,6 +1028,19 @@ function resolvePickupAddress(store: StoreDoc | null): ShippingAddressSnapshot |
   };
 }
 
+function resolvePickupLocationName(store: StoreDoc | null, storeId: string) {
+  const configuredDefault = getDelhiveryConfig().defaultPickupLocationName;
+  if (store?.name?.trim()) {
+    return store.name.trim();
+  }
+
+  if (configuredDefault) {
+    return configuredDefault;
+  }
+
+  return storeId === "direct" ? "Gifta Warehouse" : storeId;
+}
+
 function mapProviderStatusToOrderStatus(status: string): AdminOrderDto["status"] | null {
   const normalized = status.toLowerCase();
   if (normalized.includes("delivered")) return "delivered";
@@ -825,6 +1053,10 @@ function mapProviderStatusToOrderStatus(status: string): AdminOrderDto["status"]
 }
 
 function extractServiceabilityRecords(body: unknown) {
+  if (!body || typeof body !== "object") {
+    return [];
+  }
+
   const payload = body as Record<string, unknown>;
 
   const fromDeliveryCodes = (payload.delivery_codes as Array<Record<string, unknown>> | undefined)?.map((entry) => {
@@ -848,6 +1080,100 @@ function extractServiceabilityRecords(body: unknown) {
     pinCode: extractString(entry.pin ?? entry.pincode ?? entry.postal_code),
     remark: extractString(entry.remark ?? entry.remarks),
   }));
+}
+
+function normalizeBaseUrl(value: string | undefined, fallback: string) {
+  return (value?.trim() || fallback).replace(/\/$/, "");
+}
+
+function buildExpectedTatPickupDate() {
+  const configuredTime = (process.env.DELHIVERY_EXPECTED_TAT_PICKUP_TIME ?? "12:00").trim() || "12:00";
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day} ${configuredTime}`;
+}
+
+async function parseDelhiveryResponseBody(response: Response) {
+  const rawText = await response.text();
+  if (!rawText) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawText) as unknown;
+  } catch {
+    return rawText;
+  }
+}
+
+function parseExpectedTatResponse(payload: unknown) {
+  const objects = collectTatObjects(payload);
+
+  for (const entry of objects) {
+    const expectedDays = pickNumber(entry, ["expected_tat", "tat", "days", "tat_days", "lead_time", "total_tat"]);
+    const expectedDeliveryDate = pickString(entry, ["expected_delivery_date", "delivery_date", "edd", "expected_date", "delivery_datetime"]);
+
+    if (expectedDays !== undefined || expectedDeliveryDate) {
+      return {
+        expectedDays,
+        expectedDeliveryDate,
+      };
+    }
+  }
+
+  return {
+    expectedDays: undefined,
+    expectedDeliveryDate: undefined,
+  };
+}
+
+function collectTatObjects(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return [] as Array<Record<string, unknown>>;
+  }
+
+  const root = payload as Record<string, unknown>;
+  const candidates: Array<Record<string, unknown>> = [root];
+
+  for (const key of ["data", "result", "results", "response"]) {
+    const value = root[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      candidates.push(value as Record<string, unknown>);
+    }
+    if (Array.isArray(value)) {
+      candidates.push(...value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object"));
+    }
+  }
+
+  for (const value of Object.values(root)) {
+    if (Array.isArray(value)) {
+      candidates.push(...value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object"));
+    }
+  }
+
+  return candidates;
+}
+
+function pickNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = Number(record[key]);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function pickString(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = extractString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 function extractString(value: unknown): string | undefined {

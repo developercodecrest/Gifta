@@ -15,6 +15,8 @@ type VerifyRequest = {
   orderRef?: string;
 };
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;

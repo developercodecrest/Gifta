@@ -1,4 +1,3 @@
-import Razorpay from "razorpay";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -10,6 +9,8 @@ import { validateCouponCode } from "@/lib/server/coupon-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { getUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
+
+export const runtime = "nodejs";
 
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -58,6 +59,109 @@ type AdminOrderRecord = AdminOrderDto & {
   storeObjectId?: ObjectId;
   productObjectId?: ObjectId;
 };
+
+type RazorpayCreateOrderPayload = {
+  amount: number;
+  currency: string;
+  receipt: string;
+  notes: Record<string, string>;
+};
+
+type RazorpayOrderResponse = {
+  id: string;
+  amount: number;
+  currency: string;
+};
+
+type RazorpayErrorResponse = {
+  error?: {
+    code?: string;
+    description?: string;
+  };
+};
+
+class RazorpayOrderCreateError extends Error {
+  status: number;
+  providerCode?: string;
+  providerDescription?: string;
+  details?: unknown;
+
+  constructor(status: number, details: unknown) {
+    super("Razorpay order creation failed.");
+    this.name = "RazorpayOrderCreateError";
+    this.status = status;
+    this.details = details;
+
+    if (isRazorpayErrorResponse(details)) {
+      this.providerCode = details.error?.code;
+      this.providerDescription = details.error?.description;
+    }
+  }
+}
+
+function parseRazorpayResponseBody(responseText: string): unknown {
+  if (!responseText) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(responseText) as unknown;
+  } catch {
+    return responseText;
+  }
+}
+
+function isRazorpayOrderResponse(value: unknown): value is RazorpayOrderResponse {
+  return Boolean(
+    value
+      && typeof value === "object"
+      && "id" in value
+      && typeof value.id === "string"
+      && "amount" in value
+      && typeof value.amount === "number"
+      && "currency" in value
+      && typeof value.currency === "string",
+  );
+}
+
+function isRazorpayErrorResponse(value: unknown): value is RazorpayErrorResponse {
+  return Boolean(value && typeof value === "object" && "error" in value && typeof value.error === "object");
+}
+
+async function createRazorpayOrder(payload: RazorpayCreateOrderPayload) {
+  const keyId = razorpayKeyId?.trim();
+  const keySecret = razorpayKeySecret?.trim();
+
+  if (!keyId || !keySecret) {
+    throw new Error("Razorpay credentials are missing.");
+  }
+
+  const basicAuthToken = Buffer.from(`${keyId}:${keySecret}`, "utf8").toString("base64");
+  const endpoint = new URL("/v1/orders", "https://api.razorpay.com");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Basic ${basicAuthToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  const responseText = await response.text();
+  const responseBody = parseRazorpayResponseBody(responseText);
+
+  if (!response.ok) {
+    throw new RazorpayOrderCreateError(response.status, responseBody);
+  }
+
+  if (!isRazorpayOrderResponse(responseBody)) {
+    throw new Error("Razorpay order response was invalid.");
+  }
+
+  return responseBody;
+}
 
 export async function POST(request: Request) {
   if (!hasUsableRazorpayCredentials()) {
@@ -163,16 +267,24 @@ export async function POST(request: Request) {
   const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + snapshot.platformFee + shipping;
   const total = Math.max(0, totalBeforeDiscount - discount);
 
-  const razorpay = new Razorpay({
-    key_id: razorpayKeyId,
-    key_secret: razorpayKeySecret,
-  });
+  if (total <= 0) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "INVALID_ORDER_AMOUNT",
+          message: "Razorpay checkout requires a payable amount greater than zero.",
+        },
+      },
+      { status: 400 },
+    );
+  }
 
   const orderRef = createOrderRef();
   let order;
 
   try {
-    order = await razorpay.orders.create({
+    order = await createRazorpayOrder({
       amount: Math.round(total * 100),
       currency: "INR",
       receipt: orderRef,
@@ -188,12 +300,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const razorpayError = error as {
-      statusCode?: number;
-      error?: { code?: string; description?: string };
-    };
-
-    if (razorpayError?.statusCode === 401) {
+    if (error instanceof RazorpayOrderCreateError && error.status === 401) {
       return NextResponse.json(
         {
           success: false,
@@ -201,8 +308,8 @@ export async function POST(request: Request) {
             code: "RAZORPAY_AUTH_FAILED",
             message: "Razorpay authentication failed. Provide a valid RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET pair for the same test or live mode.",
             details: {
-              providerCode: razorpayError.error?.code,
-              providerDescription: razorpayError.error?.description,
+              providerCode: error.providerCode,
+              providerDescription: error.providerDescription,
             },
           },
         },

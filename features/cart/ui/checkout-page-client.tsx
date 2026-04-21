@@ -29,7 +29,10 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 declare global {
   interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    Razorpay?: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on?: (event: string, handler: (payload: Record<string, unknown>) => void) => void;
+    };
   }
 }
 
@@ -76,7 +79,9 @@ type CreateOrderResponse = {
 } | {
   success: false;
   error: {
+    code?: string;
     message: string;
+    details?: Record<string, unknown>;
   };
 };
 
@@ -130,6 +135,20 @@ type DeliveryEstimateResponse = {
     source: "delhivery" | "fallback";
     serviceable: boolean;
     remark?: string;
+    expectedTat?: {
+      source: "delhivery" | "fallback";
+      minimumDays?: number;
+      maximumDays?: number;
+      earliestDeliveryDate?: string;
+      latestDeliveryDate?: string;
+      remark?: string;
+      estimates: Array<{
+        originPin: string;
+        destinationPin: string;
+        expectedDays?: number;
+        expectedDeliveryDate?: string;
+      }>;
+    };
   };
 } | {
   success: false;
@@ -150,6 +169,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const [promoMessage, setPromoMessage] = useState("Enter a coupon to validate from admin-managed offers.");
   const [deliveryFee, setDeliveryFee] = useState(snapshot.shipping);
   const [deliveryRemark, setDeliveryRemark] = useState<string | null>(null);
+  const [deliveryEtaMessage, setDeliveryEtaMessage] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<ProfileAddress[]>([]);
   const [selectedAddress, setSelectedAddress] = useState("");
   const [newAddressOpen, setNewAddressOpen] = useState(false);
@@ -196,6 +216,10 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   }, [couponDiscount, deliveryFee, snapshot.platformFee, snapshot.subtotal, snapshot.tax]);
 
   useEffect(() => {
+    void loadRazorpaySdk();
+  }, []);
+
+  useEffect(() => {
     const code = promoCode.trim();
     if (!code) {
       setCouponDiscount(0);
@@ -237,6 +261,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
     if (!currentPin || currentPin.length < 4) {
       setDeliveryFee(snapshot.shipping);
       setDeliveryRemark(null);
+      setDeliveryEtaMessage(null);
       return;
     }
 
@@ -249,6 +274,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
       if (!res) {
         setDeliveryFee(snapshot.shipping);
         setDeliveryRemark("Delivery estimate unavailable. Default fee applied.");
+        setDeliveryEtaMessage(null);
         return;
       }
 
@@ -256,17 +282,20 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
       if (!res.ok || !payload?.success) {
         setDeliveryFee(snapshot.shipping);
         setDeliveryRemark(payload && !payload.success ? payload.error.message : "Delivery estimate unavailable.");
+        setDeliveryEtaMessage(null);
         return;
       }
 
       if (!payload.data.serviceable) {
         setDeliveryFee(0);
         setDeliveryRemark(payload.data.remark ?? "Delivery unavailable for this pincode.");
+        setDeliveryEtaMessage(null);
         return;
       }
 
       setDeliveryFee(payload.data.estimatedFee);
-      setDeliveryRemark(payload.data.remark ?? null);
+      setDeliveryRemark(normalizeDeliveryRemark(payload.data.remark));
+      setDeliveryEtaMessage(formatExpectedTatSummary(payload.data.expectedTat));
     }, 350);
 
     return () => {
@@ -481,7 +510,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
       const orderPayload = (await orderRes.json()) as CreateOrderResponse;
       if (!orderRes.ok || !orderPayload.success) {
-        setError(orderPayload.success ? "Unable to start payment." : orderPayload.error.message);
+        setError(orderPayload.success ? "Unable to start payment." : resolveCheckoutErrorMessage(orderPayload.error));
         setIsPaying(false);
         return;
       }
@@ -544,6 +573,13 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
           ondismiss: () => setIsPaying(false),
         },
       });
+
+      if (typeof razorpay.on === "function") {
+        razorpay.on("payment.failed", (response) => {
+          setError(extractRazorpayFailureMessage(response));
+          setIsPaying(false);
+        });
+      }
 
       razorpay.open();
     } catch {
@@ -791,7 +827,8 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 </div>
               </dl>
 
-              {deliveryRemark ? <p className="mt-3 text-xs text-[#74655c]">Delivery note: {deliveryRemark}</p> : null}
+              {deliveryEtaMessage ? <p className="mt-3 text-xs text-[#74655c]">{deliveryEtaMessage}</p> : null}
+              {deliveryRemark ? <p className="mt-1 text-xs text-[#74655c]">Delivery note: {deliveryRemark}</p> : null}
 
               <div className="app-data-panel mt-5 rounded-3xl p-4">
                 <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-primary" />Premium checkout surface</p>
@@ -894,12 +931,114 @@ async function loadRazorpaySdk() {
   }
 
   return new Promise<boolean>((resolve) => {
+    const existing = document.getElementById("razorpay-checkout-script") as HTMLScriptElement | null;
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve(Boolean(window.Razorpay));
+        return;
+      }
+
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+
     const script = document.createElement("script");
+    script.id = "razorpay-checkout-script";
+    script.async = true;
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve(true);
+    };
+    script.onerror = () => {
+      script.dataset.loaded = "false";
+      resolve(false);
+    };
     document.body.appendChild(script);
   });
+}
+
+function normalizeDeliveryRemark(remark?: string | null) {
+  if (!remark) {
+    return null;
+  }
+
+  if (remark === "AUTH_BYPASSED") {
+    return "Delhivery validation is currently falling back because the configured token is not being accepted upstream.";
+  }
+
+  return remark;
+}
+
+function formatExpectedTatSummary(
+  summary:
+    | DeliveryEstimateResponse extends { success: true; data: infer TData }
+      ? TData extends { expectedTat?: infer TExpectedTat }
+        ? TExpectedTat
+        : never
+      : never
+    | undefined,
+) {
+  if (!summary) {
+    return null;
+  }
+
+  if (summary.earliestDeliveryDate && summary.latestDeliveryDate) {
+    const earliest = formatShortDate(summary.earliestDeliveryDate);
+    const latest = formatShortDate(summary.latestDeliveryDate);
+    if (earliest && latest) {
+      return earliest === latest
+        ? `Estimated delivery by ${earliest}.`
+        : `Estimated delivery between ${earliest} and ${latest}.`;
+    }
+  }
+
+  if (typeof summary.minimumDays === "number" && typeof summary.maximumDays === "number") {
+    return summary.minimumDays === summary.maximumDays
+      ? `Expected transit time ${summary.minimumDays} day${summary.minimumDays === 1 ? "" : "s"}.`
+      : `Expected transit time ${summary.minimumDays}-${summary.maximumDays} days.`;
+  }
+
+  return summary.remark ?? null;
+}
+
+function formatShortDate(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+  }).format(parsed);
+}
+
+function extractRazorpayFailureMessage(payload: Record<string, unknown>) {
+  const error = payload.error;
+  if (error && typeof error === "object") {
+    const details = error as Record<string, unknown>;
+    const description = typeof details.description === "string" ? details.description : undefined;
+    const reason = typeof details.reason === "string" ? details.reason : undefined;
+    if (description || reason) {
+      return description ?? reason ?? "Payment failed. Please try again.";
+    }
+  }
+
+  return "Payment failed. Please try again.";
+}
+
+function resolveCheckoutErrorMessage(error: { message: string; details?: Record<string, unknown> }) {
+  const providerDescription = typeof error.details?.providerDescription === "string"
+    ? error.details.providerDescription
+    : undefined;
+
+  if (providerDescription && !error.message.includes(providerDescription)) {
+    return `${error.message} ${providerDescription}`;
+  }
+
+  return error.message;
 }
 
 function Field({

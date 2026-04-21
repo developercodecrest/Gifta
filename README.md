@@ -52,12 +52,20 @@ DELHIVERY_MODE=test
 DELHIVERY_API_TOKEN_TEST=delhivery_test_token
 DELHIVERY_API_TOKEN_LIVE=delhivery_live_token
 DELHIVERY_TEST_BASE_URL=https://staging-express.delhivery.com
-DELHIVERY_LIVE_BASE_URL=https://staging-express.delhivery.com
+DELHIVERY_LIVE_BASE_URL=https://track.delhivery.com
 DELHIVERY_PINCODE_PATH=/c/api/pin-codes/json/
 DELHIVERY_SHIPMENT_CREATE_PATH=/api/cmu/create.json
 DELHIVERY_PICKUP_REQUEST_PATH=/fm/request/new/
 DELHIVERY_WAYBILL_PATH=/waybill/api/bulk/json/
 DELHIVERY_TRACK_PATH=/api/v1/packages/json/
+DELHIVERY_EXPECTED_TAT_TEST_BASE_URL=https://express-dev-test.delhivery.com
+DELHIVERY_EXPECTED_TAT_LIVE_BASE_URL=https://track.delhivery.com
+DELHIVERY_EXPECTED_TAT_PATH=/api/dc/expected_tat
+DELHIVERY_EXPECTED_TAT_MOT=S
+DELHIVERY_EXPECTED_TAT_PDT=B2C
+DELHIVERY_EXPECTED_TAT_PICKUP_TIME=12:00
+DELHIVERY_DEFAULT_ORIGIN_PIN=
+DELHIVERY_DEFAULT_PICKUP_LOCATION_NAME=
 DELHIVERY_WEBHOOK_SECRET=optional_webhook_hmac_secret
 DELHIVERY_DEFAULT_WEIGHT_KG=0.5
 DELHIVERY_DEFAULT_LENGTH_CM=20
@@ -76,8 +84,9 @@ Razorpay notes:
 Delhivery notes:
 
 - Use `DELHIVERY_MODE=test` for development and `DELHIVERY_MODE=live` for production.
-- The codebase is currently pinned to `https://staging-express.delhivery.com` for both modes as a temporary project-wide override.
 - Serviceability endpoint used by checkout: `GET /api/shipping/delhivery/serviceability?pinCode=...`
+- Checkout estimate endpoint now includes fee plus expected TAT lanes from the selected cart vendors: `GET /api/shipping/delhivery/estimate?pinCode=...&subtotal=...`
+- Expected TAT requests use vendor pickup pincodes where available, or `DELHIVERY_DEFAULT_ORIGIN_PIN` as a fallback.
 - Tracking endpoint for user apps: `GET /api/shipping/delhivery/track?orderRef=...`
 - Shipping webhook endpoint: `POST /api/shipping/delhivery/webhook`
 - Shipment retry endpoint for admin ops: `POST /api/admin/orders/:id/shipping/retry`
