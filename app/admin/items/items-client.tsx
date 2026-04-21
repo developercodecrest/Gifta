@@ -22,7 +22,8 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { AdminEmptyState, AdminSection } from "@/app/admin/_components/admin-surface";
 import { uploadFileToCloudinary } from "@/lib/client/cloudinary-upload";
-import { ProductMediaItem } from "@/types/ecommerce";
+import { PRODUCT_DIMENSION_UNIT_OPTIONS, PRODUCT_WEIGHT_UNIT_OPTIONS, normalizeProductDimensionUnit, normalizeProductWeightUnit } from "@/lib/product-shipping";
+import { ProductDimensionUnit, ProductMediaItem, ProductWeightUnit } from "@/types/ecommerce";
 import { StoreCategoryOption, VendorSummaryDto } from "@/types/api";
 
 type AdminItemOffer = {
@@ -46,11 +47,12 @@ type AdminItemVariant = {
   salePrice: number;
   regularPrice?: number;
   weight?: number;
-  weightUnit?: "g" | "kg";
+  weightUnit?: ProductWeightUnit;
   size?: string;
+  length?: number;
   width?: number;
   height?: number;
-  dimensionUnit?: "cm";
+  dimensionUnit?: ProductDimensionUnit;
   inStock: boolean;
 };
 
@@ -72,6 +74,12 @@ type AdminItem = {
   inStock: boolean;
   minOrderQty?: number;
   maxOrderQty?: number;
+  weight?: number;
+  weightUnit?: ProductWeightUnit;
+  length?: number;
+  width?: number;
+  height?: number;
+  dimensionUnit?: ProductDimensionUnit;
   bestOffer?: AdminItemOffer;
   offerCount: number;
   offers?: AdminItemOffer[];
@@ -93,11 +101,12 @@ type VariantInputRow = {
   salePrice: string;
   regularPrice: string;
   weight: string;
-  weightUnit: "g" | "kg";
+  weightUnit: ProductWeightUnit;
   size: string;
+  length: string;
   width: string;
   height: string;
-  dimensionUnit: "cm";
+  dimensionUnit: ProductDimensionUnit;
   inStock: boolean;
 };
 
@@ -126,8 +135,10 @@ type CsvCanonicalField =
   | "variantRegularPrice"
   | "variantWeight"
   | "variantWeightUnit"
+  | "variantLength"
   | "variantWidth"
-  | "variantHeight";
+  | "variantHeight"
+  | "variantDimensionUnit";
 
 type CsvColumnMapping = Partial<Record<CsvCanonicalField, string>>;
 
@@ -163,6 +174,12 @@ type AdminItemCreatePayload = {
   media?: ProductMediaItem[];
   featured?: boolean;
   inStock?: boolean;
+  weight?: number | string;
+  weightUnit?: ProductWeightUnit;
+  length?: number | string;
+  width?: number | string;
+  height?: number | string;
+  dimensionUnit?: ProductDimensionUnit;
   attributes?: AdminItemAttribute[];
   variants?: AdminItemVariant[];
 };
@@ -198,8 +215,10 @@ const CSV_FIELD_DEFINITIONS: CsvFieldDefinition[] = [
   { key: "variantRegularPrice", label: "Variant Regular Price", aliases: ["variantregularprice", "variantmrp", "variantoriginalprice"] },
   { key: "variantWeight", label: "Variant Weight", aliases: ["variantweight", "weight"] },
   { key: "variantWeightUnit", label: "Variant Weight Unit", aliases: ["variantweightunit", "weightunit"] },
+  { key: "variantLength", label: "Variant Length", aliases: ["variantlength", "length"] },
   { key: "variantWidth", label: "Variant Width", aliases: ["variantwidth", "width"] },
   { key: "variantHeight", label: "Variant Height", aliases: ["variantheight", "height"] },
+  { key: "variantDimensionUnit", label: "Variant Dimension Unit", aliases: ["variantdimensionunit", "dimensionunit", "sizeunit"] },
 ];
 
 function formatCurrency(value?: number) {
@@ -351,7 +370,7 @@ export function ItemsClient({
         description={isVendorLocked ? "Manage items mapped to this vendor only and keep category mapping aligned to vendor taxonomy." : "Search by category or store, inspect offer coverage, and create product records that are linked to a specific vendor offer from the start."}
         actions={(
           <div className="flex flex-wrap gap-2">
-            <ImportItemsDialog vendors={vendors} lockedStoreId={lockedStoreId} />
+            <ImportItemsDialog lockedStoreId={lockedStoreId} />
             <CreateItemDialog vendors={vendors} lockedStoreId={lockedStoreId} globalCategories={globalCategories} />
           </div>
         )}
@@ -518,13 +537,7 @@ export function ItemsClient({
   );
 }
 
-function ImportItemsDialog({
-  vendors,
-  lockedStoreId,
-}: {
-  vendors: VendorSummaryDto[];
-  lockedStoreId?: string;
-}) {
+function ImportItemsDialog({ lockedStoreId }: { lockedStoreId?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -852,6 +865,12 @@ function CreateItemDialog({
   const [deliveryEtaHours, setDeliveryEtaHours] = useState("24");
   const [minOrderQty, setMinOrderQty] = useState("1");
   const [maxOrderQty, setMaxOrderQty] = useState("10");
+  const [productWeight, setProductWeight] = useState("");
+  const [productWeightUnit, setProductWeightUnit] = useState<ProductWeightUnit>("g");
+  const [productLength, setProductLength] = useState("");
+  const [productWidth, setProductWidth] = useState("");
+  const [productHeight, setProductHeight] = useState("");
+  const [productDimensionUnit, setProductDimensionUnit] = useState<ProductDimensionUnit>("cm");
   const [tags, setTags] = useState("gift, premium");
   const [mediaInput, setMediaInput] = useState("");
   const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
@@ -896,11 +915,12 @@ function CreateItemDialog({
         salePrice: price,
         regularPrice: originalPrice,
         weight: "0",
-        weightUnit: "g",
+        weightUnit: productWeightUnit,
         size: "",
+        length: "",
         width: "",
         height: "",
-        dimensionUnit: "cm",
+        dimensionUnit: productDimensionUnit,
         inStock,
       }),
     );
@@ -915,11 +935,12 @@ function CreateItemDialog({
         salePrice: price,
         regularPrice: originalPrice,
         weight: "0",
-        weightUnit: "g",
+        weightUnit: productWeightUnit,
         size: "",
+        length: "",
         width: "",
         height: "",
-        dimensionUnit: "cm",
+        dimensionUnit: productDimensionUnit,
         inStock,
       });
 
@@ -945,6 +966,14 @@ function CreateItemDialog({
           media: parseMediaInputLines(mediaInput),
           featured,
           inStock,
+          ...buildProductShippingCreatePayload({
+            weight: productWeight,
+            weightUnit: productWeightUnit,
+            length: productLength,
+            width: productWidth,
+            height: productHeight,
+            dimensionUnit: productDimensionUnit,
+          }),
           attributes: attributeDefinitions,
           variants: toVariantPayload(syncedVariantRows, attributeDefinitions),
         }),
@@ -1027,6 +1056,38 @@ function CreateItemDialog({
 
           <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
             <div className="flex items-center justify-between gap-3">
+              <Label className="text-base">Product package details</Label>
+              <p className="text-xs text-muted-foreground">Used as the Delhivery fallback package when a variant doesn&apos;t override it.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="Weight">
+                <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-3">
+                  <Input value={productWeight} onChange={(event) => setProductWeight(event.target.value)} inputMode="decimal" placeholder="0" />
+                  <select value={productWeightUnit} onChange={(event) => setProductWeightUnit((normalizeProductWeightUnit(event.target.value) ?? "g") as ProductWeightUnit)} className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm">
+                    {PRODUCT_WEIGHT_UNIT_OPTIONS.map((unit) => (
+                      <option key={`create-product-weight-${unit}`} value={unit}>{unit}</option>
+                    ))}
+                  </select>
+                </div>
+              </Field>
+
+              <Field label="Dimensions">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                  <Input value={productLength} onChange={(event) => setProductLength(event.target.value)} inputMode="decimal" placeholder="Length" />
+                  <Input value={productWidth} onChange={(event) => setProductWidth(event.target.value)} inputMode="decimal" placeholder="Width" />
+                  <Input value={productHeight} onChange={(event) => setProductHeight(event.target.value)} inputMode="decimal" placeholder="Height" />
+                  <select value={productDimensionUnit} onChange={(event) => setProductDimensionUnit((normalizeProductDimensionUnit(event.target.value) ?? "cm") as ProductDimensionUnit)} className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm">
+                    {PRODUCT_DIMENSION_UNIT_OPTIONS.map((unit) => (
+                      <option key={`create-product-dimension-${unit}`} value={unit}>{unit}</option>
+                    ))}
+                  </select>
+                </div>
+              </Field>
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
+            <div className="flex items-center justify-between gap-3">
               <Label className="text-base">Attributes</Label>
               <Button
                 type="button"
@@ -1101,11 +1162,12 @@ function CreateItemDialog({
                         salePrice: price,
                         regularPrice: originalPrice,
                         weight: "0",
-                        weightUnit: "g",
+                          weightUnit: productWeightUnit,
                           size: "",
+                          length: "",
                           width: "",
                           height: "",
-                          dimensionUnit: "cm",
+                          dimensionUnit: productDimensionUnit,
                         inStock,
                       },
                     ])
@@ -1168,14 +1230,15 @@ function CreateItemDialog({
                           onChange={(event) =>
                             setVariantRows((current) =>
                               current.map((entry) =>
-                                entry.id === variant.id ? { ...entry, weightUnit: event.target.value === "kg" ? "kg" : "g" } : entry,
+                                  entry.id === variant.id ? { ...entry, weightUnit: (normalizeProductWeightUnit(event.target.value) ?? "g") as ProductWeightUnit } : entry,
                               ),
                             )
                           }
                           className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
                         >
-                          <option value="g">g</option>
-                          <option value="kg">kg</option>
+                            {PRODUCT_WEIGHT_UNIT_OPTIONS.map((unit) => (
+                              <option key={`${variant.id}-weight-${unit}`} value={unit}>{unit}</option>
+                            ))}
                         </select>
                       </div>
                     </Field>
@@ -1193,7 +1256,17 @@ function CreateItemDialog({
                     </Field>
 
                     <Field label="Dimensions">
-                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                        <Input
+                          value={variant.length}
+                          onChange={(event) =>
+                            setVariantRows((current) =>
+                              current.map((entry) => (entry.id === variant.id ? { ...entry, length: event.target.value } : entry)),
+                            )
+                          }
+                          inputMode="decimal"
+                          placeholder="Length"
+                        />
                         <Input
                           value={variant.width}
                           onChange={(event) =>
@@ -1219,13 +1292,15 @@ function CreateItemDialog({
                           onChange={(event) =>
                             setVariantRows((current) =>
                               current.map((entry) =>
-                                entry.id === variant.id ? { ...entry, dimensionUnit: event.target.value === "cm" ? "cm" : "cm" } : entry,
+                                  entry.id === variant.id ? { ...entry, dimensionUnit: (normalizeProductDimensionUnit(event.target.value) ?? "cm") as ProductDimensionUnit } : entry,
                               ),
                             )
                           }
                           className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
                         >
-                          <option value="cm">cm</option>
+                            {PRODUCT_DIMENSION_UNIT_OPTIONS.map((unit) => (
+                              <option key={`${variant.id}-dimension-${unit}`} value={unit}>{unit}</option>
+                            ))}
                         </select>
                       </div>
                     </Field>
@@ -1403,6 +1478,12 @@ function ItemRowActions({
   const [productInStock, setProductInStock] = useState(item.inStock);
   const [minOrderQty, setMinOrderQty] = useState(String(item.minOrderQty ?? 1));
   const [maxOrderQty, setMaxOrderQty] = useState(String(item.maxOrderQty ?? 10));
+  const [productWeight, setProductWeight] = useState(String(item.weight ?? ""));
+  const [productWeightUnit, setProductWeightUnit] = useState<ProductWeightUnit>(item.weightUnit ?? "g");
+  const [productLength, setProductLength] = useState(String(item.length ?? ""));
+  const [productWidth, setProductWidth] = useState(String(item.width ?? ""));
+  const [productHeight, setProductHeight] = useState(String(item.height ?? ""));
+  const [productDimensionUnit, setProductDimensionUnit] = useState<ProductDimensionUnit>(item.dimensionUnit ?? "cm");
 
   const offers = item.offers ?? [];
   const [offerStoreId, setOfferStoreId] = useState(offers[0]?.storeId ?? vendors[0]?.id ?? "");
@@ -1458,11 +1539,12 @@ function ItemRowActions({
         salePrice: offerPrice,
         regularPrice: originalPrice,
         weight: "0",
-        weightUnit: "g",
+        weightUnit: productWeightUnit,
         size: "",
+        length: "",
         width: "",
         height: "",
-        dimensionUnit: "cm",
+        dimensionUnit: productDimensionUnit,
         inStock: offerInStock,
       }),
     );
@@ -1487,11 +1569,12 @@ function ItemRowActions({
         salePrice: offerPrice,
         regularPrice: originalPrice,
         weight: "0",
-        weightUnit: "g",
+        weightUnit: productWeightUnit,
         size: "",
+        length: "",
         width: "",
         height: "",
-        dimensionUnit: "cm",
+        dimensionUnit: productDimensionUnit,
         inStock: offerInStock,
       });
 
@@ -1517,6 +1600,14 @@ function ItemRowActions({
           originalPrice: Number(originalPrice) || 0,
           deliveryEtaHours: Number(deliveryEtaHours) || 24,
           offerInStock,
+          ...buildProductShippingUpdatePayload({
+            weight: productWeight,
+            weightUnit: productWeightUnit,
+            length: productLength,
+            width: productWidth,
+            height: productHeight,
+            dimensionUnit: productDimensionUnit,
+          }),
           attributes: attributeDefinitions,
           variants: toVariantPayload(syncedVariantRows, attributeDefinitions),
         }),
@@ -1755,6 +1846,38 @@ function ItemRowActions({
 
             <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
               <div className="flex items-center justify-between gap-3">
+                <Label className="text-base">Product package details</Label>
+                <p className="text-xs text-muted-foreground">Used as the Delhivery fallback package when a variant doesn&apos;t override it.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Weight">
+                  <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-3">
+                    <Input value={productWeight} onChange={(event) => setProductWeight(event.target.value)} inputMode="decimal" placeholder="0" />
+                    <select value={productWeightUnit} onChange={(event) => setProductWeightUnit((normalizeProductWeightUnit(event.target.value) ?? "g") as ProductWeightUnit)} className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm">
+                      {PRODUCT_WEIGHT_UNIT_OPTIONS.map((unit) => (
+                        <option key={`edit-product-weight-${unit}`} value={unit}>{unit}</option>
+                      ))}
+                    </select>
+                  </div>
+                </Field>
+
+                <Field label="Dimensions">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                    <Input value={productLength} onChange={(event) => setProductLength(event.target.value)} inputMode="decimal" placeholder="Length" />
+                    <Input value={productWidth} onChange={(event) => setProductWidth(event.target.value)} inputMode="decimal" placeholder="Width" />
+                    <Input value={productHeight} onChange={(event) => setProductHeight(event.target.value)} inputMode="decimal" placeholder="Height" />
+                    <select value={productDimensionUnit} onChange={(event) => setProductDimensionUnit((normalizeProductDimensionUnit(event.target.value) ?? "cm") as ProductDimensionUnit)} className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm">
+                      {PRODUCT_DIMENSION_UNIT_OPTIONS.map((unit) => (
+                        <option key={`edit-product-dimension-${unit}`} value={unit}>{unit}</option>
+                      ))}
+                    </select>
+                  </div>
+                </Field>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-[1.25rem] border border-border/70 bg-card/40 p-4 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
                 <Label className="text-base">Attributes</Label>
                 <Button
                   type="button"
@@ -1829,11 +1952,12 @@ function ItemRowActions({
                           salePrice: offerPrice,
                           regularPrice: originalPrice,
                           weight: "0",
-                          weightUnit: "g",
+                          weightUnit: productWeightUnit,
                           size: "",
+                          length: "",
                           width: "",
                           height: "",
-                          dimensionUnit: "cm",
+                          dimensionUnit: productDimensionUnit,
                           inStock: offerInStock,
                         },
                       ])
@@ -1896,14 +2020,15 @@ function ItemRowActions({
                             onChange={(event) =>
                               setVariantRows((current) =>
                                 current.map((entry) =>
-                                  entry.id === variant.id ? { ...entry, weightUnit: event.target.value === "kg" ? "kg" : "g" } : entry,
+                                    entry.id === variant.id ? { ...entry, weightUnit: (normalizeProductWeightUnit(event.target.value) ?? "g") as ProductWeightUnit } : entry,
                                 ),
                               )
                             }
                             className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
                           >
-                            <option value="g">g</option>
-                            <option value="kg">kg</option>
+                              {PRODUCT_WEIGHT_UNIT_OPTIONS.map((unit) => (
+                                <option key={`${variant.id}-edit-weight-${unit}`} value={unit}>{unit}</option>
+                              ))}
                           </select>
                         </div>
                       </Field>
@@ -1921,7 +2046,17 @@ function ItemRowActions({
                       </Field>
 
                       <Field label="Dimensions">
-                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_80px] gap-3">
+                          <Input
+                            value={variant.length}
+                            onChange={(event) =>
+                              setVariantRows((current) =>
+                                current.map((entry) => (entry.id === variant.id ? { ...entry, length: event.target.value } : entry)),
+                              )
+                            }
+                            inputMode="decimal"
+                            placeholder="Length"
+                          />
                           <Input
                             value={variant.width}
                             onChange={(event) =>
@@ -1947,13 +2082,15 @@ function ItemRowActions({
                             onChange={(event) =>
                               setVariantRows((current) =>
                                 current.map((entry) =>
-                                  entry.id === variant.id ? { ...entry, dimensionUnit: event.target.value === "cm" ? "cm" : "cm" } : entry,
+                                    entry.id === variant.id ? { ...entry, dimensionUnit: (normalizeProductDimensionUnit(event.target.value) ?? "cm") as ProductDimensionUnit } : entry,
                                 ),
                               )
                             }
                             className="min-h-11 rounded-[1.25rem] border border-input bg-background px-3 py-2 text-sm"
                           >
-                            <option value="cm">cm</option>
+                              {PRODUCT_DIMENSION_UNIT_OPTIONS.map((unit) => (
+                                <option key={`${variant.id}-edit-dimension-${unit}`} value={unit}>{unit}</option>
+                              ))}
                           </select>
                         </div>
                       </Field>
@@ -2227,11 +2364,12 @@ function toVariantRows(variants: AdminItemVariant[] | undefined): VariantInputRo
     salePrice: String(variant.salePrice ?? 0),
     regularPrice: String(variant.regularPrice ?? ""),
     weight: String(variant.weight ?? ""),
-    weightUnit: variant.weightUnit === "kg" ? "kg" : "g",
+    weightUnit: variant.weightUnit ?? "g",
     size: variant.size ?? (variant.options?.size ?? ""),
+    length: String(variant.length ?? ""),
     width: String(variant.width ?? ""),
     height: String(variant.height ?? ""),
-    dimensionUnit: variant.dimensionUnit === "cm" ? "cm" : "cm",
+    dimensionUnit: variant.dimensionUnit ?? "cm",
     inStock: variant.inStock,
   }));
 }
@@ -2285,11 +2423,12 @@ function syncVariantRowsWithAttributes(
     salePrice: string;
     regularPrice: string;
     weight: string;
-    weightUnit: "g" | "kg";
+    weightUnit: ProductWeightUnit;
     size: string;
+    length: string;
     width: string;
     height: string;
-    dimensionUnit: "cm";
+    dimensionUnit: ProductDimensionUnit;
     inStock: boolean;
   },
 ) {
@@ -2312,6 +2451,7 @@ function syncVariantRowsWithAttributes(
       weight: previous?.weight ?? defaults.weight,
       weightUnit: previous?.weightUnit ?? defaults.weightUnit,
       size: previous?.size ?? defaults.size,
+      length: previous?.length ?? defaults.length,
       width: previous?.width ?? defaults.width,
       height: previous?.height ?? defaults.height,
       dimensionUnit: previous?.dimensionUnit ?? defaults.dimensionUnit,
@@ -2357,12 +2497,14 @@ function toVariantPayload(rows: VariantInputRow[], attributes: AdminItemAttribut
 
     const regularPriceNumber = row.regularPrice.trim() ? Number(row.regularPrice) : undefined;
     const weightNumber = row.weight.trim() ? Number(row.weight) : undefined;
+    const lengthNumber = row.length.trim() ? Number(row.length) : undefined;
     const widthNumber = row.width.trim() ? Number(row.width) : undefined;
     const heightNumber = row.height.trim() ? Number(row.height) : undefined;
     const size = row.size.trim();
+    const normalizedLength = typeof lengthNumber === "number" && Number.isFinite(lengthNumber) ? Math.max(0, lengthNumber) : undefined;
     const normalizedWidth = typeof widthNumber === "number" && Number.isFinite(widthNumber) ? Math.max(0, widthNumber) : undefined;
     const normalizedHeight = typeof heightNumber === "number" && Number.isFinite(heightNumber) ? Math.max(0, heightNumber) : undefined;
-    const hasDimensions = normalizedWidth !== undefined || normalizedHeight !== undefined;
+    const hasDimensions = normalizedLength !== undefined || normalizedWidth !== undefined || normalizedHeight !== undefined;
 
     output.push({
       id: row.id,
@@ -2372,6 +2514,7 @@ function toVariantPayload(rows: VariantInputRow[], attributes: AdminItemAttribut
       weight: typeof weightNumber === "number" && Number.isFinite(weightNumber) ? Math.max(0, weightNumber) : undefined,
       weightUnit: row.weightUnit,
       ...(size ? { size } : {}),
+      ...(normalizedLength !== undefined ? { length: normalizedLength } : {}),
       ...(normalizedWidth !== undefined ? { width: normalizedWidth } : {}),
       ...(normalizedHeight !== undefined ? { height: normalizedHeight } : {}),
       ...(hasDimensions ? { dimensionUnit: row.dimensionUnit } : {}),
@@ -2380,6 +2523,62 @@ function toVariantPayload(rows: VariantInputRow[], attributes: AdminItemAttribut
   }
 
   return output;
+}
+
+function buildProductShippingCreatePayload(input: {
+  weight: string;
+  weightUnit: ProductWeightUnit;
+  length: string;
+  width: string;
+  height: string;
+  dimensionUnit: ProductDimensionUnit;
+}) {
+  const weight = normalizeCreateShippingValue(input.weight);
+  const length = normalizeCreateShippingValue(input.length);
+  const width = normalizeCreateShippingValue(input.width);
+  const height = normalizeCreateShippingValue(input.height);
+  const hasDimensions = length !== undefined || width !== undefined || height !== undefined;
+
+  return {
+    ...(weight !== undefined ? { weight, weightUnit: input.weightUnit } : {}),
+    ...(length !== undefined ? { length } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(hasDimensions ? { dimensionUnit: input.dimensionUnit } : {}),
+  };
+}
+
+function buildProductShippingUpdatePayload(input: {
+  weight: string;
+  weightUnit: ProductWeightUnit;
+  length: string;
+  width: string;
+  height: string;
+  dimensionUnit: ProductDimensionUnit;
+}) {
+  const weight = normalizeUpdateShippingValue(input.weight);
+  const length = normalizeUpdateShippingValue(input.length);
+  const width = normalizeUpdateShippingValue(input.width);
+  const height = normalizeUpdateShippingValue(input.height);
+  const hasDimensions = length !== "" || width !== "" || height !== "";
+
+  return {
+    weight,
+    weightUnit: weight !== "" ? input.weightUnit : "",
+    length,
+    width,
+    height,
+    dimensionUnit: hasDimensions ? input.dimensionUnit : "",
+  };
+}
+
+function normalizeCreateShippingValue(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeUpdateShippingValue(value: string) {
+  return value.trim();
 }
 
 function normalizeCsvToken(value: string) {
@@ -2577,18 +2776,12 @@ function parseBooleanValue(value: string) {
   return undefined;
 }
 
-function parseWeightUnit(value: string): "g" | "kg" | undefined {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-  if (normalized === "g" || normalized === "gram" || normalized === "grams") {
-    return "g";
-  }
-  if (normalized === "kg" || normalized === "kgs" || normalized === "kilogram" || normalized === "kilograms") {
-    return "kg";
-  }
-  return undefined;
+function parseWeightUnit(value: string): ProductWeightUnit | undefined {
+  return normalizeProductWeightUnit(value);
+}
+
+function parseDimensionUnit(value: string): ProductDimensionUnit | undefined {
+  return normalizeProductDimensionUnit(value);
 }
 
 function toCsvImportItems(input: {
@@ -2639,8 +2832,10 @@ function toCsvImportItems(input: {
     const variantRegularRaw = getMappedCsvValue(row, input.mapping, "variantRegularPrice");
     const variantWeightRaw = getMappedCsvValue(row, input.mapping, "variantWeight");
     const variantWeightUnitRaw = getMappedCsvValue(row, input.mapping, "variantWeightUnit");
+    const variantLengthRaw = getMappedCsvValue(row, input.mapping, "variantLength");
     const variantWidthRaw = getMappedCsvValue(row, input.mapping, "variantWidth");
     const variantHeightRaw = getMappedCsvValue(row, input.mapping, "variantHeight");
+    const variantDimensionUnitRaw = getMappedCsvValue(row, input.mapping, "variantDimensionUnit");
 
     if (!storeId) {
       failures.push({ rowNumber, message: "Missing storeId" });
@@ -2708,8 +2903,10 @@ function toCsvImportItems(input: {
       || variantRegularRaw
       || variantWeightRaw
       || variantWeightUnitRaw
+      || variantLengthRaw
       || variantWidthRaw
-      || variantHeightRaw,
+      || variantHeightRaw
+      || variantDimensionUnitRaw,
     );
 
     if (hasVariantValues && !variantSize) {
@@ -2737,6 +2934,12 @@ function toCsvImportItems(input: {
       continue;
     }
 
+    const variantLength = variantLengthRaw ? parseNumberValue(variantLengthRaw) : undefined;
+    if (variantLengthRaw && variantLength === undefined) {
+      failures.push({ rowNumber, message: "Invalid variantLength" });
+      continue;
+    }
+
     const variantWidth = variantWidthRaw ? parseNumberValue(variantWidthRaw) : undefined;
     if (variantWidthRaw && variantWidth === undefined) {
       failures.push({ rowNumber, message: "Invalid variantWidth" });
@@ -2751,7 +2954,13 @@ function toCsvImportItems(input: {
 
     const variantWeightUnit = variantWeightUnitRaw ? parseWeightUnit(variantWeightUnitRaw) : undefined;
     if (variantWeightUnitRaw && !variantWeightUnit) {
-      failures.push({ rowNumber, message: "variantWeightUnit must be g or kg" });
+      failures.push({ rowNumber, message: "variantWeightUnit must be g, kg, oz, or lb" });
+      continue;
+    }
+
+    const variantDimensionUnit = variantDimensionUnitRaw ? parseDimensionUnit(variantDimensionUnitRaw) : undefined;
+    if (variantDimensionUnitRaw && !variantDimensionUnit) {
+      failures.push({ rowNumber, message: "variantDimensionUnit must be mm, cm, m, in, or ft" });
       continue;
     }
 
@@ -2851,7 +3060,7 @@ function toCsvImportItems(input: {
       group.payload.variants = [];
     }
 
-    const hasDimensions = variantWidth !== undefined || variantHeight !== undefined;
+    const hasDimensions = variantLength !== undefined || variantWidth !== undefined || variantHeight !== undefined;
     const variantId = variantIdRaw || makeLocalId("var");
     const normalizedVariantSale = variantSale === undefined ? Math.max(0, price) : Math.max(0, variantSale);
 
@@ -2863,9 +3072,10 @@ function toCsvImportItems(input: {
       weight: variantWeight === undefined ? undefined : Math.max(0, variantWeight),
       weightUnit: variantWeight !== undefined ? (variantWeightUnit ?? "g") : undefined,
       size: variantSize,
+      length: variantLength === undefined ? undefined : Math.max(0, variantLength),
       width: variantWidth === undefined ? undefined : Math.max(0, variantWidth),
       height: variantHeight === undefined ? undefined : Math.max(0, variantHeight),
-      dimensionUnit: hasDimensions ? "cm" : undefined,
+      dimensionUnit: hasDimensions ? (variantDimensionUnit ?? "cm") : undefined,
       inStock: group.payload.inStock ?? true,
     });
   }

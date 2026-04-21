@@ -1,4 +1,5 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
+import { normalizeProductDimensionUnit, normalizeProductWeightUnit } from "@/lib/product-shipping";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
 import { deleteAdminItemScoped, updateAdminItemScoped } from "@/lib/server/ecommerce-service";
 import {
@@ -42,6 +43,12 @@ export async function PATCH(
       originalPrice?: number;
       deliveryEtaHours?: number;
       offerInStock?: boolean;
+      weight?: unknown;
+      weightUnit?: unknown;
+      length?: unknown;
+      width?: unknown;
+      height?: unknown;
+      dimensionUnit?: unknown;
       attributes?: unknown;
       variants?: unknown;
     };
@@ -66,6 +73,12 @@ export async function PATCH(
       typeof body.originalPrice !== "number" &&
       typeof body.deliveryEtaHours !== "number" &&
       typeof body.offerInStock !== "boolean" &&
+      body.weight === undefined &&
+      body.weightUnit === undefined &&
+      body.length === undefined &&
+      body.width === undefined &&
+      body.height === undefined &&
+      body.dimensionUnit === undefined &&
       body.attributes === undefined &&
       body.variants === undefined
     ) {
@@ -77,16 +90,24 @@ export async function PATCH(
       return badRequest(parsedMedia.error);
     }
 
+    const parsedShipping = parseProductShippingInput(body);
+    if (parsedShipping.error) {
+      return badRequest(parsedShipping.error);
+    }
+
     const parsedAttributeAndVariant = parseAttributesAndVariants(body.attributes, body.variants);
     if (parsedAttributeAndVariant.error) {
       return badRequest(parsedAttributeAndVariant.error);
     }
 
+    const safeBody = omitKeys(body, ["media", "attributes", "variants", "weight", "weightUnit", "length", "width", "height", "dimensionUnit"] as const);
+
     const updated = await updateAdminItemScoped({
       itemId: id,
       updates: {
-        ...body,
+        ...safeBody,
         media: parsedMedia.media,
+        ...parsedShipping.shipping,
         attributes: parsedAttributeAndVariant.attributes,
         variants: parsedAttributeAndVariant.variants,
       },
@@ -116,6 +137,88 @@ export async function PATCH(
 
     return serverError("Unable to update item", error);
   }
+}
+
+function parseProductShippingInput(input: {
+  weight?: unknown;
+  weightUnit?: unknown;
+  length?: unknown;
+  width?: unknown;
+  height?: unknown;
+  dimensionUnit?: unknown;
+}): {
+  shipping: {
+    weight?: number | null;
+    weightUnit?: ProductVariantUnit | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
+    dimensionUnit?: ProductVariantDimensionUnit | null;
+  };
+  error?: string;
+} {
+  const weight = parseOptionalNumberInput(input.weight);
+  if (input.weight !== undefined && input.weight !== null && input.weight !== "" && weight === undefined) {
+    return { shipping: {}, error: "weight must be numeric" };
+  }
+
+  const length = parseOptionalNumberInput(input.length);
+  if (input.length !== undefined && input.length !== null && input.length !== "" && length === undefined) {
+    return { shipping: {}, error: "length must be numeric" };
+  }
+
+  const width = parseOptionalNumberInput(input.width);
+  if (input.width !== undefined && input.width !== null && input.width !== "" && width === undefined) {
+    return { shipping: {}, error: "width must be numeric" };
+  }
+
+  const height = parseOptionalNumberInput(input.height);
+  if (input.height !== undefined && input.height !== null && input.height !== "" && height === undefined) {
+    return { shipping: {}, error: "height must be numeric" };
+  }
+
+  const weightUnit = normalizeProductWeightUnit(input.weightUnit) as ProductVariantUnit | undefined;
+  if (input.weightUnit !== undefined && input.weightUnit !== null && input.weightUnit !== "" && !weightUnit) {
+    return { shipping: {}, error: "weightUnit must be one of g, kg, oz, lb" };
+  }
+
+  const dimensionUnit = normalizeProductDimensionUnit(input.dimensionUnit) as ProductVariantDimensionUnit | undefined;
+  if (input.dimensionUnit !== undefined && input.dimensionUnit !== null && input.dimensionUnit !== "" && !dimensionUnit) {
+    return { shipping: {}, error: "dimensionUnit must be one of mm, cm, m, in, ft" };
+  }
+
+  const shipping: {
+    weight?: number | null;
+    weightUnit?: ProductVariantUnit | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
+    dimensionUnit?: ProductVariantDimensionUnit | null;
+  } = {};
+
+  if (input.weight !== undefined) {
+    shipping.weight = weight === undefined ? null : Math.max(0, weight);
+    shipping.weightUnit = shipping.weight === null ? null : (weightUnit ?? "g");
+  }
+
+  if (input.length !== undefined) {
+    shipping.length = length === undefined ? null : Math.max(0, length);
+  }
+
+  if (input.width !== undefined) {
+    shipping.width = width === undefined ? null : Math.max(0, width);
+  }
+
+  if (input.height !== undefined) {
+    shipping.height = height === undefined ? null : Math.max(0, height);
+  }
+
+  if (input.dimensionUnit !== undefined || input.length !== undefined || input.width !== undefined || input.height !== undefined) {
+    const hasAnyDimensions = shipping.length !== null || shipping.width !== null || shipping.height !== null;
+    shipping.dimensionUnit = hasAnyDimensions ? (dimensionUnit ?? "cm") : null;
+  }
+
+  return { shipping };
 }
 
 function parseMediaInput(mediaInput: unknown): {
@@ -229,6 +332,7 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
       weight?: unknown;
       weightUnit?: unknown;
       size?: unknown;
+      length?: unknown;
       width?: unknown;
       height?: unknown;
       dimensionUnit?: unknown;
@@ -239,11 +343,12 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
     const salePrice = typeof source.salePrice === "number" ? source.salePrice : Number(source.salePrice);
     const regularPrice = source.regularPrice === undefined ? undefined : (typeof source.regularPrice === "number" ? source.regularPrice : Number(source.regularPrice));
     const weight = source.weight === undefined ? undefined : (typeof source.weight === "number" ? source.weight : Number(source.weight));
-    const weightUnit = source.weightUnit === "g" || source.weightUnit === "kg" ? (source.weightUnit as ProductVariantUnit) : undefined;
+    const weightUnit = normalizeProductWeightUnit(source.weightUnit) as ProductVariantUnit | undefined;
     const size = typeof source.size === "string" ? source.size.trim() : "";
+    const length = source.length === undefined ? undefined : (typeof source.length === "number" ? source.length : Number(source.length));
     const width = source.width === undefined ? undefined : (typeof source.width === "number" ? source.width : Number(source.width));
     const height = source.height === undefined ? undefined : (typeof source.height === "number" ? source.height : Number(source.height));
-    const dimensionUnit = source.dimensionUnit === "cm" ? (source.dimensionUnit as ProductVariantDimensionUnit) : undefined;
+    const dimensionUnit = normalizeProductDimensionUnit(source.dimensionUnit) as ProductVariantDimensionUnit | undefined;
     const inStock = source.inStock === undefined ? true : Boolean(source.inStock);
 
     if (!variantId) {
@@ -262,12 +367,24 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
       return { attributes: undefined, variants: undefined, error: `Variant ${variantId} weight must be numeric` };
     }
 
+    if (source.weightUnit !== undefined && source.weightUnit !== null && !weightUnit) {
+      return { attributes: undefined, variants: undefined, error: `Variant ${variantId} weightUnit must be one of g, kg, oz, lb` };
+    }
+
+    if (length !== undefined && !Number.isFinite(length)) {
+      return { attributes: undefined, variants: undefined, error: `Variant ${variantId} length must be numeric` };
+    }
+
     if (width !== undefined && !Number.isFinite(width)) {
       return { attributes: undefined, variants: undefined, error: `Variant ${variantId} width must be numeric` };
     }
 
     if (height !== undefined && !Number.isFinite(height)) {
       return { attributes: undefined, variants: undefined, error: `Variant ${variantId} height must be numeric` };
+    }
+
+    if (source.dimensionUnit !== undefined && source.dimensionUnit !== null && !dimensionUnit) {
+      return { attributes: undefined, variants: undefined, error: `Variant ${variantId} dimensionUnit must be one of mm, cm, m, in, ft` };
     }
 
     if (!source.options || typeof source.options !== "object" || Array.isArray(source.options)) {
@@ -312,9 +429,10 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
     }
     signatureSet.add(signature);
 
+    const normalizedLength = length === undefined ? undefined : Math.max(0, length);
     const normalizedWidth = width === undefined ? undefined : Math.max(0, width);
     const normalizedHeight = height === undefined ? undefined : Math.max(0, height);
-    const hasDimensions = normalizedWidth !== undefined || normalizedHeight !== undefined;
+    const hasDimensions = normalizedLength !== undefined || normalizedWidth !== undefined || normalizedHeight !== undefined;
 
     variants.push({
       id: variantId,
@@ -322,8 +440,9 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
       salePrice: Math.max(0, salePrice),
       regularPrice: regularPrice === undefined ? undefined : Math.max(0, regularPrice),
       weight: weight === undefined ? undefined : Math.max(0, weight),
-      weightUnit,
+      weightUnit: weight === undefined ? undefined : (weightUnit ?? "g"),
       ...(size ? { size } : {}),
+      ...(normalizedLength !== undefined ? { length: normalizedLength } : {}),
       ...(normalizedWidth !== undefined ? { width: normalizedWidth } : {}),
       ...(normalizedHeight !== undefined ? { height: normalizedHeight } : {}),
       ...(hasDimensions ? { dimensionUnit: dimensionUnit ?? "cm" } : {}),
@@ -335,6 +454,25 @@ function parseAttributesAndVariants(attributesInput: unknown, variantsInput: unk
     attributes: attributesInput === undefined ? undefined : attributes,
     variants: variantsInput === undefined ? undefined : variants,
   };
+}
+
+function parseOptionalNumberInput(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function omitKeys<T extends Record<string, unknown>, K extends keyof T>(source: T, keys: readonly K[]): Omit<T, K> {
+  const clone = { ...source };
+
+  for (const key of keys) {
+    delete clone[key];
+  }
+
+  return clone;
 }
 
 export async function DELETE(

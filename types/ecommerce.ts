@@ -11,21 +11,29 @@ export type ProductAttribute = {
   values: string[];
 };
 
-export type ProductVariantUnit = "g" | "kg";
+export type ProductWeightUnit = "g" | "kg" | "oz" | "lb";
 
-export type ProductVariantDimensionUnit = "cm";
+export type ProductDimensionUnit = "mm" | "cm" | "m" | "in" | "ft";
 
-export type ProductVariant = {
+export type ProductVariantUnit = ProductWeightUnit;
+
+export type ProductVariantDimensionUnit = ProductDimensionUnit;
+
+export type ProductShippingSpec = {
+  weight?: number;
+  weightUnit?: ProductWeightUnit;
+  length?: number;
+  width?: number;
+  height?: number;
+  dimensionUnit?: ProductDimensionUnit;
+};
+
+export type ProductVariant = ProductShippingSpec & {
   id: string;
   options: Record<string, string>;
   salePrice: number;
   regularPrice?: number;
-  weight?: number;
-  weightUnit?: ProductVariantUnit;
   size?: string;
-  width?: number;
-  height?: number;
-  dimensionUnit?: ProductVariantDimensionUnit;
   inStock: boolean;
 };
 
@@ -48,7 +56,7 @@ export type CartItemCustomization = {
   approvalByEmail?: boolean;
 };
 
-export type Product = {
+export type Product = ProductShippingSpec & {
   id: string;
   storeId?: string;
   slug: string;

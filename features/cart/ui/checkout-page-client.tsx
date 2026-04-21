@@ -157,6 +157,8 @@ type DeliveryEstimateResponse = {
   };
 };
 
+type DeliveryExpectedTatSummary = NonNullable<Extract<DeliveryEstimateResponse, { success: true }>["data"]["expectedTat"]>;
+
 export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const router = useRouter();
   const { status } = useSession();
@@ -972,13 +974,7 @@ function normalizeDeliveryRemark(remark?: string | null) {
 }
 
 function formatExpectedTatSummary(
-  summary:
-    | DeliveryEstimateResponse extends { success: true; data: infer TData }
-      ? TData extends { expectedTat?: infer TExpectedTat }
-        ? TExpectedTat
-        : never
-      : never
-    | undefined,
+  summary: DeliveryExpectedTatSummary | undefined,
 ) {
   if (!summary) {
     return null;

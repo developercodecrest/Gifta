@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
+import { resolveShippingPackageSnapshot } from "@/lib/product-shipping";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
 import { checkDelhiveryServiceability, DelhiveryApiError, estimateDelhiveryDeliveryFee, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { validateCouponCode } from "@/lib/server/coupon-service";
@@ -402,10 +403,12 @@ export async function POST(request: Request) {
     shippingProviderStatus: "pending-payment",
     customization: line.customization,
     customizationSignature: line.customizationSignature,
-    shippingPackage: {
-      ...basePackage,
-      quantity: Math.max(1, line.quantity),
-    },
+    shippingPackage: resolveShippingPackageSnapshot({
+      product: line.product,
+      variant: line.selectedVariant,
+      quantity: line.quantity,
+      fallback: basePackage,
+    }),
     createdAt: now,
   }));
 

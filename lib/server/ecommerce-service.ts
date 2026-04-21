@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { products as seedProducts } from "@/data/products";
 import { getMongoDb } from "@/lib/mongodb";
+import { sanitizeProductShippingSpec } from "@/lib/product-shipping";
 import { ensureAuthUserRole } from "@/lib/server/otp-service";
 import {
   AdminDashboardPayload,
@@ -28,7 +29,7 @@ import {
   VendorOnboardingSubmissionDto,
   VendorSummaryDto,
 } from "@/types/api";
-import { Product, ProductAttribute, ProductMediaItem, ProductVariant } from "@/types/ecommerce";
+import { Product, ProductAttribute, ProductDimensionUnit, ProductMediaItem, ProductVariant, ProductWeightUnit } from "@/types/ecommerce";
 
 type StoreDoc = StoreDto & {
   details?: Record<string, unknown>;
@@ -465,7 +466,13 @@ function toDisplayImagesFromMedia(media: ProductMediaItem[]) {
 function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
   const productWithOptionalId = { ...(product as ProductDoc & { _id?: ObjectId }) };
   delete productWithOptionalId._id;
-  const rest = productWithOptionalId as ProductDoc;
+  const rest = { ...(productWithOptionalId as ProductDoc) };
+  delete rest.weight;
+  delete rest.weightUnit;
+  delete rest.length;
+  delete rest.width;
+  delete rest.height;
+  delete rest.dimensionUnit;
   const minOrderQty = typeof product.minOrderQty === "number" ? Math.max(1, Math.floor(product.minOrderQty)) : 1;
   const rawMax = typeof product.maxOrderQty === "number" ? Math.max(0, Math.floor(product.maxOrderQty)) : 10;
   const hiddenByQty = rawMax === 0;
@@ -477,6 +484,7 @@ function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
   const normalizedShortDescription = typeof product.shortDescription === "string" && product.shortDescription.trim()
     ? toShortDescription(product.shortDescription)
     : toShortDescription(descriptionText || normalizedDescription);
+  const normalizedShippingSpec = sanitizeProductShippingSpec(product);
 
   return {
     ...rest,
@@ -487,6 +495,7 @@ function normalizeInventoryProduct(product: ProductDoc): ProductDoc {
     minOrderQty,
     maxOrderQty,
     inStock: product.inStock && !hiddenByQty,
+    ...normalizedShippingSpec,
   };
 }
 
@@ -571,26 +580,15 @@ function normalizeProductVariants(variants: ProductVariant[] | undefined, attrib
     signatures.add(signature);
 
     const size = typeof variant.size === "string" ? variant.size.trim() : "";
-    const width = typeof variant.width === "number" && Number.isFinite(variant.width)
-      ? Math.max(0, variant.width)
-      : undefined;
-    const height = typeof variant.height === "number" && Number.isFinite(variant.height)
-      ? Math.max(0, variant.height)
-      : undefined;
-    const hasDimensions = width !== undefined || height !== undefined;
-    const dimensionUnit = variant.dimensionUnit === "cm" ? "cm" : undefined;
+    const normalizedShippingSpec = sanitizeProductShippingSpec(variant);
 
     normalized.push({
       id,
       options,
       salePrice: Math.max(0, variant.salePrice),
       regularPrice: typeof variant.regularPrice === "number" ? Math.max(0, variant.regularPrice) : undefined,
-      weight: typeof variant.weight === "number" ? Math.max(0, variant.weight) : undefined,
-      weightUnit: variant.weightUnit === "kg" ? "kg" : variant.weightUnit === "g" ? "g" : undefined,
       ...(size ? { size } : {}),
-      ...(width !== undefined ? { width } : {}),
-      ...(height !== undefined ? { height } : {}),
-      ...(hasDimensions ? { dimensionUnit: dimensionUnit ?? "cm" } : {}),
+      ...normalizedShippingSpec,
       inStock: variant.inStock ?? true,
     });
   }
@@ -2928,6 +2926,12 @@ export async function createAdminItemScoped(input: {
     inStock?: boolean;
     minOrderQty?: number;
     maxOrderQty?: number;
+    weight?: number;
+    weightUnit?: ProductWeightUnit;
+    length?: number;
+    width?: number;
+    height?: number;
+    dimensionUnit?: ProductDimensionUnit;
     attributes?: ProductAttribute[];
     variants?: ProductVariant[];
   };
@@ -3008,6 +3012,7 @@ export async function createAdminItemScoped(input: {
     maxOrderQty: input.payload.maxOrderQty ?? 10,
     featured: input.payload.featured ?? false,
     storeId,
+    ...sanitizeProductShippingSpec(input.payload),
     attributes: normalizeProductAttributes(input.payload.attributes),
     variants: [],
   };
@@ -3057,6 +3062,12 @@ export async function updateAdminItemScoped(input: {
     originalPrice?: number;
     deliveryEtaHours?: number;
     offerInStock?: boolean;
+    weight?: number | null;
+    weightUnit?: ProductWeightUnit | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
+    dimensionUnit?: ProductDimensionUnit | null;
     attributes?: ProductAttribute[];
     variants?: ProductVariant[];
   };
@@ -3079,6 +3090,7 @@ export async function updateAdminItemScoped(input: {
 
   const existingOffers = await offers.find({ productId: input.itemId }).toArray();
   const patch: Record<string, unknown> = {};
+  const unset: Record<string, ""> = {};
 
   const hasCategoryUpdate = typeof input.updates.category === "string";
   const hasSubcategoryUpdate = typeof input.updates.subcategory === "string";
@@ -3131,6 +3143,33 @@ export async function updateAdminItemScoped(input: {
   if (typeof input.updates.featured === "boolean") patch.featured = input.updates.featured;
   if (Array.isArray(input.updates.tags)) patch.tags = input.updates.tags;
 
+  const hasShippingSpecUpdate = input.updates.weight !== undefined
+    || input.updates.weightUnit !== undefined
+    || input.updates.length !== undefined
+    || input.updates.width !== undefined
+    || input.updates.height !== undefined
+    || input.updates.dimensionUnit !== undefined;
+
+  if (hasShippingSpecUpdate) {
+    const normalizedShippingSpec = sanitizeProductShippingSpec({
+      weight: input.updates.weight === null ? undefined : input.updates.weight,
+      weightUnit: input.updates.weightUnit === null ? undefined : input.updates.weightUnit,
+      length: input.updates.length === null ? undefined : input.updates.length,
+      width: input.updates.width === null ? undefined : input.updates.width,
+      height: input.updates.height === null ? undefined : input.updates.height,
+      dimensionUnit: input.updates.dimensionUnit === null ? undefined : input.updates.dimensionUnit,
+    });
+
+    for (const key of ["weight", "weightUnit", "length", "width", "height", "dimensionUnit"] as const) {
+      unset[key] = "";
+    }
+
+    for (const [key, value] of Object.entries(normalizedShippingSpec)) {
+      delete unset[key];
+      patch[key] = value;
+    }
+  }
+
   if (Array.isArray(input.updates.media)) {
     const normalizedMedia = toNormalizedProductMedia(input.updates.media, input.updates.images);
     patch.media = normalizedMedia;
@@ -3162,8 +3201,14 @@ export async function updateAdminItemScoped(input: {
     patch.variants = normalizeProductVariants(input.updates.variants, nextAttributes);
   }
 
-  if (Object.keys(patch).length) {
-    await products.updateOne({ id: input.itemId }, { $set: patch });
+  if (Object.keys(patch).length || Object.keys(unset).length) {
+    await products.updateOne(
+      { id: input.itemId },
+      {
+        ...(Object.keys(patch).length ? { $set: patch } : {}),
+        ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      },
+    );
   }
 
   const selectedOfferStoreId = input.updates.offerStoreId?.trim() || existingOffers[0]?.storeId;
