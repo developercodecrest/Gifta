@@ -157,7 +157,20 @@ type DeliveryEstimateResponse = {
   };
 };
 
-type DeliveryExpectedTatSummary = NonNullable<Extract<DeliveryEstimateResponse, { success: true }>["data"]["expectedTat"]>;
+type DeliveryExpectedTatSummary = {
+  source: "delhivery" | "fallback";
+  minimumDays?: number;
+  maximumDays?: number;
+  earliestDeliveryDate?: string;
+  latestDeliveryDate?: string;
+  remark?: string;
+  estimates: Array<{
+    originPin: string;
+    destinationPin: string;
+    expectedDays?: number;
+    expectedDeliveryDate?: string;
+  }>;
+};
 
 export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const router = useRouter();
