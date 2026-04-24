@@ -26,6 +26,24 @@ export function hasFirebaseClientConfig() {
   );
 }
 
+export function getFirebaseClientConfig() {
+  return hasFirebaseClientConfig() ? firebaseConfig : null;
+}
+
+export function getFirebaseWebPushConfig() {
+  const config = getFirebaseClientConfig();
+  const vapidKey = getEnv("NEXT_PUBLIC_FIREBASE_VAPID_KEY");
+
+  if (!config || !vapidKey) {
+    return null;
+  }
+
+  return {
+    ...config,
+    vapidKey,
+  };
+}
+
 export function getFirebaseClientApp(): FirebaseApp | null {
   if (!hasFirebaseClientConfig()) {
     return null;

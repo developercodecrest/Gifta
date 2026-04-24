@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { onValue, ref } from "firebase/database";
+import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getFirebaseClientDatabase } from "@/lib/client/firebase";
 
 type UserNotification = {
   id: string;
@@ -22,12 +25,16 @@ type NotificationsPayload = {
 };
 
 export default function NotificationsPage() {
+  const { data: session, status } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<NotificationsPayload>({ notifications: [], unreadCount: 0 });
+  const loadNotificationsRef = useRef<((showLoading?: boolean) => Promise<void>) | null>(null);
 
-  const loadNotifications = async () => {
-    setIsLoading(true);
+  const loadNotifications = async (showLoading = true) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -47,9 +54,13 @@ export default function NotificationsPage() {
     } catch {
       setError("Unable to load notifications.");
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   };
+
+  loadNotificationsRef.current = loadNotifications;
 
   const markAllRead = async () => {
     try {
@@ -90,8 +101,33 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
-    loadNotifications();
+    void loadNotifications();
   }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.id) {
+      return undefined;
+    }
+
+    const database = getFirebaseClientDatabase();
+    if (!database) {
+      return undefined;
+    }
+
+    let isFirstSnapshot = true;
+    const unsubscribe = onValue(ref(database, `user-notifications/${session.user.id}`), () => {
+      if (isFirstSnapshot) {
+        isFirstSnapshot = false;
+        return;
+      }
+
+      void loadNotificationsRef.current?.(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [session?.user?.id, status]);
 
   return (
     <div className="space-y-6">

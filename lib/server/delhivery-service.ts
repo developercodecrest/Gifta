@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
+import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service";
 import { getMongoDb } from "@/lib/mongodb";
 import { AdminOrderDto, PaymentMethod, ShippingAddressSnapshot, ShippingPackageSnapshot, ShippingProvider } from "@/types/api";
 
@@ -808,25 +808,23 @@ export async function applyDelhiveryWebhookUpdate(payload: Record<string, unknow
   if (realtimeTargets.size) {
     await Promise.all(
       Array.from(realtimeTargets.values()).map(async (entry) => {
-        await publishOrderSnapshot(entry.userId, entry.orderRef, {
-          status: entry.orderStatus,
-          shippingStatus: entry.shippingStatus,
-          paymentStatus: entry.paymentStatus,
-          timeline: [
-            {
-              status,
-              timestamp: new Date().toISOString(),
-              note: description,
-            },
-          ],
-        }).catch(() => undefined);
+        const eventType = mappedOrderStatus
+          ? `order-${mappedOrderStatus}`
+          : `shipping-${status.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
-        await publishUserNotification(entry.userId, {
-          id: `ord-${entry.orderRef}-${status.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-          type: "order-update",
-          title: "Shipping update",
-          message: description || `Order ${entry.orderRef} status changed to ${status}.`,
+        await syncOrderLifecycleEvent({
           orderRef: entry.orderRef,
+          eventType,
+          timelineStatus: mappedOrderStatus ?? status,
+          status: entry.orderStatus,
+          paymentStatus: entry.paymentStatus,
+          shippingStatus: entry.shippingStatus,
+          note: description,
+          title: description ? "Shipping update" : undefined,
+          message: description || `Order ${entry.orderRef} status changed to ${status}.`,
+          adminTitle: description ? "Shipping update" : undefined,
+          adminMessage: description || `Order ${entry.orderRef} status changed to ${status}.`,
+          silent: !mappedOrderStatus,
         }).catch(() => undefined);
       }),
     );

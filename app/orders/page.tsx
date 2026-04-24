@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PackageCheck, Truck } from "lucide-react";
 import { auth } from "@/auth";
 import { OrdersAuthGuard } from "@/app/orders/orders-auth-guard";
+import { OrderRealtimeRefresh } from "@/components/orders/order-realtime-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,7 @@ export default async function OrdersPage() {
   return (
     <OrdersAuthGuard>
       <div className="space-y-6">
+        <OrderRealtimeRefresh />
         <header className="surface-mesh soft-shadow rounded-4xl border border-white/70 p-6 sm:p-8 lg:p-10">
           <Badge variant="secondary" className="border-0 bg-white/80 text-slate-800">Order timeline</Badge>
           <h1 className="font-display mt-4 text-4xl font-semibold leading-tight sm:text-5xl">Your orders with richer tracking and full line-level details</h1>

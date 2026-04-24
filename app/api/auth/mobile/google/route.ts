@@ -2,6 +2,7 @@ import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import { badRequest, ok, unauthorized } from "@/lib/api-response";
 import { parseRole } from "@/lib/roles";
 import { upsertProfile } from "@/lib/server/ecommerce-service";
+import { getGoogleAuthAudiences, getPrimaryGoogleClientId } from "@/lib/server/google-auth-config";
 import { createMobileTokenBundle } from "@/lib/server/mobile-session-service";
 import { ensureAuthUserRole, getAuthUserByEmail } from "@/lib/server/otp-service";
 
@@ -12,7 +13,7 @@ type GoogleSignInRequest = {
   intent?: "signin" | "signup";
 };
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(getPrimaryGoogleClientId() || undefined);
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as GoogleSignInRequest;
@@ -22,7 +23,8 @@ export async function POST(request: Request) {
     return badRequest("idToken is required");
   }
 
-  if (!process.env.GOOGLE_CLIENT_ID) {
+  const audiences = getGoogleAuthAudiences();
+  if (!audiences.length) {
     return unauthorized("Google auth is not configured on server");
   }
 
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: audiences,
     });
     payload = ticket.getPayload();
   } catch {

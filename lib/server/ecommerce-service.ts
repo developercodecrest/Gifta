@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { products as seedProducts } from "@/data/products";
 import { getMongoDb } from "@/lib/mongodb";
 import { sanitizeProductShippingSpec } from "@/lib/product-shipping";
+import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service";
 import { ensureAuthUserRole } from "@/lib/server/otp-service";
 import {
   AdminDashboardPayload,
@@ -3344,7 +3345,21 @@ export async function updateAdminOrderScoped(input: {
   if (input.updates.status) patch.status = input.updates.status;
 
   await orders.updateOne({ id: input.orderId }, { $set: patch });
-  return orders.findOne({ id: input.orderId });
+  const updated = await orders.findOne({ id: input.orderId });
+
+  if (updated?.orderRef && updated.status && input.updates.status && existing.status !== input.updates.status) {
+    await syncOrderLifecycleEvent({
+      orderRef: updated.orderRef,
+      eventType: `order-${updated.status}`,
+      timelineStatus: updated.status,
+      status: updated.status,
+      paymentStatus: updated.transactionStatus,
+      shippingStatus: updated.shippingProviderStatus,
+      note: `Order status updated to ${updated.status} by admin.`,
+    }).catch(() => undefined);
+  }
+
+  return updated;
 }
 
 export async function deleteAdminOrderScoped(input: { orderId: string; scope: AdminScope }) {

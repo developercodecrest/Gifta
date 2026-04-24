@@ -88,7 +88,7 @@ function randomOtpCode() {
   return String(crypto.randomInt(100000, 1000000));
 }
 
-function getTransporter() {
+export function getTransporter() {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT ?? "587");
   const user = process.env.SMTP_USER;

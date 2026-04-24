@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { badRequest, ok, serverError } from "@/lib/api-response";
 import { getMongoDb } from "@/lib/mongodb";
 import { createShipmentForOrderRef, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
-import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
+import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service";
 import { AdminOrderDto } from "@/types/api";
 
 export const runtime = "nodejs";
@@ -64,20 +64,16 @@ export async function POST(request: Request) {
 
     let matchedCount = 0;
     let modifiedCount = 0;
-    const realtimeUpdates = new Map<string, {
-      userId: string;
-      orderRef: string;
-      status: AdminOrderDto["status"];
-      paymentStatus?: string;
-      shippingStatus?: string;
-      event: string;
-    }>();
+    const touchedOrderRefs = new Set<string>();
 
     if (event === "payment.captured" || event === "order.paid") {
       if (razorpayOrderId) {
         const matchedOrders = await orders.find({ razorpayOrderId }).project({ orderRef: 1, customerUserId: 1, status: 1 }).toArray();
         const updateResult = await orders.updateMany(
-          { razorpayOrderId },
+          {
+            razorpayOrderId,
+            transactionStatus: { $ne: "success" },
+          },
           {
             $set: {
               paymentMethod: "razorpay",
@@ -95,23 +91,16 @@ export async function POST(request: Request) {
         if (isDelhiveryConfigured()) {
           const refs = Array.from(new Set(matchedOrders.map((entry) => entry.orderRef).filter((value): value is string => Boolean(value))));
           for (const ref of refs) {
+            touchedOrderRefs.add(ref);
             await createShipmentForOrderRef(ref).catch(() => undefined);
           }
         }
 
         for (const entry of matchedOrders) {
-          if (!entry.customerUserId || !entry.orderRef) {
+          if (!entry.orderRef) {
             continue;
           }
-          const key = `${entry.customerUserId}:${entry.orderRef}`;
-          realtimeUpdates.set(key, {
-            userId: entry.customerUserId,
-            orderRef: entry.orderRef,
-            status: entry.status,
-            paymentStatus: "success",
-            shippingStatus: "pending-shipment",
-            event,
-          });
+          touchedOrderRefs.add(entry.orderRef);
         }
       }
     } else if (event === "payment.failed") {
@@ -137,18 +126,10 @@ export async function POST(request: Request) {
         modifiedCount += updateResult.modifiedCount;
 
         for (const entry of matchedOrders) {
-          if (!entry.customerUserId || !entry.orderRef) {
+          if (!entry.orderRef) {
             continue;
           }
-          const key = `${entry.customerUserId}:${entry.orderRef}`;
-          realtimeUpdates.set(key, {
-            userId: entry.customerUserId,
-            orderRef: entry.orderRef,
-            status: "cancelled",
-            paymentStatus: "failed",
-            shippingStatus: "payment-failed",
-            event,
-          });
+          touchedOrderRefs.add(entry.orderRef);
         }
       }
     } else if (event === "refund.processed" || event === "refund.created") {
@@ -181,54 +162,56 @@ export async function POST(request: Request) {
         modifiedCount += updateResult.modifiedCount;
 
         for (const entry of matchedOrders) {
-          if (!entry.customerUserId || !entry.orderRef) {
+          if (!entry.orderRef) {
             continue;
           }
-          const key = `${entry.customerUserId}:${entry.orderRef}`;
-          realtimeUpdates.set(key, {
-            userId: entry.customerUserId,
-            orderRef: entry.orderRef,
-            status: "cancelled",
-            paymentStatus: "refunded",
-            shippingStatus: "payment-refunded",
-            event,
-          });
+          touchedOrderRefs.add(entry.orderRef);
         }
       }
     }
 
-    if (realtimeUpdates.size) {
+    if (touchedOrderRefs.size) {
       await Promise.all(
-        Array.from(realtimeUpdates.values()).map(async (entry) => {
-          await publishOrderSnapshot(entry.userId, entry.orderRef, {
-            status: entry.status,
-            paymentStatus: entry.paymentStatus,
-            shippingStatus: entry.shippingStatus,
-            timeline: [
-              {
-                status: entry.event,
-                timestamp: new Date().toISOString(),
-              },
-            ],
-          }).catch(() => undefined);
+        Array.from(touchedOrderRefs.values()).map(async (orderRef) => {
+          const current = await orders.findOne(
+            { orderRef },
+            { projection: { orderRef: 1, status: 1, transactionStatus: 1, shippingProviderStatus: 1 } },
+          );
 
-          const title = entry.paymentStatus === "success"
-            ? "Payment confirmed"
-            : entry.paymentStatus === "failed"
-              ? "Payment failed"
-              : "Payment refunded";
-          const message = entry.paymentStatus === "success"
-            ? `Payment received for order ${entry.orderRef}.`
-            : entry.paymentStatus === "failed"
-              ? `Payment failed for order ${entry.orderRef}.`
-              : `Payment refunded for order ${entry.orderRef}.`;
+          if (!current?.orderRef) {
+            return;
+          }
 
-          await publishUserNotification(entry.userId, {
-            id: `pay-${entry.orderRef}-${entry.paymentStatus ?? "update"}`,
-            type: "payment",
-            title,
-            message,
-            orderRef: entry.orderRef,
+          const paymentStatus = current.transactionStatus;
+          const eventType = paymentStatus === "success"
+            ? "payment-success"
+            : paymentStatus === "failed"
+              ? "payment-failed"
+              : paymentStatus === "refunded"
+                ? "payment-refunded"
+                : "payment-update";
+
+          await syncOrderLifecycleEvent({
+            orderRef: current.orderRef,
+            eventType,
+            timelineStatus: eventType,
+            status: current.status,
+            paymentStatus,
+            shippingStatus: current.shippingProviderStatus,
+            note: event,
+            ...(paymentStatus === "success"
+              ? {}
+              : paymentStatus === "failed"
+                ? {
+                    title: `Payment failed for order ${current.orderRef}.`,
+                    message: `Payment failed for order ${current.orderRef}.`,
+                  }
+                : paymentStatus === "refunded"
+                  ? {
+                      title: `Payment refunded for order ${current.orderRef}.`,
+                      message: `Payment refunded for order ${current.orderRef}.`,
+                    }
+                  : {}),
           }).catch(() => undefined);
         }),
       );

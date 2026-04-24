@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { getMongoClient, getMongoDb } from "@/lib/mongodb";
 import { parseRole } from "@/lib/roles";
+import { getPrimaryGoogleClientId, getPrimaryGoogleClientSecret, hasGoogleWebAuthConfig } from "@/lib/server/google-auth-config";
 import { createMobileTokenBundle, getUserFromAccessToken } from "@/lib/server/mobile-session-service";
 import { upsertProfile } from "@/lib/server/ecommerce-service";
 import { ensureAuthUserById, ensureAuthUserRole, getAuthUserByEmail, verifyOtpAndGetUser } from "@/lib/server/otp-service";
@@ -137,19 +138,23 @@ const adapter: Adapter | undefined = mongoClient
     })()
   : undefined;
 const providers = [
-  Google({
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    allowDangerousEmailAccountLinking: true,
-    profile(profile) {
-      return {
-        id: profile.sub,
-        email: profile.email?.trim().toLowerCase() ?? "",
-        name: profile.name,
-        image: profile.picture,
-      };
-    },
-  }),
+  ...(hasGoogleWebAuthConfig()
+    ? [
+        Google({
+          clientId: getPrimaryGoogleClientId(),
+          clientSecret: getPrimaryGoogleClientSecret(),
+          allowDangerousEmailAccountLinking: true,
+          profile(profile) {
+            return {
+              id: profile.sub,
+              email: profile.email?.trim().toLowerCase() ?? "",
+              name: profile.name,
+              image: profile.picture,
+            };
+          },
+        }),
+      ]
+    : []),
   ...(hasMongoConfig
     ? [
         Credentials({

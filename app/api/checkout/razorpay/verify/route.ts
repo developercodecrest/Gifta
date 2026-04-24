@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getMongoDb } from "@/lib/mongodb";
 import { incrementCouponUsage } from "@/lib/server/coupon-service";
 import { createShipmentForOrderRef, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
-import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
+import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { setUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto } from "@/types/api";
@@ -65,8 +65,11 @@ export async function POST(request: Request) {
     ?? await orders.findOne({ razorpayOrderId: payload.razorpayOrderId });
 
   if (existing) {
-    await orders.updateMany(
-      { razorpayOrderId: payload.razorpayOrderId },
+    const updateResult = await orders.updateMany(
+      {
+        razorpayOrderId: payload.razorpayOrderId,
+        transactionStatus: { $ne: "success" },
+      },
       {
         $set: {
           paymentMethod: "razorpay",
@@ -78,13 +81,17 @@ export async function POST(request: Request) {
       },
     );
 
-    if (existing.promoCode) {
+    if (existing.promoCode && updateResult.modifiedCount > 0) {
       await incrementCouponUsage(existing.promoCode).catch(() => undefined);
     }
 
+    let shippingStatus = existing.shippingProviderStatus ?? "pending-shipment";
     const shouldTriggerShipment = process.env.DELHIVERY_TRIGGER_ON_VERIFY === "true";
     if (shouldTriggerShipment && isDelhiveryConfigured() && existing.orderRef) {
-      await createShipmentForOrderRef(existing.orderRef).catch(() => undefined);
+      const shipmentResult = await createShipmentForOrderRef(existing.orderRef).catch(() => undefined);
+      if (shipmentResult?.createdStores) {
+        shippingStatus = "shipment-created";
+      }
     }
 
     const identity = await resolveRequestIdentity(request);
@@ -93,27 +100,19 @@ export async function POST(request: Request) {
       await setUserCart(userId, []);
     }
 
-    const targetUserId = existing.customerUserId ?? userId;
-    if (targetUserId && existing.orderRef) {
-      await publishOrderSnapshot(targetUserId, existing.orderRef, {
-        status: existing.status,
-        paymentStatus: "success",
-        shippingStatus: "pending-shipment",
-        timeline: [
-          {
-            status: "payment-success",
-            timestamp: new Date().toISOString(),
-            note: "Payment verified successfully.",
-          },
-        ],
-      }).catch(() => undefined);
+    const currentOrder = existing.orderRef
+      ? await orders.findOne({ orderRef: existing.orderRef }, { projection: { orderRef: 1, status: 1, shippingProviderStatus: 1 } })
+      : null;
 
-      await publishUserNotification(targetUserId, {
-        id: `pay-${payload.razorpayPaymentId}`,
-        type: "payment",
-        title: "Payment confirmed",
-        message: `Payment received for order ${existing.orderRef}.`,
+    if (existing.orderRef) {
+      await syncOrderLifecycleEvent({
         orderRef: existing.orderRef,
+        eventType: "payment-success",
+        timelineStatus: "payment-success",
+        status: currentOrder?.status ?? existing.status,
+        paymentStatus: "success",
+        shippingStatus: currentOrder?.shippingProviderStatus ?? shippingStatus,
+        note: "Payment verified successfully.",
       }).catch(() => undefined);
     }
 

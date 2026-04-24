@@ -7,7 +7,7 @@ import { resolveShippingPackageSnapshot } from "@/lib/product-shipping";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
 import { checkDelhiveryServiceability, createShipmentForOrderRef, estimateDelhiveryDeliveryFee, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { incrementCouponUsage, validateCouponCode } from "@/lib/server/coupon-service";
-import { publishOrderSnapshot, publishUserNotification } from "@/lib/server/firebase-realtime";
+import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 import { getUserCart, setUserCart } from "@/lib/server/user-cart-service";
 import { AdminOrderDto, PaymentMethod, TransactionStatus } from "@/types/api";
@@ -225,36 +225,28 @@ export async function POST(request: Request) {
     await setUserCart(userId, []);
   }
 
+  let shippingStatus = "pending-shipment";
   if (isDelhiveryConfigured()) {
-    await createShipmentForOrderRef(orderRef).catch(() => undefined);
+    const shipmentResult = await createShipmentForOrderRef(orderRef).catch(() => undefined);
+    if (shipmentResult?.createdStores) {
+      shippingStatus = "shipment-created";
+    }
   }
 
   if (couponValidation.valid) {
     await incrementCouponUsage(couponValidation.code).catch(() => undefined);
   }
 
-  if (userId) {
-    await publishOrderSnapshot(userId, orderRef, {
-      status: "placed",
-      paymentStatus: transactionStatus,
-      shippingStatus: "pending-shipment",
-      timeline: [
-        {
-          status: "placed",
-          timestamp: now,
-          note: "Order placed successfully.",
-        },
-      ],
-    }).catch(() => undefined);
-
-    await publishUserNotification(userId, {
-      id: `ord-${orderRef}-placed`,
-      type: "order-update",
-      title: "Order placed",
-      message: `Your order ${orderRef} has been placed successfully.`,
-      orderRef,
-    }).catch(() => undefined);
-  }
+  await syncOrderLifecycleEvent({
+    orderRef,
+    eventType: "order-placed",
+    timelineStatus: "placed",
+    status: "placed",
+    paymentStatus: transactionStatus,
+    shippingStatus,
+    timestamp: now,
+    note: "Order placed successfully.",
+  }).catch(() => undefined);
 
   return NextResponse.json({
     success: true,

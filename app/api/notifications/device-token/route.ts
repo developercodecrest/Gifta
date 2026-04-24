@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 type DeviceTokenPayload = {
   token?: string;
-  platform?: "android" | "ios";
+  platform?: "android" | "ios" | "web";
 };
 
 export async function POST(request: Request) {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const token = payload.token?.trim();
     const platform = payload.platform;
 
-    if (!token || (platform !== "android" && platform !== "ios")) {
+    if (!token || (platform !== "android" && platform !== "ios" && platform !== "web")) {
       return badRequest("Invalid push token payload");
     }
 

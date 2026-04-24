@@ -3,7 +3,7 @@ import { getMongoDb } from "@/lib/mongodb";
 
 type DevicePushToken = {
   token: string;
-  platform: "android" | "ios";
+  platform: "android" | "ios" | "web";
   updatedAt: string;
 };
 
@@ -23,7 +23,7 @@ function normalizeToken(token: string) {
 export async function upsertUserDevicePushToken(input: {
   userId: string;
   token: string;
-  platform: "android" | "ios";
+  platform: "android" | "ios" | "web";
 }) {
   const objectId = toObjectId(input.userId);
   const token = normalizeToken(input.token);

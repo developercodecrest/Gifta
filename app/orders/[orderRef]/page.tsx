@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PackageCheck, ShieldCheck, Truck } from "lucide-react";
 import { auth } from "@/auth";
 import { OrdersAuthGuard } from "@/app/orders/orders-auth-guard";
+import { OrderRealtimeRefresh } from "@/components/orders/order-realtime-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +40,7 @@ export default async function OrderDetailsPage({
     <OrdersAuthGuard>
       {order ? (
         <div className="space-y-6">
+          <OrderRealtimeRefresh orderRef={order.orderRef} />
           <header className="surface-mesh soft-shadow rounded-4xl border border-white/70 p-6 sm:p-8 lg:p-10">
             <Badge variant="secondary" className="border-0 bg-white/80 text-slate-800">Order details</Badge>
             <div className="mt-4 flex flex-wrap items-start justify-between gap-4">

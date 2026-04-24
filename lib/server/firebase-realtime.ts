@@ -160,11 +160,18 @@ async function sendUserPushNotification(userId: string, notification: Notificati
   }
 
   try {
+    const baseUrl = process.env.NEXTAUTH_URL?.trim() || "http://localhost:3000";
+    const notificationPath = notification.orderRef ? `/orders/${encodeURIComponent(notification.orderRef)}` : "/notifications";
     const result = await messaging.sendEachForMulticast({
       tokens,
       notification: {
         title: notification.title,
         body: notification.message,
+      },
+      webpush: {
+        fcmOptions: {
+          link: new URL(notificationPath, baseUrl).toString(),
+        },
       },
       data: {
         type: notification.type,
