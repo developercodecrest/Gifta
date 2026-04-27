@@ -346,6 +346,165 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
     }
   };
 
+  const editShipment = async () => {
+    const name = window.prompt("Consignee name (leave blank to skip):", "") ?? "";
+    const phone = window.prompt("Consignee phone (leave blank to skip):", "") ?? "";
+    const add = window.prompt("Consignee address (leave blank to skip):", "") ?? "";
+    const productsDesc = window.prompt("Products description (leave blank to skip):", "") ?? "";
+
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/update`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(name.trim() ? { name } : {}),
+          ...(phone.trim() ? { phone } : {}),
+          ...(add.trim() ? { add } : {}),
+          ...(productsDesc.trim() ? { productsDesc } : {}),
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Unable to update shipment");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("Unable to update shipment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelShipment = async () => {
+    if (!window.confirm("Cancel this Delhivery shipment?")) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/cancel`, {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Unable to cancel shipment");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("Unable to cancel shipment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateEwaybill = async () => {
+    const dcn = window.prompt("Invoice number (dcn):", "") ?? "";
+    const ewbn = window.prompt("E-waybill number (ewbn):", "") ?? "";
+
+    if (!dcn.trim() || !ewbn.trim()) {
+      setError("Invoice number and e-waybill number are required");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/ewaybill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dcn, ewbn }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Unable to update e-waybill");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("Unable to update e-waybill");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generateLabel = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/label?pdf=true&pdfSize=4R`, {
+        method: "GET",
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        data?: { labelUrl?: string };
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Unable to generate shipping label");
+        return;
+      }
+
+      if (payload.data?.labelUrl) {
+        window.open(payload.data.labelUrl, "_blank", "noopener,noreferrer");
+      } else {
+        setError("Label generated but URL is unavailable in response");
+      }
+    } catch {
+      setError("Unable to generate shipping label");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const schedulePickup = async () => {
+    const pickupLocation = window.prompt("Pickup location name:", order.pickupAddress?.receiverName ?? order.storeId) ?? "";
+    const pickupDate = window.prompt("Pickup date (YYYY-MM-DD):", new Date().toISOString().slice(0, 10)) ?? "";
+    const pickupTime = window.prompt("Pickup time (HH:mm:ss):", "11:00:00") ?? "";
+    const expectedPackageCountRaw = window.prompt("Expected package count:", String(Math.max(1, order.quantity || 1))) ?? "";
+
+    if (!pickupLocation.trim() || !pickupDate.trim() || !pickupTime.trim()) {
+      setError("Pickup location, date, and time are required");
+      return;
+    }
+
+    const expectedPackageCount = Number(expectedPackageCountRaw);
+    if (!Number.isFinite(expectedPackageCount) || expectedPackageCount < 1) {
+      setError("Expected package count must be a positive number");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/pickup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pickupLocation,
+          pickupDate,
+          pickupTime,
+          expectedPackageCount,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { success?: boolean; error?: { message?: string } };
+      if (!response.ok || !payload.success) {
+        setError(payload.error?.message ?? "Unable to schedule pickup");
+        return;
+      }
+
+      window.location.reload();
+    } catch {
+      setError("Unable to schedule pickup");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button asChild size="sm" variant="outline">
@@ -378,6 +537,26 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
 
       <Button size="sm" variant="outline" onClick={() => void retryShipment()} disabled={saving}>
         Retry Ship
+      </Button>
+
+      <Button size="sm" variant="outline" onClick={() => void editShipment()} disabled={saving || !order.shippingAwb}>
+        Edit Ship
+      </Button>
+
+      <Button size="sm" variant="destructive" onClick={() => void cancelShipment()} disabled={saving || !order.shippingAwb}>
+        Cancel Ship
+      </Button>
+
+      <Button size="sm" variant="outline" onClick={() => void updateEwaybill()} disabled={saving || !order.shippingAwb}>
+        Update EWB
+      </Button>
+
+      <Button size="sm" variant="outline" onClick={() => void generateLabel()} disabled={saving || !order.shippingAwb}>
+        Label
+      </Button>
+
+      <Button size="sm" variant="outline" onClick={() => void schedulePickup()} disabled={saving}>
+        Pickup
       </Button>
 
       {order.shippingAwb ? (

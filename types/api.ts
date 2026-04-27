@@ -309,6 +309,15 @@ export type VendorSummaryDto = StoreDto & {
   offerCount: number;
   primaryCategory?: string;
   primarySubcategory?: string;
+  location?: {
+    addressLine1?: string;
+    addressLine2?: string;
+    landmark?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
   categories: StoreCategoryOption[];
   categoryBreakdown?: VendorCategoryAggregate[];
 };

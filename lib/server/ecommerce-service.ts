@@ -698,6 +698,30 @@ function getStoreBasicInfo(details: StoreDoc["details"]) {
   };
 }
 
+function getStoreLocation(details: StoreDoc["details"]) {
+  const location = (details as {
+    location?: {
+      addressLine1?: unknown;
+      addressLine2?: unknown;
+      landmark?: unknown;
+      city?: unknown;
+      state?: unknown;
+      pincode?: unknown;
+      country?: unknown;
+    };
+  } | undefined)?.location;
+
+  return {
+    addressLine1: typeof location?.addressLine1 === "string" ? location.addressLine1.trim() : "",
+    addressLine2: typeof location?.addressLine2 === "string" ? location.addressLine2.trim() : "",
+    landmark: typeof location?.landmark === "string" ? location.landmark.trim() : "",
+    city: typeof location?.city === "string" ? location.city.trim() : "",
+    state: typeof location?.state === "string" ? location.state.trim() : "",
+    pincode: typeof location?.pincode === "string" ? location.pincode.trim() : "",
+    country: typeof location?.country === "string" ? location.country.trim() : "",
+  };
+}
+
 async function getCollections() {
   const db = await getMongoDb();
 
@@ -1612,6 +1636,7 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
         .sort((left, right) => right.itemCount - left.itemCount || left.category.localeCompare(right.category));
 
       const basicInfo = getStoreBasicInfo(store.details);
+      const location = getStoreLocation(store.details);
       const categories = toStoreCategoryOptions(store.details);
       return {
         id: store.id,
@@ -1624,6 +1649,7 @@ export async function getVendorSummariesScoped(scope: AdminScope): Promise<Vendo
         offerCount,
         primaryCategory: basicInfo.category || undefined,
         primarySubcategory: basicInfo.subcategory || undefined,
+        location: Object.values(location).some(Boolean) ? location : undefined,
         categories,
         categoryBreakdown,
       };
@@ -2864,6 +2890,15 @@ export async function updateStoreScoped(input: {
     category?: string;
     subcategory?: string;
     categories?: StoreCategoryOption[];
+    location?: {
+      addressLine1?: string;
+      addressLine2?: string;
+      landmark?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      country?: string;
+    };
   };
   scope: AdminScope;
 }) {
@@ -2884,6 +2919,16 @@ export async function updateStoreScoped(input: {
   if (typeof input.updates.subcategory === "string") patch["details.basicInfo.subcategory"] = input.updates.subcategory.trim();
   if (Array.isArray(input.updates.categories)) {
     patch["details.catalog.categories"] = toNormalizedStoreCategoryOptions(input.updates.categories);
+  }
+  if (input.updates.location) {
+    const { location } = input.updates;
+    if (typeof location.addressLine1 === "string") patch["details.location.addressLine1"] = location.addressLine1.trim();
+    if (typeof location.addressLine2 === "string") patch["details.location.addressLine2"] = location.addressLine2.trim();
+    if (typeof location.landmark === "string") patch["details.location.landmark"] = location.landmark.trim();
+    if (typeof location.city === "string") patch["details.location.city"] = location.city.trim();
+    if (typeof location.state === "string") patch["details.location.state"] = location.state.trim();
+    if (typeof location.pincode === "string") patch["details.location.pincode"] = location.pincode.trim();
+    if (typeof location.country === "string") patch["details.location.country"] = location.country.trim() || "India";
   }
 
   await stores.updateOne({ id: input.storeId }, { $set: patch });

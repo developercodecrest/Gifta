@@ -1,0 +1,648 @@
+{
+  "generatedAt": "2026-04-26",
+  "status": "draft-only-not-inserted",
+  "store": {
+    "id": "store-85f63f767e",
+    "name": "PRINT MASTER",
+    "slug": "print-master"
+  },
+  "notes": [
+    "Prepared from the live Gifta schema and the existing MongoDB product shape.",
+    "No database writes have been performed.",
+    "The current DB is missing the global category settings document required by admin item creation and category-driven customization.",
+    "Demo items are marked via tags because the current product schema does not define a dedicated demoProduct boolean."
+  ],
+  "requiredGlobalCategorySettings": {
+    "categories": [
+      {
+        "name": "Customised Personal Gift",
+        "subcategories": [
+          "Photo Frames",
+          "Mugs",
+          "Name Plates",
+          "Keepsakes"
+        ]
+      },
+      {
+        "name": "Home Decor",
+        "subcategories": [
+          "Candles",
+          "Wall Decor",
+          "Table Accents"
+        ]
+      },
+      {
+        "name": "Wedding Gifts",
+        "subcategories": [
+          "Keepsakes",
+          "Decor",
+          "Luxury Sets"
+        ]
+      },
+      {
+        "name": "Corporate Gifting",
+        "subcategories": [
+          "Desk Accessories",
+          "Premium Sets",
+          "Welcome Kits"
+        ]
+      },
+      {
+        "name": "Festive Hampers",
+        "subcategories": [
+          "Tea And Snacks",
+          "Sweets",
+          "Celebration Boxes"
+        ]
+      },
+      {
+        "name": "Photo Gifts",
+        "subcategories": [
+          "Albums",
+          "Frames",
+          "Desktop Gifts"
+        ]
+      }
+    ],
+    "customizableCategories": [
+      "Customised Personal Gift"
+    ],
+    "reason": "Two draft products below are intended to open the customization UI in the product page. That behavior is category-driven in Gifta."
+  },
+  "products": [
+    {
+      "previewSlug": "demo-personalized-starry-name-frame",
+      "storeId": "store-85f63f767e",
+      "name": "Starry Name Frame",
+      "shortDescription": "A soft-glow personalized frame with layered acrylic lettering and a premium matte finish.",
+      "category": "Customised Personal Gift",
+      "subcategory": "Photo Frames",
+      "price": 1199,
+      "originalPrice": 1499,
+      "deliveryEtaHours": 48,
+      "description": "<p>Designed for milestone gifting, the Starry Name Frame pairs a clean celestial backdrop with raised custom lettering for a gift that feels personal without looking overdone.</p><p>The frame works beautifully for birthdays, room reveals, desk styling, and memory corners. It is lightweight, polished, and easy to place on a side table, shelf, or work desk.</p><ul><li>Personalized name styling with layered detail</li><li>Gloss-protected photo window with neat edge finishing</li><li>Ready-to-gift presentation for special occasions</li></ul>",
+      "disclaimerHtml": "<p>This is a demo catalog product prepared for testing. Personalization preview, color tone, and final layout can vary slightly after production approval.</p>",
+      "howToPersonaliseHtml": "<p>Upload one or more reference images, add the preferred spelling of the name, and include any theme notes in the customization description during checkout.</p>",
+      "brandDetailsHtml": "<p>Prepared for the PRINT MASTER demo catalog. Built to mirror the existing personalized-gift product structure already used in the Gifta database.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1516542076529-1ea3854896f2?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Personalized framed gift on styled shelf"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1516542076529-1ea3854896f2?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Close-up gift frame details"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "customized",
+        "name-frame"
+      ],
+      "featured": true,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 8,
+      "weight": 680,
+      "weightUnit": "g",
+      "length": 28,
+      "width": 4,
+      "height": 23,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-photo-memory-mug-set",
+      "storeId": "store-85f63f767e",
+      "name": "Photo Memory Mug Set",
+      "shortDescription": "A pair of glossy personalized mugs designed for photo collages, names, and celebratory lines.",
+      "category": "Customised Personal Gift",
+      "subcategory": "Mugs",
+      "price": 899,
+      "originalPrice": 1099,
+      "deliveryEtaHours": 36,
+      "description": "<p>The Photo Memory Mug Set turns everyday coffee moments into something more meaningful with wraparound photo printing and neat personalized text placement.</p><p>Built for couples, siblings, or friendship gifting, the set includes two coordinated ceramic mugs that feel substantial in hand and photograph beautifully for social gifting campaigns.</p><ul><li>Two matching ceramic mugs</li><li>Suitable for photo-based personalization</li><li>Clean premium print finish for gifting</li></ul>",
+      "disclaimerHtml": "<p>This is a demo catalog product. Final personalization crop and text positioning can vary slightly depending on the uploaded artwork.</p>",
+      "howToPersonaliseHtml": "<p>Upload up to 15 images, add names or a short quote, and mention whether you want a romantic, playful, or minimalist layout in the description field.</p>",
+      "brandDetailsHtml": "<p>Prepared for Gifta demo data and aligned to the current PRINT MASTER customization category strategy.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Ceramic mugs styled on tabletop"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Giftable coffee mug lifestyle image"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "customized",
+        "mug-gift"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 10,
+      "weight": 920,
+      "weightUnit": "g",
+      "length": 22,
+      "width": 11,
+      "height": 10,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-botanical-scented-candle-trio",
+      "storeId": "store-85f63f767e",
+      "name": "Botanical Scented Candle Trio",
+      "shortDescription": "Three hand-poured candles with layered scents and a warm gift-ready botanical presentation.",
+      "category": "Home Decor",
+      "subcategory": "Candles",
+      "price": 1299,
+      "originalPrice": 1599,
+      "deliveryEtaHours": 24,
+      "description": "<p>The Botanical Scented Candle Trio adds warmth to bedrooms, reading corners, and festive table styling with a coordinated fragrance blend designed to feel calm and inviting.</p><p>Each candle is packed in a rigid gift box, making it useful for birthdays, return favors, and elegant home gifting moments.</p><ul><li>Three coordinated fragrance notes</li><li>Gift-ready rigid box packaging</li><li>Balanced for decor and everyday use</li></ul>",
+      "disclaimerHtml": "<p>This demo item uses representative imagery and product copy for catalog testing. Burn time and fragrance spread may vary by environment.</p>",
+      "brandDetailsHtml": "<p>Drafted as a demo lifestyle product for Gifta’s expanded non-personalized assortment.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1603006905003-be475563bc59?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1602872029708-84d970d3388f?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1603006905003-be475563bc59?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Gift candle trio in warm decor setting"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1602872029708-84d970d3388f?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Close-up scented candles arranged on tray"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "candles",
+        "decor"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 12,
+      "weight": 760,
+      "weightUnit": "g",
+      "length": 24,
+      "width": 9,
+      "height": 8,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-heirloom-wedding-keepsake-box",
+      "storeId": "store-85f63f767e",
+      "name": "Heirloom Wedding Keepsake Box",
+      "shortDescription": "An elegant memory box for wedding notes, vows, photos, and treasured keepsakes.",
+      "category": "Wedding Gifts",
+      "subcategory": "Keepsakes",
+      "price": 1899,
+      "originalPrice": 2299,
+      "deliveryEtaHours": 48,
+      "description": "<p>The Heirloom Wedding Keepsake Box is designed for couples who want one thoughtful place to store handwritten notes, polaroids, ceremony details, and small mementos from their day.</p><p>Its neutral finish and structured interior make it suitable for premium gifting, bridal showers, and anniversary memory curation.</p><ul><li>Textured exterior with premium clasp styling</li><li>Spacious interior for letters and photographs</li><li>Ideal for wedding and anniversary gifting</li></ul>",
+      "disclaimerHtml": "<p>This demo item is intended for catalog presentation only. Inner organization accessories shown in imagery are illustrative.</p>",
+      "brandDetailsHtml": "<p>Built as a premium demo listing for the PRINT MASTER store expansion.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Elegant keepsake box styled for gifting"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Wedding memory gift box detail"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "wedding",
+        "keepsake"
+      ],
+      "featured": true,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 6,
+      "weight": 1250,
+      "weightUnit": "g",
+      "length": 32,
+      "width": 22,
+      "height": 12,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-executive-leather-desk-set",
+      "storeId": "store-85f63f767e",
+      "name": "Executive Leather Desk Set",
+      "shortDescription": "A polished corporate desk gift with notebook, sleeve, pen stand, and business card tray.",
+      "category": "Corporate Gifting",
+      "subcategory": "Desk Accessories",
+      "price": 2399,
+      "originalPrice": 2899,
+      "deliveryEtaHours": 30,
+      "description": "<p>The Executive Leather Desk Set brings order and presentation together in a gift that works well for founders, managers, clients, and onboarding moments.</p><p>Its curated mix of functional pieces makes it feel complete from the first unboxing, while the neutral tones keep it suitable for a wide range of workspaces.</p><ul><li>Curated desk essentials in one set</li><li>Presentation-friendly packaging</li><li>Suitable for corporate appreciation gifting</li></ul>",
+      "disclaimerHtml": "<p>This is a demo corporate product listing. Material texture and grain pattern may vary slightly between production batches.</p>",
+      "brandDetailsHtml": "<p>Prepared as a realistic demo corporate gifting SKU for catalog expansion and testing.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Corporate desk gift arrangement"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Work desk accessories with premium styling"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "corporate",
+        "desk-set"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 15,
+      "weight": 1480,
+      "weightUnit": "g",
+      "length": 34,
+      "width": 24,
+      "height": 9,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-festive-tea-and-treats-hamper",
+      "storeId": "store-85f63f767e",
+      "name": "Festive Tea And Treats Hamper",
+      "shortDescription": "A warm festive box with tea blends, cookies, nuts, and an elegant celebration sleeve.",
+      "category": "Festive Hampers",
+      "subcategory": "Tea And Snacks",
+      "price": 1599,
+      "originalPrice": 1999,
+      "deliveryEtaHours": 24,
+      "description": "<p>The Festive Tea And Treats Hamper is balanced for family gifting, office sharing, and seasonal doorstep surprises. It combines indulgent snacking with a gift presentation that still feels refined.</p><p>Its compact shape also makes it useful for bulk festive orders where presentation quality matters but packing efficiency is still important.</p><ul><li>Tea, cookies, and snack curation</li><li>Festive-ready rigid box presentation</li><li>Useful for individual and bulk gifting</li></ul>",
+      "disclaimerHtml": "<p>This demo listing uses representative product imagery. Snack assortments can vary based on seasonal sourcing.</p>",
+      "brandDetailsHtml": "<p>Demo hamper listing prepared for realistic category breadth in the Gifta database.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1547592180-85f173990554?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Festive snack hamper arranged for gifting"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1547592180-85f173990554?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Tea and treats gift hamper top view"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "hamper",
+        "festive"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 20,
+      "weight": 1320,
+      "weightUnit": "g",
+      "length": 29,
+      "width": 21,
+      "height": 10,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-signature-photo-led-frame",
+      "storeId": "store-85f63f767e",
+      "name": "Signature Photo LED Frame",
+      "shortDescription": "A glowing photo frame gift offered in two display sizes for desks and bedside styling.",
+      "category": "Photo Gifts",
+      "subcategory": "Frames",
+      "price": 1399,
+      "originalPrice": 1699,
+      "deliveryEtaHours": 48,
+      "description": "<p>The Signature Photo LED Frame blends warm backlighting with a crisp printed image surface, making it an easy choice for birthdays, anniversaries, and room decor gifting.</p><p>It is especially suited to customers who want a modern illuminated frame that still feels compact and easy to place in everyday spaces.</p><ul><li>Soft LED halo effect</li><li>Two size options for placement flexibility</li><li>Strong visual gift appeal for milestone occasions</li></ul>",
+      "disclaimerHtml": "<p>This is a demo product. Lighting intensity and image appearance can vary slightly based on power source and print calibration.</p>",
+      "brandDetailsHtml": "<p>Demo frame listing structured with real Gifta variant fields for testing variant selection logic.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Decorative photo frame in home setting"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Gift frame close-up with premium finish"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "photo-frame",
+        "led-frame"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 8,
+      "weight": 840,
+      "weightUnit": "g",
+      "length": 25,
+      "width": 4,
+      "height": 20,
+      "dimensionUnit": "cm",
+      "attributes": [
+        {
+          "name": "size",
+          "values": [
+            "8 x 10 in",
+            "10 x 12 in"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "var-demo-photo-led-frame-8x10",
+          "options": {
+            "size": "8 x 10 in"
+          },
+          "salePrice": 1399,
+          "regularPrice": 1699,
+          "size": "8 x 10 in",
+          "weight": 840,
+          "weightUnit": "g",
+          "length": 25,
+          "width": 4,
+          "height": 20,
+          "dimensionUnit": "cm",
+          "inStock": true
+        },
+        {
+          "id": "var-demo-photo-led-frame-10x12",
+          "options": {
+            "size": "10 x 12 in"
+          },
+          "salePrice": 1699,
+          "regularPrice": 1999,
+          "size": "10 x 12 in",
+          "weight": 980,
+          "weightUnit": "g",
+          "length": 30,
+          "width": 4,
+          "height": 24,
+          "dimensionUnit": "cm",
+          "inStock": true
+        }
+      ]
+    },
+    {
+      "previewSlug": "demo-premium-gourmet-wedding-tray",
+      "storeId": "store-85f63f767e",
+      "name": "Premium Gourmet Wedding Tray",
+      "shortDescription": "A ceremonial gifting tray with artisanal bites, floral accents, and a polished premium presentation.",
+      "category": "Wedding Gifts",
+      "subcategory": "Luxury Sets",
+      "price": 2899,
+      "originalPrice": 3399,
+      "deliveryEtaHours": 36,
+      "description": "<p>The Premium Gourmet Wedding Tray is made for grand gifting moments where the presentation should feel rich, festive, and immediately ready to display.</p><p>It works well for wedding exchanges, engagement events, and curated family gifting where abundance and finish matter equally.</p><ul><li>Structured premium tray format</li><li>Designed for visible festive presentation</li><li>Suitable for ceremonial gifting moments</li></ul>",
+      "disclaimerHtml": "<p>This is a demo wedding catalog listing. Decorative floral styling shown in imagery is illustrative and may not be included in final fulfillment.</p>",
+      "brandDetailsHtml": "<p>Created as a premium demo item to broaden wedding category testing in Gifta.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Wedding gift arrangement with premium styling"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Luxury wedding decor and gifting aesthetic"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "wedding",
+        "premium"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 5,
+      "weight": 2200,
+      "weightUnit": "g",
+      "length": 38,
+      "width": 28,
+      "height": 11,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    },
+    {
+      "previewSlug": "demo-monogram-workspace-organizer",
+      "storeId": "store-85f63f767e",
+      "name": "Monogram Workspace Organizer",
+      "shortDescription": "A clean desktop organizer for cards, notes, pens, and essentials in two finish options.",
+      "category": "Corporate Gifting",
+      "subcategory": "Desk Accessories",
+      "price": 1499,
+      "originalPrice": 1799,
+      "deliveryEtaHours": 30,
+      "description": "<p>The Monogram Workspace Organizer is structured for professionals who appreciate a neat desk and understated premium materials. It is practical enough for daily use and polished enough for gifting.</p><p>Its dual finish options make it flexible for modern office setups, executive cabins, and onboarding kits.</p><ul><li>Functional organizer layout</li><li>Suitable for office, client, and welcome gifting</li><li>Variant-based finish selection for broader appeal</li></ul>",
+      "disclaimerHtml": "<p>This is a demo organizer listing. Surface grain and tone can vary slightly by finish and production batch.</p>",
+      "brandDetailsHtml": "<p>Prepared as a realistic multi-variant desk accessory product for Gifta testing.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1456324504439-367cee3b3c32?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1456324504439-367cee3b3c32?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Desk organization accessories on workspace"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Modern office desk with organizer accessories"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "workspace",
+        "corporate"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 12,
+      "weight": 960,
+      "weightUnit": "g",
+      "length": 27,
+      "width": 16,
+      "height": 6,
+      "dimensionUnit": "cm",
+      "attributes": [
+        {
+          "name": "finish",
+          "values": [
+            "Walnut",
+            "Midnight Black"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "var-demo-workspace-organizer-walnut",
+          "options": {
+            "finish": "Walnut"
+          },
+          "salePrice": 1499,
+          "regularPrice": 1799,
+          "size": "Standard",
+          "weight": 960,
+          "weightUnit": "g",
+          "length": 27,
+          "width": 16,
+          "height": 6,
+          "dimensionUnit": "cm",
+          "inStock": true
+        },
+        {
+          "id": "var-demo-workspace-organizer-midnight-black",
+          "options": {
+            "finish": "Midnight Black"
+          },
+          "salePrice": 1549,
+          "regularPrice": 1849,
+          "size": "Standard",
+          "weight": 980,
+          "weightUnit": "g",
+          "length": 27,
+          "width": 16,
+          "height": 6,
+          "dimensionUnit": "cm",
+          "inStock": true
+        }
+      ]
+    },
+    {
+      "previewSlug": "demo-festive-gold-accent-serve-box",
+      "storeId": "store-85f63f767e",
+      "name": "Festive Gold Accent Serve Box",
+      "shortDescription": "A display-ready festive box with rich accents for sweets, dry fruits, and celebratory gifting.",
+      "category": "Festive Hampers",
+      "subcategory": "Celebration Boxes",
+      "price": 1749,
+      "originalPrice": 2149,
+      "deliveryEtaHours": 24,
+      "description": "<p>The Festive Gold Accent Serve Box is built for gifting moments that need visual richness right from the first glance. Its structured body and premium color palette help it stand out in festive assortments and family celebrations.</p><p>It is useful for Diwali, Eid, housewarming gifting, and elegant host gestures where presentation carries as much value as the contents.</p><ul><li>Display-friendly rigid structure</li><li>Premium celebratory finish</li><li>Strong festive shelf appeal</li></ul>",
+      "disclaimerHtml": "<p>This is a demo festive listing. Decorative fillers and sweets shown in imagery are representative and may not match final bundled contents.</p>",
+      "brandDetailsHtml": "<p>Prepared as a visually rich demo hamper product for the Gifta catalog.</p>",
+      "images": [
+        "https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1607082350899-7e105aa886ae?q=80&w=1200&auto=format&fit=crop"
+      ],
+      "media": [
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Festive gifting setup with gold accents"
+        },
+        {
+          "type": "image",
+          "url": "https://images.unsplash.com/photo-1607082350899-7e105aa886ae?q=80&w=1200&auto=format&fit=crop",
+          "alt": "Celebration box with luxury festive styling"
+        }
+      ],
+      "tags": [
+        "demo-product",
+        "seed-demo",
+        "print-master",
+        "festive",
+        "serve-box"
+      ],
+      "featured": false,
+      "inStock": true,
+      "minOrderQty": 1,
+      "maxOrderQty": 12,
+      "weight": 1180,
+      "weightUnit": "g",
+      "length": 31,
+      "width": 23,
+      "height": 9,
+      "dimensionUnit": "cm",
+      "attributes": [],
+      "variants": []
+    }
+  ]
+}

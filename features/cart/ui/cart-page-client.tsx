@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Gift, Minus, Plus, ShieldCheck, Sparkles, Store, Trash2, Truck } from "lucide-react";
+import { Gift, Loader2, Minus, Plus, ShieldCheck, Sparkles, Store, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCartStore } from "@/features/cart/store";
@@ -18,16 +18,36 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { status } = useSession();
-  const { items, hydrateFromCookie, removeItem, updateQty, setOffer, clear } = useCartStore();
+  const { items, hydrateFromCookie, removeItem, updateQty, setOffer, setItems, clear } = useCartStore();
   const [dismissedCheckoutReadyNotice, setDismissedCheckoutReadyNotice] = useState(false);
   const [proceedingCheckout, setProceedingCheckout] = useState(false);
+  const [localCartReady, setLocalCartReady] = useState(false);
+  const [removingLineKey, setRemovingLineKey] = useState<string | null>(null);
   const checkoutReadyParam = searchParams.get("checkoutReady");
 
   useEffect(() => {
-    if (status !== "authenticated") {
+    if (status === "loading" || localCartReady) {
+      return;
+    }
+
+    if (status === "authenticated") {
+      setItems(
+        snapshot.lines.map((line) => ({
+          productId: line.product.id,
+          quantity: line.quantity,
+          offerId: line.selectedOffer?.id,
+          variantId: line.selectedVariant?.id,
+          variantOptions: line.selectedVariant?.options,
+          customization: line.customization,
+          customizationSignature: line.customizationSignature,
+        })),
+      );
+    } else {
       hydrateFromCookie();
     }
-  }, [hydrateFromCookie, status]);
+
+    setLocalCartReady(true);
+  }, [hydrateFromCookie, localCartReady, setItems, snapshot.lines, status]);
 
   const keyOf = (productId: string, variantId?: string, customizationSignature?: string) =>
     `${productId}::${variantId ?? "default"}::${customizationSignature ?? "base"}`;
@@ -37,6 +57,12 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   const liveLines = snapshot.lines.map((line) => {
     const lineKey = keyOf(line.product.id, line.selectedVariant?.id, line.customizationSignature);
+    const hasLocalLine = quantityById.has(lineKey);
+
+    if (localCartReady && !hasLocalLine) {
+      return null;
+    }
+
     const liveQty = quantityById.get(lineKey) ?? line.quantity;
     const selectedOffer =
       line.offers.find((offer) => offer.id === offerById.get(lineKey)) ?? line.selectedOffer;
@@ -57,7 +83,21 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
       variantLabel,
       lineSubtotal: unitPrice * liveQty,
     };
-  });
+  }).filter((line): line is NonNullable<typeof line> => Boolean(line));
+
+  useEffect(() => {
+    if (!removingLineKey) {
+      return;
+    }
+
+    const stillPresent = liveLines.some(
+      (line) => keyOf(line.product.id, line.selectedVariant?.id, line.customizationSignature) === removingLineKey,
+    );
+
+    if (!stillPresent) {
+      setRemovingLineKey(null);
+    }
+  }, [liveLines, removingLineKey]);
 
   const grouped = new Map<string, { name: string; items: typeof liveLines }>();
 
@@ -76,8 +116,7 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   const subtotal = liveLines.reduce((total, line) => total + line.lineSubtotal, 0);
   const tax = Math.round(subtotal * 0.05);
-  const platformFee = subtotal > 0 && subtotal < 1000 ? 29 : 0;
-  const total = subtotal + tax + platformFee;
+  const total = subtotal + tax;
 
   const hasItems = liveLines.length > 0;
   const showCheckoutReadyNotice = status === "authenticated" && checkoutReadyParam === "1" && !dismissedCheckoutReadyNotice;
@@ -172,6 +211,8 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
             {liveLines.map((line) => {
               const minQty = line.product.minOrderQty ?? 1;
               const maxQty = line.product.maxOrderQty ?? 10;
+              const lineKey = keyOf(line.product.id, line.selectedVariant?.id, line.customizationSignature);
+              const removing = removingLineKey === lineKey;
 
               return (
               <Card key={`${line.product.id}-${line.selectedVariant?.id ?? "default"}-${line.customizationSignature ?? "base"}`} className="glass-panel rounded-4xl border-white/60">
@@ -294,13 +335,18 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                     <p className="text-xs text-[#74655c] sm:text-right">Min {minQty} • Max {maxQty}</p>
                     <p className="text-sm font-semibold text-primary sm:text-right">{formatCurrency(line.lineSubtotal)}</p>
                     <Button
-                      onClick={() => removeItem(line.product.id, line.selectedVariant?.id, line.customizationSignature)}
+                      onClick={() => {
+                        setRemovingLineKey(lineKey);
+                        removeItem(line.product.id, line.selectedVariant?.id, line.customizationSignature);
+                      }}
                       variant="outline"
                       size="sm"
                       className="gap-1 sm:ml-auto"
                       type="button"
+                      disabled={removing}
                     >
-                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                      {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      {removing ? "Removing..." : "Remove"}
                     </Button>
                   </div>
                 </CardContent>
@@ -359,10 +405,6 @@ export function CartPageClient({ snapshot }: { snapshot: CartSnapshot }) {
               <div className="flex justify-between">
                 <dt className="text-[#5f5047]">Tax (5%)</dt>
                 <dd>{formatCurrency(tax)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-[#5f5047]">Platform fee</dt>
-                <dd>{platformFee === 0 ? "Free" : formatCurrency(platformFee)}</dd>
               </div>
               <div className="flex justify-between border-t border-border pt-3 text-base font-semibold">
                 <dt>Total</dt>

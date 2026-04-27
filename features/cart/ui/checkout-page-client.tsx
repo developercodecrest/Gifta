@@ -8,7 +8,7 @@ import { useSession } from "next-auth/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { CreditCard, MapPin, ShieldCheck, Sparkles } from "lucide-react";
+import { CreditCard, Loader2, MapPin, ShieldCheck, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,7 +43,7 @@ const checkoutSchema = z.object({
   line1: z.string().min(4, "Enter street address"),
   city: z.string().min(2, "Enter city"),
   state: z.string().min(2, "Enter state"),
-  pinCode: z.string().min(4, "Enter postal code"),
+  pinCode: z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit PIN"),
 });
 
 type CheckoutForm = z.infer<typeof checkoutSchema>;
@@ -185,6 +185,9 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
   const [deliveryFee, setDeliveryFee] = useState(snapshot.shipping);
   const [deliveryRemark, setDeliveryRemark] = useState<string | null>(null);
   const [deliveryEtaMessage, setDeliveryEtaMessage] = useState<string | null>(null);
+  const [isShippingEstimateLoading, setIsShippingEstimateLoading] = useState(false);
+  const [isCheckingPinServiceability, setIsCheckingPinServiceability] = useState(false);
+  const [pinServiceabilityMessage, setPinServiceabilityMessage] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<ProfileAddress[]>([]);
   const [selectedAddress, setSelectedAddress] = useState("");
   const [newAddressOpen, setNewAddressOpen] = useState(false);
@@ -226,9 +229,9 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   const pinCode = watch("pinCode");
   const uiTotal = useMemo(() => {
-    const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + snapshot.platformFee + deliveryFee;
+    const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + deliveryFee;
     return Math.max(0, totalBeforeDiscount - couponDiscount);
-  }, [couponDiscount, deliveryFee, snapshot.platformFee, snapshot.subtotal, snapshot.tax]);
+  }, [couponDiscount, deliveryFee, snapshot.subtotal, snapshot.tax]);
 
   useEffect(() => {
     void loadRazorpaySdk();
@@ -273,16 +276,51 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
 
   useEffect(() => {
     const currentPin = pinCode?.trim();
-    if (!currentPin || currentPin.length < 4) {
+    if (!currentPin || currentPin.length < 6) {
+      setIsShippingEstimateLoading(false);
+      setIsCheckingPinServiceability(false);
+      setPinServiceabilityMessage(null);
       setDeliveryFee(snapshot.shipping);
       setDeliveryRemark(null);
       setDeliveryEtaMessage(null);
       return;
     }
 
+    setIsShippingEstimateLoading(true);
+    setIsCheckingPinServiceability(true);
+
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/shipping/delhivery/estimate?pinCode=${encodeURIComponent(currentPin)}&subtotal=${snapshot.subtotal}`, {
+      const serviceabilityRes = await fetch(`/api/shipping/delhivery/serviceability?pinCode=${encodeURIComponent(currentPin)}`, {
+        signal: controller.signal,
+      }).catch(() => null);
+
+      if (serviceabilityRes) {
+        const serviceabilityPayload = (await serviceabilityRes.json().catch(() => null)) as ServiceabilityResponse | null;
+
+        if (serviceabilityRes.ok && serviceabilityPayload?.success) {
+          const { serviceable, remark } = serviceabilityPayload.data;
+          if (!serviceable) {
+            setPinServiceabilityMessage("Delivery is currently unavailable for this pincode.");
+            setDeliveryFee(0);
+            setDeliveryRemark(remark ?? "Delivery unavailable for this pincode.");
+            setDeliveryEtaMessage(null);
+            setIsCheckingPinServiceability(false);
+            setIsShippingEstimateLoading(false);
+            return;
+          }
+
+          setPinServiceabilityMessage("Pincode is serviceable.");
+        } else {
+          setPinServiceabilityMessage(null);
+        }
+      } else {
+        setPinServiceabilityMessage(null);
+      }
+
+      setIsCheckingPinServiceability(false);
+
+      const res = await fetch(`/api/shipping/delhivery/estimate?pinCode=${encodeURIComponent(currentPin)}&paymentMethod=${encodeURIComponent(paymentMethod)}`, {
         signal: controller.signal,
       }).catch(() => null);
 
@@ -290,6 +328,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
         setDeliveryFee(snapshot.shipping);
         setDeliveryRemark("Delivery estimate unavailable. Default fee applied.");
         setDeliveryEtaMessage(null);
+        setIsShippingEstimateLoading(false);
         return;
       }
 
@@ -298,26 +337,32 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
         setDeliveryFee(snapshot.shipping);
         setDeliveryRemark(payload && !payload.success ? payload.error.message : "Delivery estimate unavailable.");
         setDeliveryEtaMessage(null);
+        setIsShippingEstimateLoading(false);
         return;
       }
 
       if (!payload.data.serviceable) {
+        setPinServiceabilityMessage("Delivery is currently unavailable for this pincode.");
         setDeliveryFee(0);
         setDeliveryRemark(payload.data.remark ?? "Delivery unavailable for this pincode.");
         setDeliveryEtaMessage(null);
+        setIsShippingEstimateLoading(false);
         return;
       }
 
       setDeliveryFee(payload.data.estimatedFee);
       setDeliveryRemark(normalizeDeliveryRemark(payload.data.remark));
       setDeliveryEtaMessage(formatExpectedTatSummary(payload.data.expectedTat));
+      setIsShippingEstimateLoading(false);
     }, 350);
 
     return () => {
       controller.abort();
       clearTimeout(timer);
+      setIsShippingEstimateLoading(false);
+      setIsCheckingPinServiceability(false);
     };
-  }, [pinCode, snapshot.shipping, snapshot.subtotal]);
+  }, [paymentMethod, pinCode, snapshot.shipping]);
 
   const openNewAddressModal = () => {
     const values = getValues();
@@ -700,6 +745,12 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                   </Field>
                 </div>
 
+                {pinCode?.trim().length >= 6 ? (
+                  <p className="text-xs text-[#74655c]">
+                    {isCheckingPinServiceability ? "Checking pincode serviceability..." : pinServiceabilityMessage}
+                  </p>
+                ) : null}
+
                 <div className="space-y-2">
                   <Label className="mb-0 block text-xs uppercase tracking-wide text-[#74655c]">Payment method</Label>
                   <div role="radiogroup" aria-label="Payment method" className="grid gap-2 sm:grid-cols-2">
@@ -820,15 +871,17 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-[#5f5047]">Shipping</dt>
-                  <dd className="font-semibold">{deliveryFee === 0 ? "Free" : formatCurrency(deliveryFee)}</dd>
+                  <dd className="font-semibold">
+                    {isShippingEstimateLoading ? (
+                      <span className="inline-flex items-center gap-1.5 text-[#74655c]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculating...
+                      </span>
+                    ) : deliveryFee === 0 ? "Free" : formatCurrency(deliveryFee)}
+                  </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-[#5f5047]">Tax</dt>
                   <dd className="font-semibold">{formatCurrency(snapshot.tax)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[#5f5047]">Platform fee</dt>
-                  <dd className="font-semibold">{snapshot.platformFee === 0 ? "Free" : formatCurrency(snapshot.platformFee)}</dd>
                 </div>
                 {couponDiscount > 0 ? (
                   <div className="flex justify-between">
@@ -979,17 +1032,27 @@ function normalizeDeliveryRemark(remark?: string | null) {
     return null;
   }
 
-  if (remark === "AUTH_BYPASSED") {
-    return "Delhivery validation is currently falling back because the configured token is not being accepted upstream.";
-  }
+  const visibleParts = remark
+    .split(/(?<=[.!?])\s+|\s+(?=Delhivery quote unavailable|AUTH_BYPASSED|Origin pincode missing)/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !/AUTH_BYPASSED/i.test(part))
+    .filter((part) => !/Delhivery quote unavailable/i.test(part))
+    .filter((part) => !/Origin pincode missing/i.test(part))
+    .filter((part) => !/Unable to parse Delhivery invoice quote/i.test(part))
+    .filter((part) => !/fallback/i.test(part));
 
-  return remark;
+  return visibleParts.length ? visibleParts.join(" ") : null;
 }
 
 function formatExpectedTatSummary(
   summary: DeliveryExpectedTatSummary | undefined,
 ) {
   if (!summary) {
+    return null;
+  }
+
+  if (summary.source === "fallback" && !summary.earliestDeliveryDate && !summary.latestDeliveryDate && typeof summary.minimumDays !== "number" && typeof summary.maximumDays !== "number") {
     return null;
   }
 

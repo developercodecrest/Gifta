@@ -1,7 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
 import { deleteStoreScoped, updateStoreScoped } from "@/lib/server/ecommerce-service";
-import { StoreCategoryOption } from "@/types/api";
+import { StoreCategoryOption, VendorSummaryDto } from "@/types/api";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,14 @@ export async function PATCH(
       category?: string;
       subcategory?: string;
       categories?: StoreCategoryOption[];
+      location?: VendorSummaryDto["location"];
     };
+
+    const hasLocationUpdate = Boolean(
+      body.location
+      && typeof body.location === "object"
+      && Object.values(body.location).some((value) => typeof value === "string"),
+    );
 
     if (
       typeof body.name !== "string" &&
@@ -33,7 +40,8 @@ export async function PATCH(
       typeof body.active !== "boolean" &&
       typeof body.category !== "string" &&
       typeof body.subcategory !== "string" &&
-      !Array.isArray(body.categories)
+      !Array.isArray(body.categories) &&
+      !hasLocationUpdate
     ) {
       return badRequest("Provide at least one valid field to update");
     }

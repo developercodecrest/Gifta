@@ -5,7 +5,7 @@ import { CART_COOKIE_NAME, parseCartCookie } from "@/lib/cart-cookie";
 import { getMongoDb } from "@/lib/mongodb";
 import { resolveShippingPackageSnapshot } from "@/lib/product-shipping";
 import { buildCartSnapshot } from "@/lib/server/cart-service";
-import { checkDelhiveryServiceability, createShipmentForOrderRef, estimateDelhiveryDeliveryFee, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { checkDelhiveryServiceability, createShipmentForOrderRef, estimateDelhiveryCheckoutDeliveryFee, getDelhiveryConfig, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 import { incrementCouponUsage, validateCouponCode } from "@/lib/server/coupon-service";
 import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
@@ -130,10 +130,14 @@ export async function POST(request: Request) {
   const couponValidation = await validateCouponCode(payload.promoCode, snapshot.subtotal);
   const discount = couponValidation.valid ? couponValidation.discount : 0;
   const deliveryEstimate = payload.customer?.pinCode
-    ? await estimateDelhiveryDeliveryFee(payload.customer.pinCode, snapshot.subtotal)
+    ? await estimateDelhiveryCheckoutDeliveryFee({
+        destinationPin: payload.customer.pinCode,
+        paymentMethod,
+        snapshot,
+      })
     : { estimatedFee: snapshot.shipping, source: "fallback" as const, serviceable: true };
   const shipping = deliveryEstimate.estimatedFee;
-  const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + snapshot.platformFee + shipping;
+  const totalBeforeDiscount = snapshot.subtotal + snapshot.tax + shipping;
   const finalTotal = Math.max(0, totalBeforeDiscount - discount);
 
   const orderRef = createOrderRef();

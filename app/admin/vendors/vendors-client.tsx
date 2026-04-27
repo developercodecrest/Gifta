@@ -211,6 +211,15 @@ function VendorRowActions({ vendor }: { vendor: VendorSummaryDto }) {
   const [categories, setCategories] = useState(vendor.categories ?? []);
   const [category, setCategory] = useState(vendor.primaryCategory ?? "");
   const [subcategory, setSubcategory] = useState(vendor.primarySubcategory ?? "");
+  const [location, setLocation] = useState({
+    addressLine1: vendor.location?.addressLine1 ?? "",
+    addressLine2: vendor.location?.addressLine2 ?? "",
+    landmark: vendor.location?.landmark ?? "",
+    city: vendor.location?.city ?? "",
+    state: vendor.location?.state ?? "",
+    pincode: vendor.location?.pincode ?? "",
+    country: vendor.location?.country ?? "India",
+  });
   const [newCategory, setNewCategory] = useState("");
   const [newSubByCategory, setNewSubByCategory] = useState<Record<string, string>>({});
 
@@ -223,6 +232,11 @@ function VendorRowActions({ vendor }: { vendor: VendorSummaryDto }) {
   );
 
   const save = async () => {
+    if (!location.addressLine1.trim() || !location.city.trim() || !location.state.trim() || !/^\d{6}$/.test(location.pincode.trim())) {
+      setError("Address 1, city, state, and a valid 6-digit pincode are required.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -237,6 +251,7 @@ function VendorRowActions({ vendor }: { vendor: VendorSummaryDto }) {
           category,
           subcategory,
           categories,
+          location,
         }),
       });
 
@@ -309,6 +324,9 @@ function VendorRowActions({ vendor }: { vendor: VendorSummaryDto }) {
             <p><span className="font-medium text-foreground">Status:</span> {vendor.active ? "Active" : "Inactive"}</p>
             <p><span className="font-medium text-foreground">Category:</span> {vendor.primaryCategory ?? "-"}</p>
             <p><span className="font-medium text-foreground">Subcategory:</span> {vendor.primarySubcategory ?? "-"}</p>
+            <p><span className="font-medium text-foreground">Address:</span> {vendor.location?.addressLine1 ?? "-"}</p>
+            <p><span className="font-medium text-foreground">City / State:</span> {[vendor.location?.city, vendor.location?.state].filter(Boolean).join(", ") || "-"}</p>
+            <p><span className="font-medium text-foreground">Pincode:</span> {vendor.location?.pincode ?? "-"}</p>
           </div>
           <div className="space-y-2">
             <Label>Category Setup</Label>
@@ -385,6 +403,41 @@ function VendorRowActions({ vendor }: { vendor: VendorSummaryDto }) {
                   <option key={entry} value={entry}>{entry}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Address 1</Label>
+              <Input value={location.addressLine1} onChange={(event) => setLocation((prev) => ({ ...prev, addressLine1: event.target.value }))} />
+            </div>
+
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Address 2</Label>
+              <Input value={location.addressLine2} onChange={(event) => setLocation((prev) => ({ ...prev, addressLine2: event.target.value }))} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Landmark</Label>
+              <Input value={location.landmark} onChange={(event) => setLocation((prev) => ({ ...prev, landmark: event.target.value }))} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Country</Label>
+              <Input value={location.country} onChange={(event) => setLocation((prev) => ({ ...prev, country: event.target.value }))} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>City</Label>
+              <Input value={location.city} onChange={(event) => setLocation((prev) => ({ ...prev, city: event.target.value }))} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>State</Label>
+              <Input value={location.state} onChange={(event) => setLocation((prev) => ({ ...prev, state: event.target.value }))} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Pincode</Label>
+              <Input value={location.pincode} onChange={(event) => setLocation((prev) => ({ ...prev, pincode: event.target.value }))} inputMode="numeric" />
             </div>
           </div>
 

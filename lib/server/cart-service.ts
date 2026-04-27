@@ -184,8 +184,8 @@ export async function buildCartSnapshot(items: CartItem[]): Promise<CartSnapshot
   const subtotal = lines.reduce((total, line) => total + line.lineSubtotal, 0);
   const shipping = vendors.reduce((total, vendor) => total + vendor.shipping, 0);
   const tax = Math.round(subtotal * 0.05);
-  const platformFee = subtotal > 0 && subtotal < 1000 ? 29 : 0;
-  const total = subtotal + shipping + tax + platformFee;
+  const platformFee = 0;
+  const total = subtotal + shipping + tax;
   const itemCount = lines.reduce((total, line) => total + line.quantity, 0);
 
   return {

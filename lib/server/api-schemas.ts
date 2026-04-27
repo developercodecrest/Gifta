@@ -40,6 +40,8 @@ export const suggestionQuerySchema = z.object({
 });
 
 const optionalString = z.string().trim().optional().default("");
+const requiredString = z.string().trim().min(1);
+const requiredPinCode = z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit pincode");
 
 const timeSlotSchema = z.object({
   day: z.string().trim().min(1),
@@ -87,12 +89,12 @@ export const createStoreSchema = z.object({
       shopActLicense: optionalString,
     }),
     location: z.object({
-      addressLine1: optionalString,
+      addressLine1: requiredString,
       addressLine2: optionalString,
       landmark: optionalString,
-      city: optionalString,
-      state: optionalString,
-      pincode: optionalString,
+      city: requiredString,
+      state: requiredString,
+      pincode: requiredPinCode,
       country: optionalString.default("India"),
       geo: z.object({
         latitude: z.number().nullable().optional(),
