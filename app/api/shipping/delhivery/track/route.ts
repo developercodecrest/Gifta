@@ -1,11 +1,14 @@
 import { badRequest, notFound, ok, serverError, unauthorized } from "@/lib/api-response";
-import { trackDelhiveryShipment, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
+import { DelhiveryApiError, isDelhiveryConfigured, recordDelhiveryOrderEvent, trackDelhiveryShipment } from "@/lib/server/delhivery-service";
 import { getUserOrderDetails } from "@/lib/server/ecommerce-service";
 import { resolveRequestIdentity } from "@/lib/server/request-auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  let order: Awaited<ReturnType<typeof getUserOrderDetails>> | null = null;
+  let trackingRequest: { orderRef?: string; awb?: string } = {};
+
   try {
     if (!isDelhiveryConfigured()) {
       return serverError("Delhivery is not configured.", { code: "DELHIVERY_CONFIG_MISSING" });
@@ -22,14 +25,33 @@ export async function GET(request: Request) {
       return badRequest("orderRef is required.");
     }
 
-    const order = await getUserOrderDetails(orderRef, identity.userId, identity.email ?? undefined);
+    order = await getUserOrderDetails(orderRef, identity.userId, identity.email ?? undefined);
     if (!order) {
       return notFound("Order not found");
     }
 
+    trackingRequest = {
+      orderRef: order.orderRef,
+      awb: order.shippingAwb,
+    };
+
     const tracking = await trackDelhiveryShipment({
       awb: order.shippingAwb,
       orderRef: order.orderRef,
+    });
+
+    await recordDelhiveryOrderEvent({
+      waybill: tracking.awb ?? order.shippingAwb,
+      orderRef: order.orderRef,
+      operation: "tracking-sync",
+      status: tracking.currentStatus ?? "tracking-synced",
+      description: tracking.currentStatus ? `Tracking synced: ${tracking.currentStatus}` : "Tracking synced with Delhivery",
+      request: trackingRequest,
+      response: tracking.raw,
+      raw: tracking.raw,
+      set: {
+        ...(tracking.currentStatus ? { shippingProviderStatus: tracking.currentStatus } : {}),
+      },
     });
 
     return ok({
@@ -43,6 +65,20 @@ export async function GET(request: Request) {
       lastSyncedAt: new Date().toISOString(),
     });
   } catch (error) {
+    if (order?.orderRef || order?.shippingAwb) {
+      await recordDelhiveryOrderEvent({
+        waybill: order.shippingAwb,
+        orderRef: order.orderRef,
+        operation: "tracking-sync",
+        status: "tracking-sync-failed",
+        description: error instanceof Error ? error.message : "Unable to fetch Delhivery tracking.",
+        request: trackingRequest,
+        response: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        raw: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        ...(error instanceof DelhiveryApiError ? { statusCode: error.status, errorCode: error.code } : {}),
+      }).catch(() => undefined);
+    }
+
     return serverError("Unable to fetch Delhivery tracking.", error);
   }
 }

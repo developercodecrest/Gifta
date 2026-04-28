@@ -1,6 +1,6 @@
-import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
+import { badRequest, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { DelhiveryApiError, generateDelhiveryShippingLabel, isDelhiveryConfigured, recordDelhiveryOrderEvent } from "@/lib/server/delhivery-service";
+import { DelhiveryApiError, downloadDelhiveryShippingLabelPdf, isDelhiveryConfigured, recordDelhiveryOrderEvent } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
 export const runtime = "nodejs";
@@ -10,7 +10,6 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   let target: Awaited<ReturnType<typeof getAdminOrdersScoped>>[number] | undefined;
-  let pdf = true;
   let pdfSize: "A4" | "4R" = "4R";
 
   try {
@@ -36,40 +35,53 @@ export async function GET(
     }
 
     const { searchParams } = new URL(request.url);
-    pdf = (searchParams.get("pdf") ?? "true").trim().toLowerCase() !== "false";
     pdfSize = ((searchParams.get("pdfSize") ?? "4R").trim().toUpperCase() === "A4" ? "A4" : "4R") as "A4" | "4R";
 
-    const label = await generateDelhiveryShippingLabel({
+    const download = await downloadDelhiveryShippingLabelPdf({
       waybill: target.shippingAwb,
-      pdf,
       pdfSize,
     });
 
     await recordDelhiveryOrderEvent({
       waybill: target.shippingAwb,
-      operation: "label-generate",
-      status: "label-generated",
-      description: `Shipping label generated in ${pdfSize} format`,
+      operation: "label-download",
+      status: "label-downloaded",
+      description: `Shipping label PDF downloaded in ${pdfSize} format`,
       request: {
         waybill: target.shippingAwb,
-        pdf,
+        pdf: true,
         pdfSize,
       },
-      response: label.raw,
-      raw: label.raw,
+      response: {
+        labelUrl: download.labelUrl,
+        contentType: download.contentType,
+        contentDisposition: download.contentDisposition,
+        byteLength: download.bytes.byteLength,
+      },
+      raw: download.labelResponse,
     });
 
-    return ok(label);
+    const fileName = `delhivery-label-${download.waybill}-${download.pdfSize.toLowerCase()}.pdf`;
+
+    return new Response(download.bytes, {
+      status: 200,
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Length": String(download.bytes.byteLength),
+        "Content-Type": download.contentType,
+      },
+    });
   } catch (error) {
     if (target?.shippingAwb) {
       await recordDelhiveryOrderEvent({
         waybill: target.shippingAwb,
-        operation: "label-generate",
-        status: "label-generate-failed",
-        description: error instanceof Error ? error.message : "Unable to generate Delhivery shipping label.",
+        operation: "label-download",
+        status: "label-download-failed",
+        description: error instanceof Error ? error.message : "Unable to download Delhivery shipping label PDF.",
         request: {
           waybill: target.shippingAwb,
-          pdf,
+          pdf: true,
           pdfSize,
         },
         response: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
@@ -79,13 +91,13 @@ export async function GET(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to generate Delhivery shipping label.", {
+      return serverError("Unable to download Delhivery shipping label PDF.", {
         code: error.code,
         status: error.status,
         upstream: error.body,
       });
     }
 
-    return serverError("Unable to generate Delhivery shipping label.", error);
+    return serverError("Unable to download Delhivery shipping label PDF.", error);
   }
 }

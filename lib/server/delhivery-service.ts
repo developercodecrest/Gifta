@@ -3,7 +3,15 @@ import { syncOrderLifecycleEvent } from "@/lib/server/order-notification-service
 import { getMongoDb } from "@/lib/mongodb";
 import { resolveShippingPackageSnapshot } from "@/lib/product-shipping";
 import { CartSnapshot } from "@/lib/server/cart-service";
-import { AdminOrderDto, PaymentMethod, ShippingAddressSnapshot, ShippingPackageSnapshot, ShippingProvider } from "@/types/api";
+import {
+  AdminOrderDto,
+  DelhiveryOrderLifecycleOperation,
+  PaymentMethod,
+  ShippingAddressSnapshot,
+  ShippingEvent,
+  ShippingPackageSnapshot,
+  ShippingProvider,
+} from "@/types/api";
 
 type DelhiveryMode = "test" | "live";
 
@@ -200,6 +208,26 @@ type DelhiveryWaybillPoolDoc = {
   consumedBy?: string;
 };
 
+type DelhiveryOrderEventTarget = {
+  orderIds?: string[];
+  orderRef?: string;
+  waybill?: string;
+};
+
+type RecordDelhiveryOrderEventInput = DelhiveryOrderEventTarget & {
+  status: string;
+  operation: DelhiveryOrderLifecycleOperation;
+  description?: string;
+  request?: unknown;
+  response?: unknown;
+  raw?: unknown;
+  statusCode?: number;
+  errorCode?: string;
+  timestamp?: string;
+  set?: Partial<AdminOrderDto>;
+  unset?: Array<keyof AdminOrderDto>;
+};
+
 export function isDelhiveryConfigured() {
   try {
     getDelhiveryConfig();
@@ -207,6 +235,51 @@ export function isDelhiveryConfigured() {
   } catch {
     return false;
   }
+}
+
+export async function recordDelhiveryOrderEvent(input: RecordDelhiveryOrderEventInput) {
+  const db = await getMongoDb();
+  const orders = db.collection<AdminOrderDto>("orders");
+  const query = buildDelhiveryOrderQuery(input);
+  const timestamp = input.timestamp?.trim() || new Date().toISOString();
+
+  const event: ShippingEvent = {
+    timestamp,
+    status: input.status,
+    provider: "delhivery",
+    operation: input.operation,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.request !== undefined ? { request: input.request } : {}),
+    ...(input.response !== undefined ? { response: input.response } : {}),
+    ...(input.statusCode !== undefined ? { statusCode: input.statusCode } : {}),
+    ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+    ...(input.raw !== undefined
+      ? { raw: input.raw }
+      : input.response !== undefined
+        ? { raw: input.response }
+        : {}),
+  };
+
+  const update: {
+    $set: Partial<AdminOrderDto>;
+    $push: { shippingEvents: ShippingEvent };
+    $unset?: Record<string, "">;
+  } = {
+    $set: {
+      shippingProvider: "delhivery",
+      shippingLastSyncedAt: timestamp,
+      ...(input.set ?? {}),
+    },
+    $push: {
+      shippingEvents: event,
+    },
+  };
+
+  if (input.unset?.length) {
+    update.$unset = Object.fromEntries(input.unset.map((key) => [key, ""])) as Record<string, "">;
+  }
+
+  return orders.updateMany(query, update);
 }
 
 export function getDelhiveryConfig(): DelhiveryConfig {
@@ -966,7 +1039,7 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
     } satisfies ShippingPackageSnapshot;
 
     try {
-      const shipment = await createDelhiveryShipment({
+      const shipmentRequest = {
         orderRef,
         storeId,
         amount,
@@ -978,38 +1051,44 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
         productsDescription: rows.map((row) => row.productId).filter(Boolean).join(", "),
         sellerName: store?.name ?? pickup.receiverName,
         sellerAddress: pickup.line1,
+      } satisfies ShipmentCreateInput;
+
+      const shipment = await createDelhiveryShipment({
+        ...shipmentRequest,
       });
 
-      await orders.updateMany(
-        { id: { $in: rows.map((row) => row.id) } },
-        {
-          $set: {
-            shippingProvider: "delhivery",
-            shippingProviderStatus: shipment.providerStatus,
-            ...(shipment.awb ? { shippingAwb: shipment.awb } : {}),
-            ...(shipment.shipmentId ? { shippingShipmentId: shipment.shipmentId } : {}),
-            ...(shipment.pickupRequestId ? { shippingPickupRequestId: shipment.pickupRequestId } : {}),
-            pickupAddress: pickup,
-            shippingPackage: packageDetails,
-            shippingLastSyncedAt: new Date().toISOString(),
-          },
-          $unset: {
-            shippingError: "",
-          },
-          $push: {
-            shippingEvents: {
-              timestamp: new Date().toISOString(),
-              status: shipment.providerStatus,
-              description: "Shipment created with Delhivery",
-            },
-          },
+      await recordDelhiveryOrderEvent({
+        orderIds: rows.map((row) => row.id),
+        operation: "shipment-create",
+        status: shipment.providerStatus,
+        description: "Shipment created with Delhivery",
+        request: shipmentRequest,
+        response: shipment.raw,
+        raw: shipment.raw,
+        set: {
+          shippingProviderStatus: shipment.providerStatus,
+          ...(shipment.awb ? { shippingAwb: shipment.awb } : {}),
+          ...(shipment.shipmentId ? { shippingShipmentId: shipment.shipmentId } : {}),
+          ...(shipment.pickupRequestId ? { shippingPickupRequestId: shipment.pickupRequestId } : {}),
+          pickupAddress: pickup,
+          shippingPackage: packageDetails,
         },
-      );
+        unset: ["shippingError"],
+      });
 
       createdStores += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to create shipment with Delhivery.";
-      await applyShipmentFailure(rows, message);
+      await applyShipmentFailure(rows, message, {
+        orderRef,
+        storeId,
+        amount,
+        paymentMethod: first.paymentMethod ?? "cod",
+        pickup,
+        pickupLocationName,
+        destination,
+        packageDetails,
+      });
       failedStores += 1;
     }
   }
@@ -1082,51 +1161,69 @@ export async function trackDelhiveryShipment(input: { awb?: string; orderRef?: s
   };
 }
 
-export async function applyDelhiveryWebhookUpdate(payload: Record<string, unknown>) {
-  const db = await getMongoDb();
-  const orders = db.collection<AdminOrderDto>("orders");
+export async function downloadDelhiveryShippingLabelPdf(input: {
+  waybill: string;
+  pdfSize?: "A4" | "4R";
+}) {
+  const label = await generateDelhiveryShippingLabel({
+    waybill: input.waybill,
+    pdf: true,
+    pdfSize: input.pdfSize,
+  });
 
+  if (!label.labelUrl) {
+    throw new Error("Delhivery did not return a PDF URL for this shipping label.");
+  }
+
+  const response = await fetch(label.labelUrl, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to download Delhivery label PDF (${response.status}).`);
+  }
+
+  return {
+    waybill: label.waybill,
+    pdfSize: label.pdfSize,
+    labelUrl: label.labelUrl,
+    labelResponse: label.raw,
+    contentType: response.headers.get("content-type")?.trim() || "application/pdf",
+    contentDisposition: response.headers.get("content-disposition")?.trim() || undefined,
+    bytes: await response.arrayBuffer(),
+  };
+}
+
+export async function applyDelhiveryWebhookUpdate(payload: Record<string, unknown>) {
   const status = extractString(payload.status) ?? extractString(payload.current_status) ?? "update";
   const awb = extractString(payload.waybill) ?? extractString(payload.awb);
   const orderRef = extractString(payload.order) ?? extractString(payload.order_id) ?? extractString(payload.orderRef);
   const description = extractString(payload.instructions) ?? extractString(payload.remarks) ?? extractString(payload.message);
 
-  const query: Record<string, unknown> = awb
-    ? { shippingAwb: awb }
-    : orderRef
-      ? { orderRef }
-      : {};
-
-  if (!Object.keys(query).length) {
+  if (!awb && !orderRef) {
     return { matchedCount: 0, modifiedCount: 0, status };
   }
 
   const mappedOrderStatus = mapProviderStatusToOrderStatus(status);
-  const baseSet: Record<string, unknown> = {
-    shippingProvider: "delhivery",
-    shippingProviderStatus: status,
-    ...(awb ? { shippingAwb: awb } : {}),
-    shippingLastSyncedAt: new Date().toISOString(),
-  };
-
-  if (mappedOrderStatus === "delivered") {
-    baseSet.status = "delivered";
-  }
-
-  const update = await orders.updateMany(
-    query,
-    {
-      $set: baseSet,
-      $push: {
-        shippingEvents: {
-          timestamp: new Date().toISOString(),
-          status,
-          description,
-          raw: payload,
-        },
-      },
+  const update = await recordDelhiveryOrderEvent({
+    waybill: awb,
+    orderRef,
+    operation: "webhook",
+    status,
+    description,
+    response: payload,
+    raw: payload,
+    set: {
+      shippingProviderStatus: status,
+      ...(awb ? { shippingAwb: awb } : {}),
+      ...(mappedOrderStatus === "delivered" ? { status: "delivered" } : {}),
     },
-  );
+  });
+
+  const db = await getMongoDb();
+  const orders = db.collection<AdminOrderDto>("orders");
+  const query = buildDelhiveryOrderQuery({ waybill: awb, orderRef });
 
   if (mappedOrderStatus && mappedOrderStatus !== "delivered") {
     await orders.updateMany(
@@ -1744,28 +1841,24 @@ async function createPickupRequest(input: { pickupLocation: string; expectedPack
   }).then((result) => result.pickupRequestId);
 }
 
-async function applyShipmentFailure(rows: AdminOrderDto[], message: string) {
-  const db = await getMongoDb();
-  const orders = db.collection<AdminOrderDto>("orders");
-
-  await orders.updateMany(
-    { id: { $in: rows.map((row) => row.id) } },
-    {
-      $set: {
-        shippingProvider: "delhivery",
-        shippingProviderStatus: "shipment-failed",
-        shippingError: message,
-        shippingLastSyncedAt: new Date().toISOString(),
-      },
-      $push: {
-        shippingEvents: {
-          timestamp: new Date().toISOString(),
-          status: "shipment-failed",
-          description: message,
-        },
-      },
+async function applyShipmentFailure(
+  rows: AdminOrderDto[],
+  message: string,
+  request?: Partial<ShipmentCreateInput>,
+) {
+  await recordDelhiveryOrderEvent({
+    orderIds: rows.map((row) => row.id),
+    operation: "shipment-failed",
+    status: "shipment-failed",
+    description: message,
+    request,
+    response: { message },
+    raw: { message },
+    set: {
+      shippingProviderStatus: "shipment-failed",
+      shippingError: message,
     },
-  );
+  });
 }
 
 function resolvePickupAddress(store: StoreDoc | null): ShippingAddressSnapshot | null {
@@ -2031,6 +2124,29 @@ function extractFirstArray(root: unknown, path: Array<string | number>): unknown
   }
 
   return Array.isArray(current) ? current : undefined;
+}
+
+function buildDelhiveryOrderQuery(target: DelhiveryOrderEventTarget): Record<string, unknown> {
+  const conditions: Record<string, unknown>[] = [];
+  const orderIds = Array.from(new Set((target.orderIds ?? []).map((value) => value.trim()).filter(Boolean)));
+  const waybill = target.waybill?.trim();
+  const orderRef = target.orderRef?.trim();
+
+  if (orderIds.length) {
+    conditions.push({ id: { $in: orderIds } });
+  }
+  if (waybill) {
+    conditions.push({ shippingAwb: waybill });
+  }
+  if (orderRef) {
+    conditions.push({ orderRef });
+  }
+
+  if (!conditions.length) {
+    throw new Error("A Delhivery order event target is required.");
+  }
+
+  return conditions.length === 1 ? conditions[0] : { $or: conditions };
 }
 
 function findFirstUrl(payload: unknown): string | undefined {

@@ -1,9 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
-import { getMongoDb } from "@/lib/mongodb";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { cancelDelhiveryShipmentByWaybill, DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable } from "@/lib/server/delhivery-service";
+import { cancelDelhiveryShipmentByWaybill, DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable, recordDelhiveryOrderEvent } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
-import { AdminOrderDto } from "@/types/api";
 
 export const runtime = "nodejs";
 
@@ -11,6 +9,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let target: Awaited<ReturnType<typeof getAdminOrdersScoped>>[number] | undefined;
+
   try {
     const identity = await authorizeAdminRequest(request, "orders");
     if (!identity) {
@@ -23,7 +23,7 @@ export async function POST(
 
     const { id } = await context.params;
     const orders = await getAdminOrdersScoped(identity);
-    const target = orders.find((entry) => entry.id === id);
+    target = orders.find((entry) => entry.id === id);
 
     if (!target) {
       return unauthorized("Not allowed");
@@ -42,35 +42,37 @@ export async function POST(
 
     const result = await cancelDelhiveryShipmentByWaybill(target.shippingAwb);
 
-    const db = await getMongoDb();
-    const ordersCollection = db.collection<AdminOrderDto>("orders");
-
-    await ordersCollection.updateMany(
-      {
-        $or: [
-          { id: target.id },
-          ...(target.orderRef ? [{ orderRef: target.orderRef }] : []),
-        ],
+    await recordDelhiveryOrderEvent({
+      waybill: target.shippingAwb,
+      orderRef: target.orderRef,
+      operation: "shipment-cancel",
+      status: "shipment-cancel-requested",
+      description: "Shipment cancellation triggered via Delhivery API",
+      request: { waybill: target.shippingAwb, cancellation: true },
+      response: result.raw,
+      raw: result.raw,
+      set: {
+        status: "cancelled",
+        shippingProviderStatus: "shipment-cancel-requested",
       },
-      {
-        $set: {
-          status: "cancelled",
-          shippingProvider: "delhivery",
-          shippingProviderStatus: "shipment-cancel-requested",
-          shippingLastSyncedAt: new Date().toISOString(),
-        },
-        $push: {
-          shippingEvents: {
-            timestamp: new Date().toISOString(),
-            status: "shipment-cancel-requested",
-            description: "Shipment cancellation triggered via Delhivery API",
-          },
-        },
-      },
-    );
+    });
 
     return ok(result);
   } catch (error) {
+    if (target?.shippingAwb) {
+      await recordDelhiveryOrderEvent({
+        waybill: target.shippingAwb,
+        orderRef: target.orderRef,
+        operation: "shipment-cancel",
+        status: "shipment-cancel-failed",
+        description: error instanceof Error ? error.message : "Unable to cancel Delhivery shipment.",
+        request: { waybill: target.shippingAwb, cancellation: true },
+        response: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        raw: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        ...(error instanceof DelhiveryApiError ? { statusCode: error.status, errorCode: error.code } : {}),
+      }).catch(() => undefined);
+    }
+
     if (error instanceof DelhiveryApiError) {
       return serverError("Unable to cancel Delhivery shipment.", {
         code: error.code,

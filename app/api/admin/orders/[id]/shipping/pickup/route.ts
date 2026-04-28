@@ -1,9 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
-import { getMongoDb } from "@/lib/mongodb";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { DelhiveryApiError, isDelhiveryConfigured, scheduleDelhiveryPickup } from "@/lib/server/delhivery-service";
+import { DelhiveryApiError, isDelhiveryConfigured, recordDelhiveryOrderEvent, scheduleDelhiveryPickup } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
-import { AdminOrderDto } from "@/types/api";
 
 export const runtime = "nodejs";
 
@@ -18,6 +16,9 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let target: Awaited<ReturnType<typeof getAdminOrdersScoped>>[number] | undefined;
+  let payload: PickupPayload = {};
+
   try {
     const identity = await authorizeAdminRequest(request, "orders");
     if (!identity) {
@@ -29,10 +30,10 @@ export async function POST(
     }
 
     const { id } = await context.params;
-    const payload = (await request.json().catch(() => ({}))) as PickupPayload;
+    payload = (await request.json().catch(() => ({}))) as PickupPayload;
 
     const orders = await getAdminOrdersScoped(identity);
-    const target = orders.find((entry) => entry.id === id);
+    target = orders.find((entry) => entry.id === id);
 
     if (!target) {
       return unauthorized("Not allowed");
@@ -62,34 +63,42 @@ export async function POST(
       expectedPackageCount,
     });
 
-    const db = await getMongoDb();
-    const ordersCollection = db.collection<AdminOrderDto>("orders");
-
-    await ordersCollection.updateMany(
-      {
-        $or: [
-          { id: target.id },
-          ...(target.orderRef ? [{ orderRef: target.orderRef }] : []),
-        ],
+    await recordDelhiveryOrderEvent({
+      waybill: target.shippingAwb,
+      orderRef: target.orderRef,
+      operation: "pickup-request",
+      status: "pickup-requested",
+      description: `Pickup requested for ${pickupDate} ${pickupTime} at ${pickupLocation}`,
+      request: {
+        pickupLocation,
+        pickupDate,
+        pickupTime,
+        expectedPackageCount,
       },
-      {
-        $set: {
-          shippingPickupRequestId: result.pickupRequestId,
-          shippingProviderStatus: "pickup-requested",
-          shippingLastSyncedAt: new Date().toISOString(),
-        },
-        $push: {
-          shippingEvents: {
-            timestamp: new Date().toISOString(),
-            status: "pickup-requested",
-            description: `Pickup requested for ${pickupDate} ${pickupTime} at ${pickupLocation}`,
-          },
-        },
+      response: result.raw,
+      raw: result.raw,
+      set: {
+        ...(result.pickupRequestId ? { shippingPickupRequestId: result.pickupRequestId } : {}),
+        shippingProviderStatus: "pickup-requested",
       },
-    );
+    });
 
     return ok(result);
   } catch (error) {
+    if (target) {
+      await recordDelhiveryOrderEvent({
+        waybill: target.shippingAwb,
+        orderRef: target.orderRef,
+        operation: "pickup-request",
+        status: "pickup-request-failed",
+        description: error instanceof Error ? error.message : "Unable to schedule Delhivery pickup.",
+        request: payload,
+        response: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        raw: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        ...(error instanceof DelhiveryApiError ? { statusCode: error.status, errorCode: error.code } : {}),
+      }).catch(() => undefined);
+    }
+
     if (error instanceof DelhiveryApiError) {
       return serverError("Unable to schedule Delhivery pickup.", {
         code: error.code,

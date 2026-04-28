@@ -82,11 +82,29 @@ export type ShippingPackageSnapshot = {
   quantity: number;
 };
 
+export type DelhiveryOrderLifecycleOperation =
+  | "shipment-create"
+  | "shipment-failed"
+  | "shipment-update"
+  | "shipment-cancel"
+  | "pickup-request"
+  | "ewaybill-update"
+  | "label-generate"
+  | "label-download"
+  | "tracking-sync"
+  | "webhook";
+
 export type ShippingEvent = {
   timestamp: string;
   status: string;
   description?: string;
-  raw?: Record<string, unknown>;
+  provider?: ShippingProvider;
+  operation?: DelhiveryOrderLifecycleOperation;
+  request?: unknown;
+  response?: unknown;
+  statusCode?: number;
+  errorCode?: string;
+  raw?: unknown;
 };
 
 export type ProfileAddress = {

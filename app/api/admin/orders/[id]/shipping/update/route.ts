@@ -1,9 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
-import { getMongoDb } from "@/lib/mongodb";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable, updateDelhiveryShipmentByWaybill } from "@/lib/server/delhivery-service";
+import { DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable, recordDelhiveryOrderEvent, updateDelhiveryShipmentByWaybill } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
-import { AdminOrderDto } from "@/types/api";
 
 export const runtime = "nodejs";
 
@@ -24,6 +22,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  let target: Awaited<ReturnType<typeof getAdminOrdersScoped>>[number] | undefined;
+  let body: UpdateRequest = {};
+
   try {
     const identity = await authorizeAdminRequest(request, "orders");
     if (!identity) {
@@ -35,10 +36,10 @@ export async function PATCH(
     }
 
     const { id } = await context.params;
-    const body = (await request.json().catch(() => ({}))) as UpdateRequest;
+    body = (await request.json().catch(() => ({}))) as UpdateRequest;
 
     const orders = await getAdminOrdersScoped(identity);
-    const target = orders.find((entry) => entry.id === id);
+    target = orders.find((entry) => entry.id === id);
 
     if (!target) {
       return unauthorized("Not allowed");
@@ -60,29 +61,37 @@ export async function PATCH(
       updates: body,
     });
 
-    const db = await getMongoDb();
-    const ordersCollection = db.collection<AdminOrderDto>("orders");
-
-    await ordersCollection.updateOne(
-      { id: target.id },
-      {
-        $set: {
-          shippingProvider: "delhivery",
-          shippingProviderStatus: "shipment-updated",
-          shippingLastSyncedAt: new Date().toISOString(),
-        },
-        $push: {
-          shippingEvents: {
-            timestamp: new Date().toISOString(),
-            status: "shipment-updated",
-            description: "Shipment updated via Delhivery edit API",
-          },
-        },
+    await recordDelhiveryOrderEvent({
+      waybill: target.shippingAwb,
+      operation: "shipment-update",
+      status: "shipment-updated",
+      description: "Shipment updated via Delhivery edit API",
+      request: body,
+      response: result.raw,
+      raw: result.raw,
+      set: {
+        shippingProviderStatus: "shipment-updated",
       },
-    );
+    });
 
     return ok(result);
   } catch (error) {
+    if (
+      target?.shippingAwb &&
+      !(error instanceof Error && error.message.includes("Provide at least one shipment field"))
+    ) {
+      await recordDelhiveryOrderEvent({
+        waybill: target.shippingAwb,
+        operation: "shipment-update",
+        status: "shipment-update-failed",
+        description: error instanceof Error ? error.message : "Unable to update Delhivery shipment.",
+        request: body,
+        response: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        raw: error instanceof DelhiveryApiError ? error.body : { message: error instanceof Error ? error.message : "Unknown error" },
+        ...(error instanceof DelhiveryApiError ? { statusCode: error.status, errorCode: error.code } : {}),
+      }).catch(() => undefined);
+    }
+
     if (error instanceof DelhiveryApiError) {
       return serverError("Unable to update Delhivery shipment.", {
         code: error.code,

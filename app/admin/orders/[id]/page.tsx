@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { resolveProductImage } from "@/lib/product-image";
 import { getAdminOrderDetailsScoped } from "@/lib/server/ecommerce-service";
 import { formatCurrency } from "@/lib/utils";
+import { AdminOrderShipmentActions } from "../admin-order-shipment-actions";
 
 export default async function AdminOrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const identity = await ensureAdminAccess("orders");
@@ -129,6 +130,13 @@ export default async function AdminOrderDetailsPage({ params }: { params: Promis
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-border/70 bg-card px-3 py-2">
+                  <p className="font-semibold text-foreground">Shipment actions</p>
+                  <div className="mt-2">
+                    <AdminOrderShipmentActions order={line} />
+                  </div>
+                </div>
+
                 {(line.deliveryAddress || line.pickupAddress || line.shippingPackage) ? (
                   <div className="grid gap-3 text-sm text-[#5f5047] md:grid-cols-3">
                     <div className="rounded-xl border border-border/70 bg-card px-3 py-2">
@@ -200,6 +208,96 @@ export default async function AdminOrderDetailsPage({ params }: { params: Promis
           ))}
         </div>
       </AdminSection>
+
+      <AdminSection title="Delhivery API history" description="Saved request and response payloads for order-level Delhivery lifecycle calls.">
+        <div className="space-y-3">
+          {details.lines.some((line) => line.shippingEvents?.length) ? details.lines.map((line) => (
+            line.shippingEvents?.length ? (
+              <Card key={`${line.id}-shipping-history`} className="border-border/70 bg-background/80">
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-foreground">{line.productName}</p>
+                      <p className="text-sm text-[#5f5047]">Row {line.id} • AWB {line.shippingAwb ?? "-"}</p>
+                    </div>
+                    <Badge variant="outline">{line.shippingEvents.length} event(s)</Badge>
+                  </div>
+
+                  <div className="space-y-2">
+                    {[...line.shippingEvents].reverse().map((event, index) => (
+                      <div key={`${line.id}-shipping-event-${index}`} className="rounded-xl border border-border/70 bg-card px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">{event.operation ?? "status-update"}</Badge>
+                          <Badge variant="outline">{event.status}</Badge>
+                          {event.statusCode ? <span className="text-xs text-[#74655c]">HTTP {event.statusCode}</span> : null}
+                          {event.errorCode ? <span className="text-xs text-destructive">{event.errorCode}</span> : null}
+                        </div>
+                        {event.description ? <p className="mt-2 text-sm text-[#5f5047]">{event.description}</p> : null}
+                        <p className="mt-1 text-xs text-[#74655c]">{formatEventDateTime(event.timestamp)}</p>
+
+                        <div className="mt-2 grid gap-2 md:grid-cols-3">
+                          {renderPayloadPanel("Request", event.request)}
+                          {renderPayloadPanel("Response", event.response)}
+                          {event.response === undefined ? renderPayloadPanel("Raw", event.raw) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null
+          )) : (
+            <Card className="border-border/70 bg-background/80">
+              <CardContent className="p-4 text-sm text-[#5f5047]">
+                No Delhivery API history has been stored for this order yet.
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </AdminSection>
     </div>
+  );
+}
+
+function formatEventDateTime(value?: string) {
+  if (!value) {
+    return "Timestamp unavailable";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString();
+}
+
+function stringifyEventPayload(value: unknown) {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderPayloadPanel(label: string, value: unknown) {
+  const serialized = stringifyEventPayload(value);
+  if (!serialized) {
+    return null;
+  }
+
+  return (
+    <details className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+      <summary className="cursor-pointer text-sm font-medium text-foreground">{label}</summary>
+      <pre className="mt-2 overflow-x-auto whitespace-pre-wrap wrap-break-word text-xs text-[#5f5047]">{serialized}</pre>
+    </details>
   );
 }
