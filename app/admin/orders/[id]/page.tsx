@@ -36,9 +36,14 @@ export default async function AdminOrderDetailsPage({ params }: { params: Promis
         title={details.orderRef}
         description="Complete order context across customer, payment, shipping, and customization details."
         actions={(
-          <Button asChild variant="outline">
-            <Link href="/admin/orders">Back to orders</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline">
+              <Link href="/admin/orders/delhivery-guide">Delhivery guide</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/orders">Back to orders</Link>
+            </Button>
+          </>
         )}
         stats={[
           { label: "Status", value: details.status, tone: "warm" },

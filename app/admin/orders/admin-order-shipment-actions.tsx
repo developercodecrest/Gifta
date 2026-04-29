@@ -2,7 +2,33 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Clock3,
+  FileDown,
+  FileText,
+  MapPin,
+  Package2,
+  Pencil,
+  RefreshCcw,
+  Route,
+  Truck,
+  XCircle,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { AdminOrderDto } from "@/types/api";
 
@@ -16,8 +42,28 @@ type ShipmentActionOrder = Pick<
   | "shippingProvider"
   | "shippingProviderStatus"
   | "shippingAwb"
+  | "shippingPickupRequestId"
   | "pickupAddress"
 >;
+
+type PickupFormState = {
+  pickupLocation: string;
+  pickupDate: string;
+  pickupTime: string;
+  expectedPackageCount: string;
+};
+
+type EditShipmentFormState = {
+  name: string;
+  phone: string;
+  add: string;
+  productsDesc: string;
+};
+
+type EwaybillFormState = {
+  dcn: string;
+  ewbn: string;
+};
 
 async function getApiErrorMessage(response: Response, fallback: string) {
   const payload = (await response.json().catch(() => ({}))) as {
@@ -47,6 +93,43 @@ function triggerBrowserDownload(blob: Blob, fileName: string) {
   URL.revokeObjectURL(objectUrl);
 }
 
+function buildDefaultPickupForm(order: ShipmentActionOrder): PickupFormState {
+  return {
+    pickupLocation: order.pickupAddress?.receiverName ?? order.storeId ?? "",
+    pickupDate: new Date().toISOString().slice(0, 10),
+    pickupTime: "11:00:00",
+    expectedPackageCount: String(Math.max(1, order.quantity || 1)),
+  };
+}
+
+function buildDefaultEditForm(): EditShipmentFormState {
+  return {
+    name: "",
+    phone: "",
+    add: "",
+    productsDesc: "",
+  };
+}
+
+function buildDefaultEwaybillForm(): EwaybillFormState {
+  return {
+    dcn: "",
+    ewbn: "",
+  };
+}
+
+function normalizePickupTime(value: string) {
+  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) {
+    return value;
+  }
+
+  if (/^\d{2}:\d{2}$/.test(value)) {
+    return `${value}:00`;
+  }
+
+  return value;
+}
+
 export function AdminOrderShipmentActions({
   order,
   className,
@@ -56,19 +139,94 @@ export function AdminOrderShipmentActions({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [ewaybillError, setEwaybillError] = useState<string | null>(null);
+  const [pickupError, setPickupError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [ewaybillOpen, setEwaybillOpen] = useState(false);
+  const [pickupOpen, setPickupOpen] = useState(false);
+  const [editForm, setEditForm] = useState<EditShipmentFormState>(() => buildDefaultEditForm());
+  const [ewaybillForm, setEwaybillForm] = useState<EwaybillFormState>(() => buildDefaultEwaybillForm());
+  const [pickupForm, setPickupForm] = useState<PickupFormState>(() => buildDefaultPickupForm(order));
 
   const isDelhiveryOrder = (order.shippingProvider ?? "delhivery") === "delhivery";
   if (!isDelhiveryOrder) {
     return null;
   }
 
+  const pickupButtonLabel = order.shippingPickupRequestId ? "Pickup Again" : "Request Pickup";
+  const workflowSteps = [
+    "Create / Retry",
+    "Edit Ship",
+    "Update EWB",
+    "Label PDF",
+    pickupButtonLabel,
+    order.shippingAwb ? "Track" : "Track later",
+    "Cancel last",
+  ];
+
+  const resetPickupState = () => {
+    setPickupForm(buildDefaultPickupForm(order));
+    setPickupError(null);
+  };
+
+  const resetEditState = () => {
+    setEditForm(buildDefaultEditForm());
+    setEditError(null);
+  };
+
+  const resetEwaybillState = () => {
+    setEwaybillForm(buildDefaultEwaybillForm());
+    setEwaybillError(null);
+  };
+
+  const handleEditOpenChange = (open: boolean) => {
+    setEditOpen(open);
+    if (open) {
+      setError(null);
+      resetEditState();
+      return;
+    }
+
+    resetEditState();
+  };
+
+  const handleEwaybillOpenChange = (open: boolean) => {
+    setEwaybillOpen(open);
+    if (open) {
+      setError(null);
+      resetEwaybillState();
+      return;
+    }
+
+    resetEwaybillState();
+  };
+
+  const handlePickupOpenChange = (open: boolean) => {
+    setPickupOpen(open);
+    if (open) {
+      setError(null);
+      resetPickupState();
+      return;
+    }
+
+    resetPickupState();
+  };
+
+  const beginAction = () => {
+    setSaving(true);
+    setError(null);
+    setEditError(null);
+    setEwaybillError(null);
+    setPickupError(null);
+  };
+
   const reloadPage = () => {
     window.location.reload();
   };
 
   const retryShipment = async () => {
-    setSaving(true);
-    setError(null);
+    beginAction();
 
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/retry`, {
@@ -89,13 +247,17 @@ export function AdminOrderShipmentActions({
   };
 
   const editShipment = async () => {
-    const name = window.prompt("Consignee name (leave blank to skip):", "") ?? "";
-    const phone = window.prompt("Consignee phone (leave blank to skip):", "") ?? "";
-    const add = window.prompt("Consignee address (leave blank to skip):", "") ?? "";
-    const productsDesc = window.prompt("Products description (leave blank to skip):", "") ?? "";
+    const name = editForm.name.trim();
+    const phone = editForm.phone.trim();
+    const add = editForm.add.trim();
+    const productsDesc = editForm.productsDesc.trim();
 
-    setSaving(true);
-    setError(null);
+    if (!name && !phone && !add && !productsDesc) {
+      setEditError("Provide at least one shipment field to update");
+      return;
+    }
+
+    beginAction();
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/update`, {
         method: "PATCH",
@@ -109,13 +271,14 @@ export function AdminOrderShipmentActions({
       });
 
       if (!response.ok) {
-        setError(await getApiErrorMessage(response, "Unable to update shipment"));
+        setEditError(await getApiErrorMessage(response, "Unable to update shipment"));
         return;
       }
 
+      setEditOpen(false);
       reloadPage();
     } catch {
-      setError("Unable to update shipment");
+      setEditError("Unable to update shipment");
     } finally {
       setSaving(false);
     }
@@ -126,8 +289,7 @@ export function AdminOrderShipmentActions({
       return;
     }
 
-    setSaving(true);
-    setError(null);
+    beginAction();
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/cancel`, {
         method: "POST",
@@ -147,16 +309,15 @@ export function AdminOrderShipmentActions({
   };
 
   const updateEwaybill = async () => {
-    const dcn = window.prompt("Invoice number (dcn):", "") ?? "";
-    const ewbn = window.prompt("E-waybill number (ewbn):", "") ?? "";
+    const dcn = ewaybillForm.dcn.trim();
+    const ewbn = ewaybillForm.ewbn.trim();
 
-    if (!dcn.trim() || !ewbn.trim()) {
-      setError("Invoice number and e-waybill number are required");
+    if (!dcn || !ewbn) {
+      setEwaybillError("Invoice number and e-waybill number are required");
       return;
     }
 
-    setSaving(true);
-    setError(null);
+    beginAction();
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/ewaybill`, {
         method: "POST",
@@ -165,21 +326,21 @@ export function AdminOrderShipmentActions({
       });
 
       if (!response.ok) {
-        setError(await getApiErrorMessage(response, "Unable to update e-waybill"));
+        setEwaybillError(await getApiErrorMessage(response, "Unable to update e-waybill"));
         return;
       }
 
+      setEwaybillOpen(false);
       reloadPage();
     } catch {
-      setError("Unable to update e-waybill");
+      setEwaybillError("Unable to update e-waybill");
     } finally {
       setSaving(false);
     }
   };
 
   const downloadLabelPdf = async () => {
-    setSaving(true);
-    setError(null);
+    beginAction();
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/label-download?pdfSize=4R`, {
         method: "GET",
@@ -202,24 +363,32 @@ export function AdminOrderShipmentActions({
   };
 
   const schedulePickup = async () => {
-    const pickupLocation = window.prompt("Pickup location name:", order.pickupAddress?.receiverName ?? order.storeId) ?? "";
-    const pickupDate = window.prompt("Pickup date (YYYY-MM-DD):", new Date().toISOString().slice(0, 10)) ?? "";
-    const pickupTime = window.prompt("Pickup time (HH:mm:ss):", "11:00:00") ?? "";
-    const expectedPackageCountRaw = window.prompt("Expected package count:", String(Math.max(1, order.quantity || 1))) ?? "";
+    const pickupLocation = pickupForm.pickupLocation.trim();
+    const pickupDate = pickupForm.pickupDate.trim();
+    const pickupTime = normalizePickupTime(pickupForm.pickupTime.trim());
 
-    if (!pickupLocation.trim() || !pickupDate.trim() || !pickupTime.trim()) {
-      setError("Pickup location, date, and time are required");
+    if (!pickupLocation || !pickupDate || !pickupTime) {
+      setPickupError("Pickup location, date, and time are required");
       return;
     }
 
-    const expectedPackageCount = Number(expectedPackageCountRaw);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) {
+      setPickupError("Pickup date must be in YYYY-MM-DD format");
+      return;
+    }
+
+    if (!/^\d{2}:\d{2}:\d{2}$/.test(pickupTime)) {
+      setPickupError("Pickup time must be in HH:mm:ss format");
+      return;
+    }
+
+    const expectedPackageCount = Number(pickupForm.expectedPackageCount);
     if (!Number.isFinite(expectedPackageCount) || expectedPackageCount < 1) {
-      setError("Expected package count must be a positive number");
+      setPickupError("Expected package count must be a positive number");
       return;
     }
 
-    setSaving(true);
-    setError(null);
+    beginAction();
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/pickup`, {
         method: "POST",
@@ -233,57 +402,431 @@ export function AdminOrderShipmentActions({
       });
 
       if (!response.ok) {
-        setError(await getApiErrorMessage(response, "Unable to schedule pickup"));
+        setPickupError(await getApiErrorMessage(response, "Unable to schedule pickup"));
         return;
       }
 
+      setPickupOpen(false);
       reloadPage();
     } catch {
-      setError("Unable to schedule pickup");
+      setPickupError("Unable to schedule pickup");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className={cn("flex flex-wrap gap-2", className)}>
-      <Button size="sm" variant="outline" onClick={() => void retryShipment()} disabled={saving}>
-        Retry Ship
-      </Button>
-
-      <Button size="sm" variant="outline" onClick={() => void editShipment()} disabled={saving || !order.shippingAwb}>
-        Edit Ship
-      </Button>
-
-      <Button size="sm" variant="destructive" onClick={() => void cancelShipment()} disabled={saving || !order.shippingAwb}>
-        Cancel Ship
-      </Button>
-
-      <Button size="sm" variant="outline" onClick={() => void updateEwaybill()} disabled={saving || !order.shippingAwb}>
-        Update EWB
-      </Button>
-
-      <Button size="sm" variant="outline" onClick={() => void downloadLabelPdf()} disabled={saving || !order.shippingAwb}>
-        Download Label PDF
-      </Button>
-
-      <Button size="sm" variant="outline" onClick={() => void schedulePickup()} disabled={saving}>
-        Pickup
-      </Button>
-
-      {order.shippingAwb ? (
-        <Button asChild size="sm" variant="outline">
-          <Link
-            href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className={cn("w-full space-y-3", className)}>
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#74655c]">
+        <Badge className="bg-[#fff4df] text-[#9e7526] hover:bg-[#fff4df]">Suggested Delhivery flow</Badge>
+        {workflowSteps.map((step, index) => (
+          <span
+            key={`${step}-${index}`}
+            className="rounded-full border border-[#ead8b2] bg-white/80 px-3 py-1 font-medium"
           >
-            Track
-          </Link>
-        </Button>
-      ) : null}
+            {index + 1}. {step}
+          </span>
+        ))}
+      </div>
 
-      {error ? <p className="w-full text-xs text-destructive">{error}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={() => void retryShipment()} disabled={saving}>
+          <RefreshCcw className="h-3.5 w-3.5" />
+          Create / Retry
+        </Button>
+
+        <Dialog open={editOpen} onOpenChange={handleEditOpenChange}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" disabled={saving || !order.shippingAwb}>
+              <Pencil className="h-3.5 w-3.5" />
+              Edit Ship
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.9)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-3xl">
+            <div className="relative grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
+              <div className="space-y-5 border-b border-[#ead8b2] bg-white/45 p-6 lg:border-b-0 lg:border-r">
+                <DialogHeader className="space-y-3 text-left">
+                  <Badge className="w-fit bg-[#cd9933] text-white hover:bg-[#cd9933]">Delhivery shipment edit</Badge>
+                  <DialogTitle className="font-display text-3xl tracking-[-0.05em] text-[#2f2217]">
+                    Update consignee and parcel details
+                  </DialogTitle>
+                  <DialogDescription className="max-w-md leading-6 text-[#6d5a4d]">
+                    Correct destination details before the label desk reprints or the pickup team reattempts handoff.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="rounded-[1.45rem] border border-[#e4cf9e] bg-white/80 p-4 shadow-[0_18px_45px_-38px_rgba(116,84,26,0.35)]">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Package2 className="h-4 w-4 text-[#cd9933]" />
+                    Shipment context
+                  </div>
+                  <div className="mt-3 space-y-1.5 text-sm text-[#5f5047]">
+                    <p><span className="font-semibold text-foreground">Order:</span> {order.orderRef}</p>
+                    <p><span className="font-semibold text-foreground">Store:</span> {order.storeId}</p>
+                    <p><span className="font-semibold text-foreground">AWB:</span> {order.shippingAwb ?? "Not created yet"}</p>
+                    <p><span className="font-semibold text-foreground">Shipment status:</span> {order.shippingProviderStatus ?? "pending-shipment"}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.45rem] border border-dashed border-[#e4cf9e] bg-[#fff9ee] p-4 text-sm text-[#5f5047]">
+                  Leave any field blank if it should remain unchanged. At least one field is required before the update can be submitted.
+                </div>
+              </div>
+
+              <form
+                className="bg-white/72 p-6"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void editShipment();
+                }}
+              >
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`edit-name-${order.id}`}>Consignee name</Label>
+                      <Input
+                        id={`edit-name-${order.id}`}
+                        value={editForm.name}
+                        onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
+                        className="border-[#e4cf9e] bg-white"
+                        placeholder="Receiver name"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`edit-phone-${order.id}`}>Consignee phone</Label>
+                      <Input
+                        id={`edit-phone-${order.id}`}
+                        value={editForm.phone}
+                        onChange={(event) => setEditForm((current) => ({ ...current, phone: event.target.value }))}
+                        className="border-[#e4cf9e] bg-white"
+                        placeholder="Receiver phone"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`edit-address-${order.id}`}>Consignee address</Label>
+                    <textarea
+                      id={`edit-address-${order.id}`}
+                      value={editForm.add}
+                      onChange={(event) => setEditForm((current) => ({ ...current, add: event.target.value }))}
+                      className="flex min-h-28 w-full rounded-md border border-[#e4cf9e] bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      placeholder="Updated address line for Delhivery"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`edit-products-${order.id}`}>Products description</Label>
+                    <textarea
+                      id={`edit-products-${order.id}`}
+                      value={editForm.productsDesc}
+                      onChange={(event) => setEditForm((current) => ({ ...current, productsDesc: event.target.value }))}
+                      className="flex min-h-24 w-full rounded-md border border-[#e4cf9e] bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      placeholder="Describe the parcel contents for the updated shipment"
+                    />
+                  </div>
+                </div>
+
+                {editError ? <p className="mt-4 text-sm text-destructive">{editError}</p> : null}
+
+                <DialogFooter className="mt-6 border-t border-[#ead8b2] pt-4">
+                  <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
+                    Close
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? "Updating..." : "Apply Shipment Update"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={ewaybillOpen} onOpenChange={handleEwaybillOpenChange}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" disabled={saving || !order.shippingAwb}>
+              <FileText className="h-3.5 w-3.5" />
+              Update EWB
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.9)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-2xl">
+            <div className="relative grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="space-y-5 border-b border-[#ead8b2] bg-white/50 p-6 lg:border-b-0 lg:border-r">
+                <DialogHeader className="space-y-3 text-left">
+                  <Badge className="w-fit bg-[#cd9933] text-white hover:bg-[#cd9933]">Delhivery e-waybill</Badge>
+                  <DialogTitle className="font-display text-3xl tracking-[-0.05em] text-[#2f2217]">
+                    Attach invoice and e-waybill details
+                  </DialogTitle>
+                  <DialogDescription className="max-w-md leading-6 text-[#6d5a4d]">
+                    Keep the Delhivery shipment aligned with invoice paperwork before the package moves further in the route.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="rounded-[1.45rem] border border-[#e4cf9e] bg-white/82 p-4 shadow-[0_18px_45px_-38px_rgba(116,84,26,0.35)]">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <FileText className="h-4 w-4 text-[#cd9933]" />
+                    Reference snapshot
+                  </div>
+                  <div className="mt-3 space-y-1.5 text-sm text-[#5f5047]">
+                    <p><span className="font-semibold text-foreground">Order:</span> {order.orderRef}</p>
+                    <p><span className="font-semibold text-foreground">AWB:</span> {order.shippingAwb ?? "Not created yet"}</p>
+                    <p><span className="font-semibold text-foreground">Store:</span> {order.storeId}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.45rem] border border-dashed border-[#e4cf9e] bg-[#fff9ee] p-4 text-sm text-[#5f5047]">
+                  Delhivery requires both values. Use the invoice number as <span className="font-semibold text-foreground">DCN</span> and the transport e-waybill as <span className="font-semibold text-foreground">EWBN</span>.
+                </div>
+              </div>
+
+              <form
+                className="bg-white/72 p-6"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void updateEwaybill();
+                }}
+              >
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`ewaybill-dcn-${order.id}`}>Invoice number (DCN)</Label>
+                    <Input
+                      id={`ewaybill-dcn-${order.id}`}
+                      value={ewaybillForm.dcn}
+                      onChange={(event) => setEwaybillForm((current) => ({ ...current, dcn: event.target.value }))}
+                      className="border-[#e4cf9e] bg-white"
+                      placeholder="Invoice reference"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`ewaybill-ewbn-${order.id}`}>E-waybill number (EWBN)</Label>
+                    <Input
+                      id={`ewaybill-ewbn-${order.id}`}
+                      value={ewaybillForm.ewbn}
+                      onChange={(event) => setEwaybillForm((current) => ({ ...current, ewbn: event.target.value }))}
+                      className="border-[#e4cf9e] bg-white"
+                      placeholder="Government e-waybill number"
+                    />
+                  </div>
+                </div>
+
+                {ewaybillError ? <p className="mt-4 text-sm text-destructive">{ewaybillError}</p> : null}
+
+                <DialogFooter className="mt-6 border-t border-[#ead8b2] pt-4">
+                  <Button type="button" variant="outline" onClick={() => setEwaybillOpen(false)} disabled={saving}>
+                    Close
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? "Updating..." : "Save E-waybill"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Button size="sm" variant="outline" onClick={() => void downloadLabelPdf()} disabled={saving || !order.shippingAwb}>
+          <FileDown className="h-3.5 w-3.5" />
+          Label PDF
+        </Button>
+
+        <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" disabled={saving}>
+              <Truck className="h-3.5 w-3.5" />
+              {pickupButtonLabel}
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.92)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-3xl">
+        <div className="relative">
+          <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_right,rgba(205,153,51,0.25),transparent_58%)]" />
+
+          <div className="relative grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-5 p-6">
+              <DialogHeader className="space-y-3 text-left">
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="w-fit bg-[#cd9933] text-white hover:bg-[#cd9933]">Delhivery pickup</Badge>
+                  {order.shippingPickupRequestId ? (
+                    <Badge className="w-fit bg-white/90 text-[#9e7526] hover:bg-white/90">
+                      Existing request {order.shippingPickupRequestId}
+                    </Badge>
+                  ) : null}
+                </div>
+                <DialogTitle className="font-display text-3xl tracking-[-0.05em] text-[#2f2217]">
+                  Schedule pickup without browser prompts
+                </DialogTitle>
+                <DialogDescription className="max-w-xl leading-6 text-[#6d5a4d]">
+                  Use this panel when the shipment needs a fresh pickup request or a schedule correction. Shipment creation already attempts one pickup request automatically.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[1.45rem] border border-[#e4cf9e] bg-white/75 p-4 shadow-[0_20px_45px_-38px_rgba(116,84,26,0.35)]">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Package2 className="h-4 w-4 text-[#cd9933]" />
+                    Shipment context
+                  </div>
+                  <div className="mt-3 space-y-1.5 text-sm text-[#5f5047]">
+                    <p><span className="font-semibold text-foreground">Order:</span> {order.orderRef}</p>
+                    <p><span className="font-semibold text-foreground">Store:</span> {order.storeId}</p>
+                    <p><span className="font-semibold text-foreground">AWB:</span> {order.shippingAwb ?? "Not created yet"}</p>
+                    <p><span className="font-semibold text-foreground">Package count:</span> {Math.max(1, order.quantity || 1)}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.45rem] border border-[#e4cf9e] bg-[#fff8ea] p-4 shadow-[0_20px_45px_-38px_rgba(116,84,26,0.35)]">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <MapPin className="h-4 w-4 text-[#cd9933]" />
+                    Pickup source
+                  </div>
+                  <div className="mt-3 space-y-1.5 text-sm text-[#5f5047]">
+                    {order.pickupAddress ? (
+                      <>
+                        <p className="font-semibold text-foreground">{order.pickupAddress.receiverName ?? order.storeId}</p>
+                        <p>{order.pickupAddress.receiverPhone ?? "Phone unavailable"}</p>
+                        <p>{order.pickupAddress.line1}</p>
+                        <p>{order.pickupAddress.city}, {order.pickupAddress.state} {order.pickupAddress.pinCode}</p>
+                      </>
+                    ) : (
+                      <p>Pickup address is not stored on this row yet, so the form falls back to the store ID.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[1.6rem] border border-[#e4cf9e] bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,247,229,0.94))] p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <AlertTriangle className="h-4 w-4 text-[#cd9933]" />
+                  Recommended checks
+                </div>
+                <div className="mt-3 space-y-2 text-sm text-[#5f5047]">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#cd9933] text-xs font-semibold text-white">1</span>
+                    <p>Create the shipment first if the AWB is still missing.</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#cd9933] text-xs font-semibold text-white">2</span>
+                    <p>Edit shipment data or update the e-waybill before requesting a corrected pickup slot.</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#cd9933] text-xs font-semibold text-white">3</span>
+                    <p>Use Pickup Again when the original Delhivery pickup request was missed or needs a new time window.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <form
+              className="border-t border-[#ead8b2] bg-white/68 p-6 lg:border-l lg:border-t-0"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void schedulePickup();
+              }}
+            >
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor={`pickup-location-${order.id}`}>Pickup location name</Label>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e7526]" />
+                    <Input
+                      id={`pickup-location-${order.id}`}
+                      value={pickupForm.pickupLocation}
+                      onChange={(event) => setPickupForm((current) => ({ ...current, pickupLocation: event.target.value }))}
+                      className="border-[#e4cf9e] bg-white pl-10"
+                      placeholder="Warehouse or pickup desk name"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`pickup-date-${order.id}`}>Pickup date</Label>
+                    <div className="relative">
+                      <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e7526]" />
+                      <Input
+                        id={`pickup-date-${order.id}`}
+                        type="date"
+                        value={pickupForm.pickupDate}
+                        onChange={(event) => setPickupForm((current) => ({ ...current, pickupDate: event.target.value }))}
+                        className="border-[#e4cf9e] bg-white pl-10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`pickup-time-${order.id}`}>Pickup time</Label>
+                    <div className="relative">
+                      <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e7526]" />
+                      <Input
+                        id={`pickup-time-${order.id}`}
+                        type="time"
+                        step={1}
+                        value={pickupForm.pickupTime}
+                        onChange={(event) => setPickupForm((current) => ({ ...current, pickupTime: event.target.value }))}
+                        className="border-[#e4cf9e] bg-white pl-10"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor={`pickup-packages-${order.id}`}>Expected package count</Label>
+                  <div className="relative">
+                    <Package2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e7526]" />
+                    <Input
+                      id={`pickup-packages-${order.id}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={pickupForm.expectedPackageCount}
+                      onChange={(event) => setPickupForm((current) => ({ ...current, expectedPackageCount: event.target.value }))}
+                      className="border-[#e4cf9e] bg-white pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-[1.4rem] border border-dashed border-[#e4cf9e] bg-[#fffaf0] px-4 py-3 text-sm text-[#5f5047]">
+                  Delhivery expects the pickup time in <span className="font-semibold text-foreground">HH:mm:ss</span> format. If your browser returns only hours and minutes, this form will append the seconds automatically.
+                </div>
+              </div>
+
+              {pickupError ? <p className="mt-4 text-sm text-destructive">{pickupError}</p> : null}
+
+              <DialogFooter className="mt-6 border-t border-[#ead8b2] pt-4">
+                <Button type="button" variant="outline" onClick={() => setPickupOpen(false)} disabled={saving}>
+                  Close
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Scheduling..." : order.shippingPickupRequestId ? "Update Pickup Request" : "Schedule Pickup"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </div>
+        </div>
+          </DialogContent>
+        </Dialog>
+
+        {order.shippingAwb ? (
+          <Button asChild size="sm" variant="outline">
+            <Link
+              href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Route className="h-3.5 w-3.5" />
+              Track
+            </Link>
+          </Button>
+        ) : null}
+
+        <Button size="sm" variant="destructive" onClick={() => void cancelShipment()} disabled={saving || !order.shippingAwb}>
+          <XCircle className="h-3.5 w-3.5" />
+          Cancel Ship
+        </Button>
+      </div>
+
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

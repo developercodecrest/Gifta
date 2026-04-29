@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
+import { Button } from "@/components/ui/button";
 import { OrdersClient } from "./orders-client";
 
 export default async function AdminOrdersPage() {
@@ -17,6 +19,11 @@ export default async function AdminOrdersPage() {
         eyebrow="Orders"
         title="Fulfillment pipeline and delivery exceptions"
         description="Track payment, shipping, and delivery progress across every store in your admin scope."
+        actions={(
+          <Button asChild variant="outline">
+            <Link href="/admin/orders/delhivery-guide">Open Delhivery guide</Link>
+          </Button>
+        )}
         stats={[
           { label: "Orders", value: String(orders.length), tone: "warm" },
           { label: "Pending flow", value: String(pending), tone: "sun" },
