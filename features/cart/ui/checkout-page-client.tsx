@@ -36,6 +36,12 @@ declare global {
   }
 }
 
+const RAZORPAY_SCRIPT_ID = "razorpay-checkout-script";
+const RAZORPAY_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
+const RAZORPAY_SCRIPT_TIMEOUT_MS = 15_000;
+
+let razorpaySdkPromise: Promise<boolean> | null = null;
+
 const checkoutSchema = z.object({
   fullName: z.string().min(2, "Enter full name"),
   email: z.string().email("Enter valid email"),
@@ -575,9 +581,13 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
         return;
       }
 
-      const sdkReady = await loadRazorpaySdk();
+      let sdkReady = await loadRazorpaySdk();
+      if ((!sdkReady || !window.Razorpay) && typeof window !== "undefined") {
+        sdkReady = await loadRazorpaySdk({ forceReload: true });
+      }
+
       if (!sdkReady || !window.Razorpay) {
-        setError("Razorpay SDK failed to load. Please try again.");
+        setError("Razorpay checkout could not be loaded. Please try again.");
         setIsPaying(false);
         return;
       }
@@ -627,7 +637,7 @@ export function CheckoutPageClient({ snapshot }: { snapshot: CartSnapshot }) {
           router.refresh();
         },
         theme: {
-          color: "#111827",
+          color: "#cd9933",
         },
         modal: {
           ondismiss: () => setIsPaying(false),
@@ -989,7 +999,7 @@ function CheckoutNote({
   );
 }
 
-async function loadRazorpaySdk() {
+async function loadRazorpaySdk(options?: { forceReload?: boolean }) {
   if (typeof window === "undefined") {
     return false;
   }
@@ -998,33 +1008,82 @@ async function loadRazorpaySdk() {
     return true;
   }
 
-  return new Promise<boolean>((resolve) => {
-    const existing = document.getElementById("razorpay-checkout-script") as HTMLScriptElement | null;
-    if (existing) {
-      if (existing.dataset.loaded === "true") {
-        resolve(Boolean(window.Razorpay));
+  const forceReload = options?.forceReload === true;
+  const existing = document.getElementById(RAZORPAY_SCRIPT_ID) as HTMLScriptElement | null;
+  const shouldReplaceExisting = forceReload || existing?.dataset.status === "error";
+
+  if (shouldReplaceExisting) {
+    existing?.remove();
+    razorpaySdkPromise = null;
+  }
+
+  if (razorpaySdkPromise) {
+    return razorpaySdkPromise;
+  }
+
+  const script = shouldReplaceExisting || !existing
+    ? document.createElement("script")
+    : existing;
+
+  if (!script.id) {
+    script.id = RAZORPAY_SCRIPT_ID;
+  }
+
+  script.async = true;
+  script.src = RAZORPAY_SCRIPT_SRC;
+
+  razorpaySdkPromise = new Promise<boolean>((resolve) => {
+    let settled = false;
+    let timeoutId = 0;
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      script.removeEventListener("load", handleLoad);
+      script.removeEventListener("error", handleError);
+    };
+
+    const finalize = (ready: boolean) => {
+      if (settled) {
         return;
       }
 
-      existing.addEventListener("load", () => resolve(true), { once: true });
-      existing.addEventListener("error", () => resolve(false), { once: true });
+      settled = true;
+      cleanup();
+
+      const available = ready && Boolean(window.Razorpay);
+      script.dataset.status = available ? "loaded" : "error";
+
+      if (!available) {
+        razorpaySdkPromise = null;
+      }
+
+      resolve(available);
+    };
+
+    const handleLoad = () => finalize(true);
+    const handleError = () => finalize(false);
+
+    if (window.Razorpay) {
+      finalize(true);
       return;
     }
 
-    const script = document.createElement("script");
-    script.id = "razorpay-checkout-script";
-    script.async = true;
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => {
-      script.dataset.loaded = "true";
-      resolve(true);
-    };
-    script.onerror = () => {
-      script.dataset.loaded = "false";
-      resolve(false);
-    };
-    document.body.appendChild(script);
+    if (script.dataset.status === "loaded") {
+      finalize(true);
+      return;
+    }
+
+    script.dataset.status = "loading";
+    script.addEventListener("load", handleLoad, { once: true });
+    script.addEventListener("error", handleError, { once: true });
+    timeoutId = window.setTimeout(() => finalize(false), RAZORPAY_SCRIPT_TIMEOUT_MS);
+
+    if (!script.isConnected) {
+      document.head.appendChild(script);
+    }
   });
+
+  return razorpaySdkPromise;
 }
 
 function normalizeDeliveryRemark(remark?: string | null) {
