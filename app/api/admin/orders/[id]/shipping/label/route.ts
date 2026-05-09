@@ -1,5 +1,6 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
 import { DelhiveryApiError, generateDelhiveryShippingLabel, isDelhiveryConfigured, recordDelhiveryOrderEvent } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
@@ -79,11 +80,7 @@ export async function GET(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to generate Delhivery shipping label.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to generate Delhivery shipping label.");
     }
 
     return serverError("Unable to generate Delhivery shipping label.", error);

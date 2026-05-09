@@ -62,7 +62,7 @@ function getCustomerDetails(order: AdminOrder, profile?: ProfileDto): {
 }
 
 export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | AdminOrder["status"]>("all");
   const [userProfilesById, setUserProfilesById] = useState<Record<string, ProfileDto>>({});
@@ -127,14 +127,14 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
         <div className="flex items-center rounded-full border border-border bg-background px-4 py-2 text-sm text-[#5f5047]">
           {sorted.length} orders • {pendingCount} pending
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
+        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+          <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" className="min-w-26 justify-center" onClick={() => setViewMode("list")}>
             <List className="h-4 w-4" /> List
           </Button>
-          <Button variant={viewMode === "grid" ? "default" : "outline"} size="sm" onClick={() => setViewMode("grid")}>
+          <Button variant={viewMode === "grid" ? "default" : "outline"} size="sm" className="min-w-26 justify-center" onClick={() => setViewMode("grid")}>
             <LayoutGrid className="h-4 w-4" /> Grid
           </Button>
-          <Button variant={viewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setViewMode("table")}>
+          <Button variant={viewMode === "table" ? "default" : "outline"} size="sm" className="min-w-26 justify-center" onClick={() => setViewMode("table")}>
             <Table2 className="h-4 w-4" /> Table
           </Button>
         </div>
@@ -187,7 +187,7 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                       </td>
                       <td className="px-3 py-2.5">₹{order.totalAmount}</td>
                       <td className="px-3 py-2.5 text-muted-foreground">{new Date(order.createdAt).toLocaleString()}</td>
-                      <td className="px-3 py-2.5"><div className="flex justify-end"><OrderRowActions order={order} /></div></td>
+                      <td className="px-3 py-2.5"><div className="flex min-w-[18rem] justify-end"><OrderRowActions order={order} compactShipmentActions /></div></td>
                     </tr>
                   );
                 })}
@@ -202,8 +202,8 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
             const customer = getCustomerDetails(order, profile);
             return (
               <Card key={order.id} className="border-border/70 bg-background/80">
-                <CardContent className="flex min-h-32 items-start justify-between gap-3 p-3.5">
-                  <div className="space-y-1.5">
+                <CardContent className="flex min-h-32 flex-col items-start justify-between gap-4 p-3.5 md:flex-row">
+                  <div className="min-w-0 space-y-1.5">
                     <p className="font-semibold">{order.id}</p>
                     <p className="text-sm text-[#5f5047]">{customer.name} • Qty {order.quantity}</p>
                     <p className="text-xs text-[#74655c]">{customer.email ?? "No email"} • {customer.phone ?? "No phone"}</p>
@@ -213,10 +213,10 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                     {customer.address ? <p className="text-xs text-[#74655c] line-clamp-2">{customer.address}</p> : null}
                     <CustomizationPreview customization={order.customization} />
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex w-full flex-col items-start gap-2 md:w-auto md:items-end">
                     <Badge variant="secondary">{order.status}</Badge>
                     <p className="font-semibold">₹{order.totalAmount}</p>
-                    <OrderRowActions order={order} />
+                    <OrderRowActions order={order} compactShipmentActions />
                   </div>
                 </CardContent>
               </Card>
@@ -240,7 +240,7 @@ export function OrdersClient({ orders }: { orders: AdminOrder[] }) {
                   <p className="text-xs text-[#74655c]">{(order.shippingProvider ?? "delhivery").toUpperCase()} · {order.shippingProviderStatus ?? "pending-shipment"}</p>
                   <CustomizationPreview customization={order.customization} />
                   <p className="font-semibold">₹{order.totalAmount}</p>
-                  <div className="mt-auto"><OrderRowActions order={order} /></div>
+                  <div className="mt-auto"><OrderRowActions order={order} compactShipmentActions /></div>
                 </CardContent>
               </Card>
             );
@@ -278,7 +278,7 @@ function CustomizationPreview({ customization }: { customization?: AdminOrder["c
   );
 }
 
-function OrderRowActions({ order }: { order: AdminOrder }) {
+function OrderRowActions({ order, compactShipmentActions = false }: { order: AdminOrder; compactShipmentActions?: boolean }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [status, setStatus] = useState<AdminOrder["status"]>(order.status);
@@ -328,7 +328,7 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex max-w-full flex-wrap gap-2">
       <Button asChild size="sm" variant="outline">
         <Link href={`/admin/orders/${encodeURIComponent(order.id)}`}>
           <Eye className="h-4 w-4" /> View
@@ -357,7 +357,7 @@ function OrderRowActions({ order }: { order: AdminOrder }) {
         </DialogContent>
       </Dialog>
 
-      <AdminOrderShipmentActions order={order} />
+      <AdminOrderShipmentActions order={order} compact={compactShipmentActions} className="max-w-full" />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogTrigger asChild><Button size="sm" variant="destructive"><Trash2 className="h-4 w-4" /> Delete</Button></DialogTrigger>

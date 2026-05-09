@@ -1,4 +1,5 @@
 import { badRequest, ok, serverError } from "@/lib/api-response";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
 import { checkDelhiveryServiceability, DelhiveryApiError, isDelhiveryConfigured } from "@/lib/server/delhivery-service";
 
 export const runtime = "nodejs";
@@ -19,11 +20,7 @@ export async function GET(request: Request) {
     return ok(result);
   } catch (error) {
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to check Delhivery serviceability.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to check Delhivery serviceability.");
     }
     return serverError("Unable to check Delhivery serviceability.", error);
   }

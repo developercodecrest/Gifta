@@ -12,6 +12,19 @@ type AuthUserDoc = {
   role?: string;
 };
 
+type StoreDoc = {
+  _id?: ObjectId;
+  id: string;
+  name: string;
+  ownerUserId?: string;
+  details?: {
+    owner?: {
+      fullName?: string;
+      email?: string;
+    };
+  };
+};
+
 type OrderDoc = AdminOrderDto & {
   _id?: ObjectId;
   customerUserObjectId?: ObjectId;
@@ -46,7 +59,16 @@ type SyncOrderLifecycleEventInput = {
   message?: string;
   adminTitle?: string;
   adminMessage?: string;
+  notifyCustomer?: boolean;
+  notifyStoreOwners?: boolean;
+  notifyAdmins?: boolean;
   silent?: boolean;
+};
+
+type Recipient = {
+  userId?: string;
+  email: string;
+  fullName: string;
 };
 
 type OrderSummary = {
@@ -56,6 +78,7 @@ type OrderSummary = {
   customerEmail?: string;
   totalAmount: number;
   itemCount: number;
+  storeRecipients: Recipient[];
 };
 
 type NotificationTemplate = {
@@ -95,11 +118,12 @@ async function getCollections() {
     events: db.collection<OrderNotificationEventDoc>("order_notification_events"),
     orders: db.collection<OrderDoc>("orders"),
     users: db.collection<AuthUserDoc>("users"),
+    stores: db.collection<StoreDoc>("stores"),
   };
 }
 
 async function loadOrderSummary(orderRef: string) {
-  const { orders, users } = await getCollections();
+  const { orders, users, stores } = await getCollections();
   const orderRows = await orders.find({ orderRef }).sort({ createdAt: 1 }).toArray();
   if (!orderRows.length) {
     return null;
@@ -110,6 +134,39 @@ async function loadOrderSummary(orderRef: string) {
     ? new ObjectId(primaryOrder.customerUserId)
     : null;
   const customerUser = userObjectId ? await users.findOne({ _id: userObjectId }) : null;
+  const storeIds = Array.from(new Set(orderRows.map((row) => row.storeId?.trim()).filter((value): value is string => Boolean(value))));
+  const storeDocs = storeIds.length
+    ? await stores.find({ id: { $in: storeIds } }, { projection: { id: 1, name: 1, ownerUserId: 1, details: 1 } }).toArray()
+    : [];
+  const ownerObjectIds = Array.from(new Set(
+    storeDocs
+      .map((store) => store.ownerUserId?.trim())
+      .filter((value): value is string => Boolean(value) && ObjectId.isValid(value))
+      .map((value) => new ObjectId(value).toHexString()),
+  )).map((value) => new ObjectId(value));
+  const ownerUsers = ownerObjectIds.length
+    ? await users.find({ _id: { $in: ownerObjectIds } }, { projection: { email: 1, fullName: 1 } }).toArray()
+    : [];
+  const ownerUsersById = new Map(ownerUsers.map((entry) => [entry._id?.toHexString(), entry]));
+  const storeRecipients = Array.from(
+    new Map(
+      storeDocs.flatMap((store) => {
+        const ownerUser = store.ownerUserId ? ownerUsersById.get(store.ownerUserId) : null;
+        const email = ownerUser?.email?.trim().toLowerCase() || store.details?.owner?.email?.trim().toLowerCase() || "";
+
+        if (!email) {
+          return [];
+        }
+
+        const fullName = ownerUser?.fullName?.trim() || store.details?.owner?.fullName?.trim() || `${store.name} Owner`;
+        return [[email, {
+          userId: ownerUser?._id?.toHexString(),
+          email,
+          fullName,
+        } satisfies Recipient]];
+      }),
+    ).values(),
+  );
 
   return {
     orderRef,
@@ -118,6 +175,7 @@ async function loadOrderSummary(orderRef: string) {
     customerEmail: primaryOrder.customerEmail ?? customerUser?.email,
     totalAmount: orderRows.reduce((sum, row) => sum + (Number.isFinite(row.totalAmount) ? row.totalAmount : 0), 0),
     itemCount: orderRows.reduce((sum, row) => sum + Math.max(0, row.quantity ?? 0), 0),
+    storeRecipients,
   } satisfies OrderSummary;
 }
 
@@ -235,6 +293,9 @@ async function sendLifecycleEmails(input: {
   customerMessage: string;
   adminTitle: string;
   adminMessage: string;
+  notifyCustomer: boolean;
+  notifyStoreOwners: boolean;
+  notifyAdmins: boolean;
 }) {
   const from = process.env.EMAIL_FROM?.trim();
   if (!from) {
@@ -247,7 +308,7 @@ async function sendLifecycleEmails(input: {
 
   const jobs: Array<Promise<unknown>> = [];
 
-  if (customerEmail && !customerEmail.endsWith("@gifta.local")) {
+  if (input.notifyCustomer && customerEmail && !customerEmail.endsWith("@gifta.local")) {
     jobs.push(
       transporter.sendMail({
         from,
@@ -259,16 +320,36 @@ async function sendLifecycleEmails(input: {
     );
   }
 
-  for (const recipient of adminRecipients) {
-    jobs.push(
-      transporter.sendMail({
-        from,
-        to: recipient.email,
-        subject: `[Gifta Admin] ${input.adminTitle}`,
-        text: `${input.adminMessage}\n\nOrder Ref: ${input.summary.orderRef}`,
-        html: `<p>${input.adminMessage}</p><p><strong>Order Ref:</strong> ${input.summary.orderRef}</p>`,
-      }),
-    );
+  if (input.notifyStoreOwners) {
+    for (const recipient of input.summary.storeRecipients) {
+      if (recipient.email.endsWith("@gifta.local")) {
+        continue;
+      }
+
+      jobs.push(
+        transporter.sendMail({
+          from,
+          to: recipient.email,
+          subject: `[Gifta Store] ${input.adminTitle}`,
+          text: `${input.adminMessage}\n\nOrder Ref: ${input.summary.orderRef}`,
+          html: `<p>${input.adminMessage}</p><p><strong>Order Ref:</strong> ${input.summary.orderRef}</p>`,
+        }),
+      );
+    }
+  }
+
+  if (input.notifyAdmins) {
+    for (const recipient of adminRecipients) {
+      jobs.push(
+        transporter.sendMail({
+          from,
+          to: recipient.email,
+          subject: `[Gifta Admin] ${input.adminTitle}`,
+          text: `${input.adminMessage}\n\nOrder Ref: ${input.summary.orderRef}`,
+          html: `<p>${input.adminMessage}</p><p><strong>Order Ref:</strong> ${input.summary.orderRef}</p>`,
+        }),
+      );
+    }
   }
 
   if (jobs.length) {
@@ -284,10 +365,13 @@ async function publishLifecyclePushNotifications(input: {
   adminTitle: string;
   adminMessage: string;
   eventType: string;
+  notifyCustomer: boolean;
+  notifyStoreOwners: boolean;
+  notifyAdmins: boolean;
 }) {
   const notificationId = `${input.notificationType === "payment" ? "pay" : "ord"}-${input.summary.orderRef}-${toSlug(input.eventType)}`;
 
-  if (input.summary.customerUserId) {
+  if (input.notifyCustomer && input.summary.customerUserId) {
     await publishUserNotification(input.summary.customerUserId, {
       id: notificationId,
       type: input.notificationType,
@@ -297,22 +381,42 @@ async function publishLifecyclePushNotifications(input: {
     }).catch(() => undefined);
   }
 
-  const adminRecipients = await getAdminRecipients();
-  await Promise.all(
-    adminRecipients.map(async (recipient) => {
-      if (!recipient.userId) {
-        return;
-      }
+  if (input.notifyStoreOwners) {
+    await Promise.all(
+      input.summary.storeRecipients.map(async (recipient) => {
+        if (!recipient.userId) {
+          return;
+        }
 
-      await publishUserNotification(recipient.userId, {
-        id: notificationId,
-        type: input.notificationType,
-        title: input.adminTitle,
-        message: input.adminMessage,
-        orderRef: input.summary.orderRef,
-      }).catch(() => undefined);
-    }),
-  );
+        await publishUserNotification(recipient.userId, {
+          id: notificationId,
+          type: input.notificationType,
+          title: input.adminTitle,
+          message: input.adminMessage,
+          orderRef: input.summary.orderRef,
+        }).catch(() => undefined);
+      }),
+    );
+  }
+
+  if (input.notifyAdmins) {
+    const adminRecipients = await getAdminRecipients();
+    await Promise.all(
+      adminRecipients.map(async (recipient) => {
+        if (!recipient.userId) {
+          return;
+        }
+
+        await publishUserNotification(recipient.userId, {
+          id: notificationId,
+          type: input.notificationType,
+          title: input.adminTitle,
+          message: input.adminMessage,
+          orderRef: input.summary.orderRef,
+        }).catch(() => undefined);
+      }),
+    );
+  }
 }
 
 export async function syncOrderLifecycleEvent(input: SyncOrderLifecycleEventInput) {
@@ -335,6 +439,10 @@ export async function syncOrderLifecycleEvent(input: SyncOrderLifecycleEventInpu
   const adminTitle = input.adminTitle?.trim() || defaults.adminTitle;
   const adminMessage = input.adminMessage?.trim() || defaults.adminMessage;
   const notificationType = input.notificationType ?? defaults.notificationType;
+  const defaultStoreOwnerNotification = /^(order|shipping)-/i.test(input.eventType.trim());
+  const notifyCustomer = input.notifyCustomer ?? true;
+  const notifyStoreOwners = input.notifyStoreOwners ?? defaultStoreOwnerNotification;
+  const notifyAdmins = input.notifyAdmins ?? true;
   const eventKey = `${input.orderRef}:${toSlug(input.eventType)}`;
 
   const { events } = await getCollections();
@@ -384,6 +492,9 @@ export async function syncOrderLifecycleEvent(input: SyncOrderLifecycleEventInpu
     customerMessage: message,
     adminTitle,
     adminMessage,
+    notifyCustomer,
+    notifyStoreOwners,
+    notifyAdmins,
   }).catch(() => undefined);
 
   await publishLifecyclePushNotifications({
@@ -394,6 +505,9 @@ export async function syncOrderLifecycleEvent(input: SyncOrderLifecycleEventInpu
     adminTitle,
     adminMessage,
     eventType: input.eventType,
+    notifyCustomer,
+    notifyStoreOwners,
+    notifyAdmins,
   }).catch(() => undefined);
 
   return { eventInserted: true, orderRef: input.orderRef, reason: "OK" as const };

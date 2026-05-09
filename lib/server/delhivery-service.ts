@@ -23,6 +23,8 @@ type DelhiveryConfig = {
   pincodePath: string;
   shipmentCreatePath: string;
   pickupRequestPath: string;
+  warehouseCreatePath: string;
+  warehouseEditPath: string;
   waybillPath: string;
   waybillFetchPath: string;
   labelPath: string;
@@ -171,6 +173,22 @@ export type DelhiveryPickupScheduleResult = {
   raw: unknown;
 };
 
+type DelhiveryWarehouseRequest = {
+  name: string;
+  registered_name?: string;
+  phone: string;
+  email?: string;
+  address: string;
+  city: string;
+  pin: string;
+  country: string;
+  return_address: string;
+  return_city: string;
+  return_pin: string;
+  return_state: string;
+  return_country: string;
+};
+
 function shouldBypassServiceabilityAuthFailure() {
   const explicit = process.env.DELHIVERY_BYPASS_SERVICEABILITY_ON_AUTH_FAILURE?.trim().toLowerCase();
   if (explicit === "true") {
@@ -188,8 +206,18 @@ type StoreDoc = {
   id: string;
   name: string;
   details?: {
+    owner?: {
+      fullName?: string;
+      email?: string;
+      phone?: string;
+    };
+    business?: {
+      legalName?: string;
+    };
     location?: {
       addressLine1?: string;
+      addressLine2?: string;
+      landmark?: string;
       city?: string;
       state?: string;
       pincode?: string;
@@ -313,6 +341,8 @@ export function getDelhiveryConfig(): DelhiveryConfig {
     pincodePath: (process.env.DELHIVERY_PINCODE_PATH ?? "/c/api/pin-codes/json/").trim(),
     shipmentCreatePath: (process.env.DELHIVERY_SHIPMENT_CREATE_PATH ?? "/api/cmu/create.json").trim(),
     pickupRequestPath: (process.env.DELHIVERY_PICKUP_REQUEST_PATH ?? "/fm/request/new/").trim(),
+    warehouseCreatePath: (process.env.DELHIVERY_WAREHOUSE_CREATE_PATH ?? "/api/backend/clientwarehouse/create/").trim(),
+    warehouseEditPath: (process.env.DELHIVERY_WAREHOUSE_EDIT_PATH ?? "/api/backend/clientwarehouse/edit/").trim(),
     waybillPath: (process.env.DELHIVERY_WAYBILL_PATH ?? "/waybill/api/bulk/json/").trim(),
     waybillFetchPath: (process.env.DELHIVERY_WAYBILL_FETCH_PATH ?? "/waybill/api/fetch/json/").trim(),
     labelPath: (process.env.DELHIVERY_LABEL_PATH ?? "/api/p/packing_slip").trim(),
@@ -1021,14 +1051,6 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
     }
 
     const store = storeId === "direct" ? null : await stores.findOne({ id: storeId });
-    const pickup = resolvePickupAddress(store);
-    const pickupLocationName = resolvePickupLocationName(store, storeId);
-
-    if (!pickup) {
-      await applyShipmentFailure(rows, "Missing vendor pickup address for Delhivery fulfillment.");
-      failedStores += 1;
-      continue;
-    }
 
     const amount = rows.reduce((sum, row) => sum + (row.totalAmount || 0), 0);
     const totalQuantity = rows.reduce((sum, row) => sum + (row.quantity || 0), 0);
@@ -1039,18 +1061,23 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
     } satisfies ShippingPackageSnapshot;
 
     try {
+      const { pickupAddress, pickupLocationName } = await ensureDelhiveryWarehouseRegistered({
+        store,
+        storeId,
+      });
+
       const shipmentRequest = {
         orderRef,
         storeId,
         amount,
         paymentMethod: first.paymentMethod ?? "cod",
-        pickup,
+        pickup: pickupAddress,
         pickupLocationName,
         destination,
         packageDetails,
         productsDescription: rows.map((row) => row.productId).filter(Boolean).join(", "),
-        sellerName: store?.name ?? pickup.receiverName,
-        sellerAddress: pickup.line1,
+        sellerName: store?.name ?? pickupAddress.receiverName,
+        sellerAddress: pickupAddress.line1,
       } satisfies ShipmentCreateInput;
 
       const shipment = await createDelhiveryShipment({
@@ -1070,7 +1097,7 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
           ...(shipment.awb ? { shippingAwb: shipment.awb } : {}),
           ...(shipment.shipmentId ? { shippingShipmentId: shipment.shipmentId } : {}),
           ...(shipment.pickupRequestId ? { shippingPickupRequestId: shipment.pickupRequestId } : {}),
-          pickupAddress: pickup,
+          pickupAddress: pickupAddress,
           shippingPackage: packageDetails,
         },
         unset: ["shippingError"],
@@ -1084,8 +1111,6 @@ export async function createShipmentForOrderRef(orderRef: string): Promise<Fulfi
         storeId,
         amount,
         paymentMethod: first.paymentMethod ?? "cod",
-        pickup,
-        pickupLocationName,
         destination,
         packageDetails,
       });
@@ -1144,7 +1169,12 @@ export async function trackDelhiveryShipment(input: { awb?: string; orderRef?: s
 
   const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new Error(`Delhivery tracking API failed (${response.status}).`);
+    throw buildDelhiveryApiError(
+      response,
+      body,
+      "Unable to fetch Delhivery tracking.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_TRACKING_FAILED",
+    );
   }
 
   const events = extractTrackingEvents(body);
@@ -1292,7 +1322,9 @@ export async function applyDelhiveryWebhookUpdate(payload: Record<string, unknow
           message: description || `Order ${entry.orderRef} status changed to ${status}.`,
           adminTitle: description ? "Shipping update" : undefined,
           adminMessage: description || `Order ${entry.orderRef} status changed to ${status}.`,
-          silent: !mappedOrderStatus,
+          notifyCustomer: Boolean(mappedOrderStatus),
+          notifyStoreOwners: true,
+          notifyAdmins: true,
         }).catch(() => undefined);
       }),
     );
@@ -1398,12 +1430,15 @@ export async function updateDelhiveryShipmentByWaybill(input: {
 
   const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new DelhiveryApiError(`Delhivery shipment update failed (${response.status}).`, {
-      status: response.status,
+    throw buildDelhiveryApiError(
+      response,
       body,
-      code: response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_SHIPMENT_UPDATE_FAILED",
-    });
+      "Unable to update Delhivery shipment.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_SHIPMENT_UPDATE_FAILED",
+    );
   }
+
+  assertDelhiveryBusinessSuccess(body, "Unable to update Delhivery shipment.", "DELHIVERY_SHIPMENT_UPDATE_FAILED");
 
   return {
     operation: "update",
@@ -1435,12 +1470,15 @@ export async function cancelDelhiveryShipmentByWaybill(waybillInput: string) {
 
   const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new DelhiveryApiError(`Delhivery shipment cancellation failed (${response.status}).`, {
-      status: response.status,
+    throw buildDelhiveryApiError(
+      response,
       body,
-      code: response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_SHIPMENT_CANCEL_FAILED",
-    });
+      "Unable to cancel Delhivery shipment.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_SHIPMENT_CANCEL_FAILED",
+    );
   }
+
+  assertDelhiveryBusinessSuccess(body, "Unable to cancel Delhivery shipment.", "DELHIVERY_SHIPMENT_CANCEL_FAILED");
 
   return {
     operation: "cancel",
@@ -1481,12 +1519,15 @@ export async function updateDelhiveryEwaybill(input: {
 
   const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new DelhiveryApiError(`Delhivery e-waybill update failed (${response.status}).`, {
-      status: response.status,
+    throw buildDelhiveryApiError(
+      response,
       body,
-      code: response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_EWAYBILL_UPDATE_FAILED",
-    });
+      "Unable to update Delhivery e-waybill.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_EWAYBILL_UPDATE_FAILED",
+    );
   }
+
+  assertDelhiveryBusinessSuccess(body, "Unable to update Delhivery e-waybill.", "DELHIVERY_EWAYBILL_UPDATE_FAILED");
 
   return {
     operation: "update",
@@ -1525,12 +1566,15 @@ export async function generateDelhiveryShippingLabel(input: {
 
   const body = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new DelhiveryApiError(`Delhivery shipping label generation failed (${response.status}).`, {
-      status: response.status,
+    throw buildDelhiveryApiError(
+      response,
       body,
-      code: response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_LABEL_FAILED",
-    });
+      "Unable to generate Delhivery shipping label.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_LABEL_FAILED",
+    );
   }
+
+  assertDelhiveryBusinessSuccess(body, "Unable to generate Delhivery shipping label.", "DELHIVERY_LABEL_FAILED");
 
   const labelUrl = findFirstUrl(body);
 
@@ -1710,12 +1754,15 @@ export async function scheduleDelhiveryPickup(input: {
 
   const data = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new DelhiveryApiError(`Unable to create Delhivery pickup request (${response.status}).`, {
-      status: response.status,
-      body: data,
-      code: response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_PICKUP_FAILED",
-    });
+    throw buildDelhiveryApiError(
+      response,
+      data,
+      "Unable to schedule Delhivery pickup.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_PICKUP_FAILED",
+    );
   }
+
+  assertDelhiveryBusinessSuccess(data, "Unable to schedule Delhivery pickup.", "DELHIVERY_PICKUP_FAILED");
 
   return {
     pickupLocation,
@@ -1727,6 +1774,164 @@ export async function scheduleDelhiveryPickup(input: {
       ?? extractFirstString(data, ["id"]),
     raw: data,
   } satisfies DelhiveryPickupScheduleResult;
+}
+
+export async function ensureDelhiveryWarehouseForStore(input: {
+  storeId: string;
+  pickupLocationName?: string;
+  pickupAddress?: ShippingAddressSnapshot | null;
+}) {
+  const store = await getDelhiveryStoreDoc(input.storeId);
+
+  return ensureDelhiveryWarehouseRegistered({
+    store,
+    storeId: input.storeId,
+    pickupAddress: input.pickupAddress,
+    pickupLocationName: input.pickupLocationName,
+  });
+}
+
+async function ensureDelhiveryWarehouseRegistered(input: {
+  store: StoreDoc | null;
+  storeId: string;
+  pickupAddress?: ShippingAddressSnapshot | null;
+  pickupLocationName?: string;
+}) {
+  const pickupAddress = mergeShippingAddressSnapshots(input.pickupAddress, resolvePickupAddress(input.store));
+  if (!pickupAddress) {
+    throw new Error("Missing vendor pickup address for Delhivery fulfillment.");
+  }
+
+  const pickupLocationName = resolvePickupLocationName(input.store, input.storeId, input.pickupLocationName);
+  const warehouseRequest = buildDelhiveryWarehouseRequest({
+    store: input.store,
+    storeId: input.storeId,
+    pickupAddress,
+    pickupLocationName,
+  });
+
+  try {
+    await createDelhiveryWarehouse(warehouseRequest);
+  } catch (error) {
+    if (!(error instanceof DelhiveryApiError) || !isDelhiveryWarehouseAlreadyExistsError(error.body)) {
+      throw error;
+    }
+
+    await editDelhiveryWarehouse({
+      name: warehouseRequest.name,
+      pin: warehouseRequest.pin,
+      address: warehouseRequest.address,
+      phone: warehouseRequest.phone,
+    });
+  }
+
+  return {
+    pickupAddress,
+    pickupLocationName,
+  };
+}
+
+async function createDelhiveryWarehouse(payload: DelhiveryWarehouseRequest) {
+  const config = getDelhiveryConfig();
+  const response = await fetch(`${config.baseUrl}${config.warehouseCreatePath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${config.token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  const data = await parseDelhiveryResponseBody(response);
+  if (!response.ok) {
+    throw buildDelhiveryApiError(
+      response,
+      data,
+      "Unable to register Delhivery pickup location.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_WAREHOUSE_CREATE_FAILED",
+    );
+  }
+
+  assertDelhiveryBusinessSuccess(data, "Unable to register Delhivery pickup location.", "DELHIVERY_WAREHOUSE_CREATE_FAILED");
+
+  return {
+    raw: data,
+  };
+}
+
+async function editDelhiveryWarehouse(input: {
+  name: string;
+  pin: string;
+  address?: string;
+  phone?: string;
+}) {
+  const config = getDelhiveryConfig();
+  const response = await fetch(`${config.baseUrl}${config.warehouseEditPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${config.token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: input.name,
+      pin: input.pin,
+      ...(input.address ? { address: input.address } : {}),
+      ...(input.phone ? { phone: input.phone } : {}),
+    }),
+    cache: "no-store",
+  });
+
+  const data = await parseDelhiveryResponseBody(response);
+  if (!response.ok) {
+    throw buildDelhiveryApiError(
+      response,
+      data,
+      "Unable to update Delhivery pickup location.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_WAREHOUSE_EDIT_FAILED",
+    );
+  }
+
+  assertDelhiveryBusinessSuccess(data, "Unable to update Delhivery pickup location.", "DELHIVERY_WAREHOUSE_EDIT_FAILED");
+
+  return {
+    raw: data,
+  };
+}
+
+function buildDelhiveryWarehouseRequest(input: {
+  store: StoreDoc | null;
+  storeId: string;
+  pickupAddress: ShippingAddressSnapshot;
+  pickupLocationName: string;
+}): DelhiveryWarehouseRequest {
+  const address = resolveStoreLocationAddress(input.store, input.pickupAddress.line1);
+  const phone = resolveStoreOwnerPhone(input.store) || input.pickupAddress.receiverPhone?.trim() || "";
+
+  if (!phone) {
+    throw new Error(`Store ${input.store?.name ?? input.storeId} is missing a pickup contact phone. Update the vendor owner phone before requesting Delhivery pickup.`);
+  }
+
+  const registeredName = resolveStoreRegisteredName(input.store);
+  const email = resolveStoreOwnerEmail(input.store);
+
+  return {
+    name: input.pickupLocationName,
+    ...(registeredName ? { registered_name: registeredName } : {}),
+    phone,
+    ...(email ? { email } : {}),
+    address,
+    city: input.pickupAddress.city,
+    pin: input.pickupAddress.pinCode,
+    country: input.pickupAddress.country || "India",
+    return_address: address,
+    return_city: input.pickupAddress.city,
+    return_pin: input.pickupAddress.pinCode,
+    return_state: input.pickupAddress.state,
+    return_country: input.pickupAddress.country || "India",
+  };
 }
 
 async function createDelhiveryShipment(input: ShipmentCreateInput): Promise<ShipmentCreateResult> {
@@ -1801,8 +2006,15 @@ async function createDelhiveryShipment(input: ShipmentCreateInput): Promise<Ship
 
   const data = await parseDelhiveryResponseBody(response);
   if (!response.ok) {
-    throw new Error(`Delhivery shipment API failed (${response.status}).`);
+    throw buildDelhiveryApiError(
+      response,
+      data,
+      "Unable to create Delhivery shipment.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_SHIPMENT_CREATE_FAILED",
+    );
   }
+
+  assertDelhiveryBusinessSuccess(data, "Unable to create Delhivery shipment.", "DELHIVERY_SHIPMENT_CREATE_FAILED");
 
   const awb = extractFirstString(data, ["packages", 0, "waybill"])
     ?? extractFirstString(data, ["packages", 0, "awb"])
@@ -1868,17 +2080,21 @@ function resolvePickupAddress(store: StoreDoc | null): ShippingAddressSnapshot |
   }
 
   return {
-    line1: location.addressLine1,
+    line1: resolveStoreLocationAddress(store, location.addressLine1),
     city: location.city,
     state: location.state,
     pinCode: location.pincode,
     country: location.country || "India",
     receiverName: store?.name,
-    receiverPhone: "",
+    receiverPhone: resolveStoreOwnerPhone(store) || "",
   };
 }
 
-function resolvePickupLocationName(store: StoreDoc | null, storeId: string) {
+function resolvePickupLocationName(store: StoreDoc | null, storeId: string, preferredName?: string) {
+  if (preferredName?.trim()) {
+    return preferredName.trim();
+  }
+
   const configuredDefault = getDelhiveryConfig().defaultPickupLocationName;
   if (store?.name?.trim()) {
     return store.name.trim();
@@ -1889,6 +2105,69 @@ function resolvePickupLocationName(store: StoreDoc | null, storeId: string) {
   }
 
   return storeId === "direct" ? "Gifta Warehouse" : storeId;
+}
+
+function resolveStoreOwnerPhone(store: StoreDoc | null) {
+  return store?.details?.owner?.phone?.trim() || undefined;
+}
+
+function resolveStoreOwnerEmail(store: StoreDoc | null) {
+  return store?.details?.owner?.email?.trim() || undefined;
+}
+
+function resolveStoreRegisteredName(store: StoreDoc | null) {
+  return store?.details?.business?.legalName?.trim() || store?.name?.trim() || undefined;
+}
+
+function resolveStoreLocationAddress(store: StoreDoc | null, fallbackLine1: string) {
+  const segments = [
+    store?.details?.location?.addressLine1,
+    store?.details?.location?.addressLine2,
+    store?.details?.location?.landmark,
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  return segments.length ? segments.join(", ") : fallbackLine1.trim();
+}
+
+function mergeShippingAddressSnapshots(
+  primary?: ShippingAddressSnapshot | null,
+  fallback?: ShippingAddressSnapshot | null,
+): ShippingAddressSnapshot | null {
+  if (!primary && !fallback) {
+    return null;
+  }
+
+  return {
+    line1: primary?.line1?.trim() || fallback?.line1?.trim() || "",
+    city: primary?.city?.trim() || fallback?.city?.trim() || "",
+    state: primary?.state?.trim() || fallback?.state?.trim() || "",
+    pinCode: primary?.pinCode?.trim() || fallback?.pinCode?.trim() || "",
+    country: primary?.country?.trim() || fallback?.country?.trim() || "India",
+    receiverName: primary?.receiverName?.trim() || fallback?.receiverName?.trim() || undefined,
+    receiverPhone: primary?.receiverPhone?.trim() || fallback?.receiverPhone?.trim() || undefined,
+  };
+}
+
+async function getDelhiveryStoreDoc(storeId: string) {
+  if (!storeId || storeId === "direct") {
+    return null;
+  }
+
+  const db = await getMongoDb();
+  const stores = db.collection<StoreDoc>("stores");
+
+  return stores.findOne(
+    { id: storeId },
+    {
+      projection: {
+        id: 1,
+        name: 1,
+        details: 1,
+      },
+    },
+  );
 }
 
 function mapProviderStatusToOrderStatus(status: string): AdminOrderDto["status"] | null {
@@ -2034,6 +2313,150 @@ function extractString(value: unknown): string | undefined {
     return String(value);
   }
   return undefined;
+}
+
+function buildDelhiveryApiError(response: Response, body: unknown, fallbackMessage: string, code: string) {
+  return new DelhiveryApiError(extractDelhiveryErrorMessage(body, `${fallbackMessage} (${response.status}).`), {
+    status: response.status,
+    body,
+    code,
+  });
+}
+
+function assertDelhiveryBusinessSuccess(payload: unknown, fallbackMessage: string, code: string) {
+  const message = detectDelhiveryBusinessFailure(payload, fallbackMessage);
+  if (!message) {
+    return;
+  }
+
+  throw new DelhiveryApiError(message, {
+    status: 400,
+    body: payload,
+    code,
+  });
+}
+
+function detectDelhiveryBusinessFailure(payload: unknown, fallbackMessage: string) {
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (record.success === false || record.Success === false) {
+    return extractDelhiveryErrorMessage(payload, fallbackMessage);
+  }
+
+  if (typeof record.status === "boolean" && record.status === false) {
+    return extractDelhiveryErrorMessage(payload, fallbackMessage);
+  }
+
+  const status = extractString(record.status ?? record.Status)?.trim();
+  if (status && /^(fail|failure|error)$/i.test(status)) {
+    return extractDelhiveryErrorMessage(payload, fallbackMessage);
+  }
+
+  if (Array.isArray(record.packages)) {
+    for (const entry of record.packages) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const packageRecord = entry as Record<string, unknown>;
+      const packageStatus = extractString(packageRecord.status ?? packageRecord.Status)?.trim();
+      if (packageStatus && /^(fail|failure|error)$/i.test(packageStatus)) {
+        return extractDelhiveryErrorMessage(packageRecord, extractDelhiveryErrorMessage(payload, fallbackMessage));
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isDelhiveryWarehouseAlreadyExistsError(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const codes = Array.isArray(record.error_code)
+    ? record.error_code.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+    : [];
+
+  if (codes.includes(2000)) {
+    return true;
+  }
+
+  return collectDelhiveryMessages(payload).some((message) => /already exists|client-warehouse.+exists/i.test(message));
+}
+
+export function extractDelhiveryErrorMessage(payload: unknown, fallbackMessage = "Delhivery request failed.") {
+  const messages = collectDelhiveryMessages(payload);
+  if (!messages.length) {
+    return fallbackMessage;
+  }
+
+  return messages.join(" ");
+}
+
+function collectDelhiveryMessages(payload: unknown, depth = 0): string[] {
+  if (depth > 5 || payload === null || payload === undefined) {
+    return [];
+  }
+
+  if (typeof payload === "string") {
+    const value = payload.trim();
+    return value ? [value] : [];
+  }
+
+  if (typeof payload === "number" || typeof payload === "boolean") {
+    return [String(payload)];
+  }
+
+  if (Array.isArray(payload)) {
+    return Array.from(new Set(payload.flatMap((entry) => collectDelhiveryMessages(entry, depth + 1))));
+  }
+
+  if (typeof payload !== "object") {
+    return [];
+  }
+
+  const record = payload as Record<string, unknown>;
+  const prioritizedKeys = [
+    "pickup_location",
+    "message",
+    "msg",
+    "error",
+    "errors",
+    "remark",
+    "remarks",
+    "rmk",
+    "detail",
+    "description",
+    "reason",
+    "result",
+    "data",
+  ];
+
+  const messages: string[] = [];
+  for (const key of prioritizedKeys) {
+    if (key in record) {
+      messages.push(...collectDelhiveryMessages(record[key], depth + 1));
+    }
+  }
+
+  if (Array.isArray(record.packages)) {
+    for (const entry of record.packages) {
+      messages.push(...collectDelhiveryMessages(entry, depth + 1));
+    }
+  }
+
+  if (!messages.length) {
+    for (const value of Object.values(record)) {
+      messages.push(...collectDelhiveryMessages(value, depth + 1));
+    }
+  }
+
+  return Array.from(new Set(messages.map((value) => value.trim()).filter(Boolean)));
 }
 
 function extractFirstString(root: unknown, path: Array<string | number>) {

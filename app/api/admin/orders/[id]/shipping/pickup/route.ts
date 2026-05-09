@@ -1,6 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { DelhiveryApiError, isDelhiveryConfigured, recordDelhiveryOrderEvent, scheduleDelhiveryPickup } from "@/lib/server/delhivery-service";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
+import { DelhiveryApiError, ensureDelhiveryWarehouseForStore, isDelhiveryConfigured, recordDelhiveryOrderEvent, scheduleDelhiveryPickup } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
 export const runtime = "nodejs";
@@ -39,12 +40,18 @@ export async function POST(
       return unauthorized("Not allowed");
     }
 
-    const pickupLocation = payload.pickupLocation?.trim() || target.pickupAddress?.receiverName || target.storeId;
+    const requestedPickupLocation = payload.pickupLocation?.trim() || target.pickupAddress?.receiverName || target.storeId;
     const pickupDate = payload.pickupDate?.trim() || new Date().toISOString().slice(0, 10);
     const pickupTime = payload.pickupTime?.trim() || "11:00:00";
     const expectedPackageCount = Math.max(1, Math.floor(payload.expectedPackageCount ?? target.quantity ?? 1));
 
-    if (!pickupLocation) {
+    const { pickupAddress, pickupLocationName } = await ensureDelhiveryWarehouseForStore({
+      storeId: target.storeId,
+      pickupAddress: target.pickupAddress,
+      pickupLocationName: requestedPickupLocation,
+    });
+
+    if (!pickupLocationName) {
       return badRequest("pickupLocation is required.");
     }
 
@@ -57,7 +64,7 @@ export async function POST(
     }
 
     const result = await scheduleDelhiveryPickup({
-      pickupLocation,
+      pickupLocation: pickupLocationName,
       pickupDate,
       pickupTime,
       expectedPackageCount,
@@ -68,9 +75,9 @@ export async function POST(
       orderRef: target.orderRef,
       operation: "pickup-request",
       status: "pickup-requested",
-      description: `Pickup requested for ${pickupDate} ${pickupTime} at ${pickupLocation}`,
+      description: `Pickup requested for ${pickupDate} ${pickupTime} at ${pickupLocationName}`,
       request: {
-        pickupLocation,
+        pickupLocation: pickupLocationName,
         pickupDate,
         pickupTime,
         expectedPackageCount,
@@ -79,6 +86,7 @@ export async function POST(
       raw: result.raw,
       set: {
         ...(result.pickupRequestId ? { shippingPickupRequestId: result.pickupRequestId } : {}),
+        pickupAddress,
         shippingProviderStatus: "pickup-requested",
       },
     });
@@ -100,11 +108,7 @@ export async function POST(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to schedule Delhivery pickup.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to schedule Delhivery pickup.");
     }
 
     return serverError("Unable to schedule Delhivery pickup.", error);

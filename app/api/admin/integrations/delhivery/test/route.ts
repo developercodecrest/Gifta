@@ -1,6 +1,7 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
-import { isDelhiveryConfigured, runDelhiveryDiagnostics } from "@/lib/server/delhivery-service";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
+import { DelhiveryApiError, isDelhiveryConfigured, runDelhiveryDiagnostics } from "@/lib/server/delhivery-service";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,10 @@ export async function GET(request: Request) {
     const diagnostics = await runDelhiveryDiagnostics(pinCode);
     return ok(diagnostics);
   } catch (error) {
+    if (error instanceof DelhiveryApiError) {
+      return respondWithDelhiveryError(error, "Unable to test Delhivery integration.");
+    }
+
     return serverError("Unable to test Delhivery integration.", error);
   }
 }

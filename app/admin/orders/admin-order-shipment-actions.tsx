@@ -65,12 +65,65 @@ type EwaybillFormState = {
   ewbn: string;
 };
 
-async function getApiErrorMessage(response: Response, fallback: string) {
-  const payload = (await response.json().catch(() => ({}))) as {
-    error?: { message?: string };
-  };
+type ApiErrorPayload = {
+  error?: unknown;
+};
 
-  return payload.error?.message ?? fallback;
+async function getApiErrorMessage(response: Response, fallback: string) {
+  const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+  const messages = collectApiMessages(payload.error);
+  return messages[0] ?? fallback;
+}
+
+function collectApiMessages(payload: unknown, depth = 0): string[] {
+  if (depth > 5 || payload === null || payload === undefined) {
+    return [];
+  }
+
+  if (typeof payload === "string") {
+    const value = payload.trim();
+    return value ? [value] : [];
+  }
+
+  if (typeof payload === "number" || typeof payload === "boolean") {
+    return [String(payload)];
+  }
+
+  if (Array.isArray(payload)) {
+    return Array.from(new Set(payload.flatMap((entry) => collectApiMessages(entry, depth + 1))));
+  }
+
+  if (typeof payload !== "object") {
+    return [];
+  }
+
+  const record = payload as Record<string, unknown>;
+  const prioritizedKeys = [
+    "message",
+    "pickup_location",
+    "error",
+    "errors",
+    "details",
+    "upstream",
+    "detail",
+    "reason",
+    "description",
+  ];
+
+  const messages: string[] = [];
+  for (const key of prioritizedKeys) {
+    if (key in record) {
+      messages.push(...collectApiMessages(record[key], depth + 1));
+    }
+  }
+
+  if (!messages.length) {
+    for (const value of Object.values(record)) {
+      messages.push(...collectApiMessages(value, depth + 1));
+    }
+  }
+
+  return Array.from(new Set(messages.map((value) => value.trim()).filter(Boolean)));
 }
 
 function parseDownloadFileName(headerValue: string | null, fallback: string) {
@@ -133,9 +186,11 @@ function normalizePickupTime(value: string) {
 export function AdminOrderShipmentActions({
   order,
   className,
+  compact = false,
 }: {
   order: ShipmentActionOrder;
   className?: string;
+  compact?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,6 +210,9 @@ export function AdminOrderShipmentActions({
   }
 
   const pickupButtonLabel = order.shippingPickupRequestId ? "Pickup Again" : "Request Pickup";
+  const actionButtonClassName = compact ? "w-full justify-start" : undefined;
+  const hasAwb = Boolean(order.shippingAwb?.trim());
+  const missingAwbMessage = "Create / Retry shipment first to generate an AWB. Edit, E-waybill, label, and cancel need an existing shipment.";
   const workflowSteps = [
     "Create / Retry",
     "Edit Ship",
@@ -247,6 +305,11 @@ export function AdminOrderShipmentActions({
   };
 
   const editShipment = async () => {
+    if (!hasAwb) {
+      setEditError(missingAwbMessage);
+      return;
+    }
+
     const name = editForm.name.trim();
     const phone = editForm.phone.trim();
     const add = editForm.add.trim();
@@ -285,6 +348,11 @@ export function AdminOrderShipmentActions({
   };
 
   const cancelShipment = async () => {
+    if (!hasAwb) {
+      setError(missingAwbMessage);
+      return;
+    }
+
     if (!window.confirm("Cancel this Delhivery shipment?")) {
       return;
     }
@@ -309,6 +377,11 @@ export function AdminOrderShipmentActions({
   };
 
   const updateEwaybill = async () => {
+    if (!hasAwb) {
+      setEwaybillError(missingAwbMessage);
+      return;
+    }
+
     const dcn = ewaybillForm.dcn.trim();
     const ewbn = ewaybillForm.ewbn.trim();
 
@@ -340,6 +413,11 @@ export function AdminOrderShipmentActions({
   };
 
   const downloadLabelPdf = async () => {
+    if (!hasAwb) {
+      setError(missingAwbMessage);
+      return;
+    }
+
     beginAction();
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/shipping/label-download?pdfSize=4R`, {
@@ -416,34 +494,51 @@ export function AdminOrderShipmentActions({
   };
 
   return (
-    <div className={cn("w-full space-y-3", className)}>
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#74655c]">
-        <Badge className="bg-[#fff4df] text-[#9e7526] hover:bg-[#fff4df]">Suggested Delhivery flow</Badge>
-        {workflowSteps.map((step, index) => (
-          <span
-            key={`${step}-${index}`}
-            className="rounded-full border border-[#ead8b2] bg-white/80 px-3 py-1 font-medium"
-          >
-            {index + 1}. {step}
-          </span>
-        ))}
-      </div>
+    <div className={cn("w-full space-y-3", compact && "space-y-2", className)}>
+      {compact ? (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#74655c]">
+          <Badge className="bg-[#fff4df] text-[#9e7526] hover:bg-[#fff4df]">
+            {order.shippingProviderStatus ?? "pending-shipment"}
+          </Badge>
+          {order.shippingAwb ? <Badge variant="outline">AWB {order.shippingAwb}</Badge> : null}
+          {order.shippingPickupRequestId ? <Badge variant="outline">Pickup {order.shippingPickupRequestId}</Badge> : null}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#74655c]">
+          <Badge className="bg-[#fff4df] text-[#9e7526] hover:bg-[#fff4df]">Suggested Delhivery flow</Badge>
+          {!hasAwb ? <Badge variant="outline">AWB pending</Badge> : null}
+          {workflowSteps.map((step, index) => (
+            <span
+              key={`${step}-${index}`}
+              className="rounded-full border border-[#ead8b2] bg-white/80 px-3 py-1 font-medium"
+            >
+              {index + 1}. {step}
+            </span>
+          ))}
+        </div>
+      )}
 
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={() => void retryShipment()} disabled={saving}>
+      {!hasAwb ? (
+        <p className="text-xs text-[#8a6a2d]">
+          AWB is not created for this row yet. Use Create / Retry first, then edit, update E-waybill, download label, and cancel will submit normally.
+        </p>
+      ) : null}
+
+      <div className={cn("flex flex-wrap gap-2", compact && "grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3") }>
+        <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => void retryShipment()} disabled={saving}>
           <RefreshCcw className="h-3.5 w-3.5" />
           Create / Retry
         </Button>
 
         <Dialog open={editOpen} onOpenChange={handleEditOpenChange}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={saving || !order.shippingAwb}>
+            <Button size="sm" variant="outline" className={actionButtonClassName} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
               <Pencil className="h-3.5 w-3.5" />
               Edit Ship
             </Button>
           </DialogTrigger>
-          <DialogContent className="overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.9)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-3xl">
-            <div className="relative grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
+          <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.9)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-3xl">
+            <div className="relative grid max-h-[calc(100vh-2rem)] gap-0 overflow-y-auto lg:grid-cols-[0.92fr_1.08fr]">
               <div className="space-y-5 border-b border-[#ead8b2] bg-white/45 p-6 lg:border-b-0 lg:border-r">
                 <DialogHeader className="space-y-3 text-left">
                   <Badge className="w-fit bg-[#cd9933] text-white hover:bg-[#cd9933]">Delhivery shipment edit</Badge>
@@ -471,6 +566,12 @@ export function AdminOrderShipmentActions({
                 <div className="rounded-[1.45rem] border border-dashed border-[#e4cf9e] bg-[#fff9ee] p-4 text-sm text-[#5f5047]">
                   Leave any field blank if it should remain unchanged. At least one field is required before the update can be submitted.
                 </div>
+
+                {!hasAwb ? (
+                  <div className="rounded-[1.45rem] border border-dashed border-[#e4cf9e] bg-[#fff9ee] p-4 text-sm text-[#5f5047]">
+                    This row does not have an AWB yet. Create the shipment first, then apply shipment edits.
+                  </div>
+                ) : null}
               </div>
 
               <form
@@ -545,13 +646,13 @@ export function AdminOrderShipmentActions({
 
         <Dialog open={ewaybillOpen} onOpenChange={handleEwaybillOpenChange}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={saving || !order.shippingAwb}>
+            <Button size="sm" variant="outline" className={actionButtonClassName} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
               <FileText className="h-3.5 w-3.5" />
               Update EWB
             </Button>
           </DialogTrigger>
-          <DialogContent className="overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.9)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-2xl">
-            <div className="relative grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
+          <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.9)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-2xl">
+            <div className="relative grid max-h-[calc(100vh-2rem)] gap-0 overflow-y-auto lg:grid-cols-[0.9fr_1.1fr]">
               <div className="space-y-5 border-b border-[#ead8b2] bg-white/50 p-6 lg:border-b-0 lg:border-r">
                 <DialogHeader className="space-y-3 text-left">
                   <Badge className="w-fit bg-[#cd9933] text-white hover:bg-[#cd9933]">Delhivery e-waybill</Badge>
@@ -578,6 +679,12 @@ export function AdminOrderShipmentActions({
                 <div className="rounded-[1.45rem] border border-dashed border-[#e4cf9e] bg-[#fff9ee] p-4 text-sm text-[#5f5047]">
                   Delhivery requires both values. Use the invoice number as <span className="font-semibold text-foreground">DCN</span> and the transport e-waybill as <span className="font-semibold text-foreground">EWBN</span>.
                 </div>
+
+                {!hasAwb ? (
+                  <div className="rounded-[1.45rem] border border-dashed border-[#e4cf9e] bg-[#fff9ee] p-4 text-sm text-[#5f5047]">
+                    This row does not have an AWB yet. Create the shipment first, then attach invoice and e-waybill details.
+                  </div>
+                ) : null}
               </div>
 
               <form
@@ -626,20 +733,20 @@ export function AdminOrderShipmentActions({
           </DialogContent>
         </Dialog>
 
-        <Button size="sm" variant="outline" onClick={() => void downloadLabelPdf()} disabled={saving || !order.shippingAwb}>
+        <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => void downloadLabelPdf()} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
           <FileDown className="h-3.5 w-3.5" />
           Label PDF
         </Button>
 
         <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={saving}>
+            <Button size="sm" variant="outline" className={actionButtonClassName} disabled={saving}>
               <Truck className="h-3.5 w-3.5" />
               {pickupButtonLabel}
             </Button>
           </DialogTrigger>
-          <DialogContent className="overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.92)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-3xl">
-        <div className="relative">
+          <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden border-[#ead8b2] bg-[linear-gradient(145deg,rgba(255,252,246,0.98),rgba(250,241,221,0.98)_55%,rgba(243,224,185,0.92)_100%)] p-0 shadow-[0_40px_120px_-48px_rgba(116,84,26,0.55)] sm:max-w-3xl">
+        <div className="relative max-h-[calc(100vh-2rem)] overflow-y-auto">
           <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_right,rgba(205,153,51,0.25),transparent_58%)]" />
 
           <div className="relative grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
@@ -808,7 +915,7 @@ export function AdminOrderShipmentActions({
         </Dialog>
 
         {order.shippingAwb ? (
-          <Button asChild size="sm" variant="outline">
+          <Button asChild size="sm" variant="outline" className={actionButtonClassName}>
             <Link
               href={`https://www.delhivery.com/track/package/${encodeURIComponent(order.shippingAwb)}`}
               target="_blank"
@@ -820,7 +927,7 @@ export function AdminOrderShipmentActions({
           </Button>
         ) : null}
 
-        <Button size="sm" variant="destructive" onClick={() => void cancelShipment()} disabled={saving || !order.shippingAwb}>
+        <Button size="sm" variant="destructive" className={actionButtonClassName} onClick={() => void cancelShipment()} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
           <XCircle className="h-3.5 w-3.5" />
           Cancel Ship
         </Button>

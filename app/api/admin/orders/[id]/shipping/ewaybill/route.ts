@@ -1,5 +1,6 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
 import { DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable, recordDelhiveryOrderEvent, updateDelhiveryEwaybill } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
@@ -90,11 +91,7 @@ export async function POST(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to update Delhivery e-waybill.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to update Delhivery e-waybill.");
     }
 
     return serverError("Unable to update Delhivery e-waybill.", error);

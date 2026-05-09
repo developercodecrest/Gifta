@@ -1,5 +1,6 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
 import { DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable, recordDelhiveryOrderEvent, updateDelhiveryShipmentByWaybill } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
@@ -93,11 +94,7 @@ export async function PATCH(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to update Delhivery shipment.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to update Delhivery shipment.");
     }
 
     if (error instanceof Error && error.message.includes("Provide at least one shipment field")) {

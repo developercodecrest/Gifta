@@ -1,5 +1,6 @@
 import { badRequest, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
 import { DelhiveryApiError, downloadDelhiveryShippingLabelPdf, isDelhiveryConfigured, recordDelhiveryOrderEvent } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
@@ -91,11 +92,7 @@ export async function GET(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to download Delhivery shipping label PDF.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to download Delhivery shipping label PDF.");
     }
 
     return serverError("Unable to download Delhivery shipping label PDF.", error);

@@ -1,5 +1,6 @@
 import { badRequest, ok, serverError, unauthorized } from "@/lib/api-response";
 import { authorizeAdminRequest } from "@/lib/server/admin-auth";
+import { respondWithDelhiveryError } from "@/lib/server/delhivery-error-response";
 import { cancelDelhiveryShipmentByWaybill, DelhiveryApiError, isDelhiveryConfigured, isDelhiveryShipmentMutable, recordDelhiveryOrderEvent } from "@/lib/server/delhivery-service";
 import { getAdminOrdersScoped } from "@/lib/server/ecommerce-service";
 
@@ -74,11 +75,7 @@ export async function POST(
     }
 
     if (error instanceof DelhiveryApiError) {
-      return serverError("Unable to cancel Delhivery shipment.", {
-        code: error.code,
-        status: error.status,
-        upstream: error.body,
-      });
+      return respondWithDelhiveryError(error, "Unable to cancel Delhivery shipment.");
     }
 
     return serverError("Unable to cancel Delhivery shipment.", error);
