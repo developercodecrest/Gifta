@@ -91,6 +91,7 @@ export type DelhiveryOrderLifecycleOperation =
   | "ewaybill-update"
   | "label-generate"
   | "label-download"
+  | "document-download"
   | "tracking-sync"
   | "webhook";
 

@@ -138,12 +138,12 @@ async function loadOrderSummary(orderRef: string) {
   const storeDocs = storeIds.length
     ? await stores.find({ id: { $in: storeIds } }, { projection: { id: 1, name: 1, ownerUserId: 1, details: 1 } }).toArray()
     : [];
-  const ownerObjectIds = Array.from(new Set(
-    storeDocs
-      .map((store) => store.ownerUserId?.trim())
-      .filter((value): value is string => Boolean(value) && ObjectId.isValid(value))
-      .map((value) => new ObjectId(value).toHexString()),
-  )).map((value) => new ObjectId(value));
+  const ownerUserIds = storeDocs
+    .map((store) => store.ownerUserId?.trim())
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .filter((value) => ObjectId.isValid(value));
+  const ownerObjectIds = Array.from(new Set(ownerUserIds.map((value) => new ObjectId(value).toHexString())))
+    .map((value) => new ObjectId(value));
   const ownerUsers = ownerObjectIds.length
     ? await users.find({ _id: { $in: ownerObjectIds } }, { projection: { email: 1, fullName: 1 } }).toArray()
     : [];
@@ -151,7 +151,8 @@ async function loadOrderSummary(orderRef: string) {
   const storeRecipients = Array.from(
     new Map(
       storeDocs.flatMap((store) => {
-        const ownerUser = store.ownerUserId ? ownerUsersById.get(store.ownerUserId) : null;
+        const ownerUserId = store.ownerUserId?.trim();
+        const ownerUser = ownerUserId ? ownerUsersById.get(ownerUserId) : null;
         const email = ownerUser?.email?.trim().toLowerCase() || store.details?.owner?.email?.trim().toLowerCase() || "";
 
         if (!email) {

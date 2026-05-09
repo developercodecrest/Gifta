@@ -164,6 +164,26 @@ export type DelhiveryShippingLabelResult = {
   raw: unknown;
 };
 
+export type DelhiveryDocumentType = "SIGNATURE_URL" | "RVP_QC_IMAGE" | "EPOD" | "SELLER_RETURN_IMAGE";
+
+export type DelhiveryPackageDocumentResult = {
+  waybill: string;
+  docType: DelhiveryDocumentType;
+  urls: string[];
+  raw: unknown;
+};
+
+export type DelhiveryDownloadedDocumentResult = {
+  waybill: string;
+  docType: DelhiveryDocumentType;
+  urls: string[];
+  primaryUrl?: string;
+  primaryContentType?: string;
+  primaryContentDisposition?: string;
+  primaryBytes?: ArrayBuffer;
+  raw: unknown;
+};
+
 export type DelhiveryPickupScheduleResult = {
   pickupLocation: string;
   pickupDate: string;
@@ -1222,6 +1242,92 @@ export async function downloadDelhiveryShippingLabelPdf(input: {
     contentType: response.headers.get("content-type")?.trim() || "application/pdf",
     contentDisposition: response.headers.get("content-disposition")?.trim() || undefined,
     bytes: await response.arrayBuffer(),
+  };
+}
+
+export async function fetchDelhiveryPackageDocuments(input: {
+  waybill: string;
+  docType: DelhiveryDocumentType;
+}) {
+  const config = getDelhiveryConfig();
+  const waybill = input.waybill.trim();
+
+  const params = new URLSearchParams({
+    doc_type: input.docType,
+    waybill,
+  });
+
+  const response = await fetch(`${config.baseUrl}/api/rest/fetch/pkg/document/?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Token ${config.token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  const body = await parseDelhiveryResponseBody(response);
+  if (!response.ok) {
+    throw buildDelhiveryApiError(
+      response,
+      body,
+      "Unable to fetch Delhivery package document.",
+      response.status === 401 || response.status === 403 ? "DELHIVERY_AUTH_FAILED" : "DELHIVERY_DOCUMENT_FAILED",
+    );
+  }
+
+  assertDelhiveryBusinessSuccess(body, "Unable to fetch Delhivery package document.", "DELHIVERY_DOCUMENT_FAILED");
+
+  const urls = extractDelhiveryDocumentUrls(body, input.docType);
+  if (!urls.length) {
+    throw new DelhiveryApiError("Delhivery did not return any documents for this waybill.", {
+      status: 404,
+      body,
+      code: "DELHIVERY_DOCUMENT_NOT_FOUND",
+    });
+  }
+
+  return {
+    waybill,
+    docType: input.docType,
+    urls,
+    raw: body,
+  } satisfies DelhiveryPackageDocumentResult;
+}
+
+export async function downloadDelhiveryPackageDocument(input: {
+  waybill: string;
+  docType: DelhiveryDocumentType;
+}): Promise<DelhiveryDownloadedDocumentResult> {
+  const document = await fetchDelhiveryPackageDocuments(input);
+  const primaryUrl = document.urls[0];
+
+  if (!primaryUrl) {
+    return {
+      ...document,
+      primaryUrl: undefined,
+      primaryContentType: undefined,
+      primaryContentDisposition: undefined,
+      primaryBytes: undefined,
+    };
+  }
+
+  const response = await fetch(primaryUrl, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to download Delhivery document (${response.status}).`);
+  }
+
+  return {
+    ...document,
+    primaryUrl,
+    primaryContentType: response.headers.get("content-type")?.trim() || undefined,
+    primaryContentDisposition: response.headers.get("content-disposition")?.trim() || undefined,
+    primaryBytes: await response.arrayBuffer(),
   };
 }
 
@@ -2610,4 +2716,48 @@ function findFirstUrl(payload: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function collectUrls(payload: unknown, urls: string[] = []): string[] {
+  if (!payload) {
+    return urls;
+  }
+
+  if (typeof payload === "string") {
+    if (/^https?:\/\//i.test(payload)) {
+      urls.push(payload);
+    }
+    return urls;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      collectUrls(entry, urls);
+    }
+    return urls;
+  }
+
+  if (typeof payload !== "object") {
+    return urls;
+  }
+
+  for (const value of Object.values(payload as Record<string, unknown>)) {
+    collectUrls(value, urls);
+  }
+
+  return urls;
+}
+
+function extractDelhiveryDocumentUrls(payload: unknown, docType: DelhiveryDocumentType) {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const record = payload as Record<string, unknown>;
+  const data = record.data;
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+
+  return Array.from(new Set(collectUrls((data as Record<string, unknown>)[docType])));
 }

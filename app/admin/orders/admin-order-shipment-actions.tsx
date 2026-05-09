@@ -146,6 +146,14 @@ function triggerBrowserDownload(blob: Blob, fileName: string) {
   URL.revokeObjectURL(objectUrl);
 }
 
+function triggerJsonDownload(data: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json",
+  });
+
+  triggerBrowserDownload(blob, fileName);
+}
+
 function buildDefaultPickupForm(order: ShipmentActionOrder): PickupFormState {
   return {
     pickupLocation: order.pickupAddress?.receiverName ?? order.storeId ?? "",
@@ -183,6 +191,8 @@ function normalizePickupTime(value: string) {
   return value;
 }
 
+type DelhiveryDocumentType = "SIGNATURE_URL" | "RVP_QC_IMAGE" | "EPOD" | "SELLER_RETURN_IMAGE";
+
 export function AdminOrderShipmentActions({
   order,
   className,
@@ -217,7 +227,7 @@ export function AdminOrderShipmentActions({
     "Create / Retry",
     "Edit Ship",
     "Update EWB",
-    "Label PDF",
+    "Shipping Label PDF",
     pickupButtonLabel,
     order.shippingAwb ? "Track" : "Track later",
     "Cancel last",
@@ -440,6 +450,60 @@ export function AdminOrderShipmentActions({
     }
   };
 
+  const downloadLabelData = async () => {
+    if (!hasAwb) {
+      setError(missingAwbMessage);
+      return;
+    }
+
+    beginAction();
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/shipping/label?pdf=false&pdfSize=4R`, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        setError(await getApiErrorMessage(response, "Unable to download shipping label data"));
+        return;
+      }
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        data?: {
+          labelData?: unknown;
+          raw?: unknown;
+        };
+      };
+
+      if (!payload.success) {
+        setError("Unable to download shipping label data");
+        return;
+      }
+
+      triggerJsonDownload(
+        payload.data?.labelData ?? payload.data?.raw ?? payload.data ?? {},
+        `delhivery-label-data-${order.shippingAwb ?? order.id}.json`,
+      );
+    } catch {
+      setError("Unable to download shipping label data");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPackageDocument = (docType: DelhiveryDocumentType) => {
+    if (!hasAwb) {
+      setError(missingAwbMessage);
+      return;
+    }
+
+    window.open(
+      `/api/admin/orders/${order.id}/shipping/document-download?docType=${encodeURIComponent(docType)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
   const schedulePickup = async () => {
     const pickupLocation = pickupForm.pickupLocation.trim();
     const pickupDate = pickupForm.pickupDate.trim();
@@ -521,6 +585,18 @@ export function AdminOrderShipmentActions({
       {!hasAwb ? (
         <p className="text-xs text-[#8a6a2d]">
           AWB is not created for this row yet. Use Create / Retry first, then edit, update E-waybill, download label, and cancel will submit normally.
+        </p>
+      ) : null}
+
+      {hasAwb && !compact ? (
+        <p className="text-xs text-[#74655c]">
+          Shipping Label PDF is the Delhivery AWB label from the packing-slip API. Label Data downloads the raw payload for custom rendering, not a receipt.
+        </p>
+      ) : null}
+
+      {hasAwb && !compact ? (
+        <p className="text-xs text-[#74655c]">
+          EPOD, Signature, and QC Images come from Delhivery's package-document API and are separate from the shipping label.
         </p>
       ) : null}
 
@@ -735,7 +811,27 @@ export function AdminOrderShipmentActions({
 
         <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => void downloadLabelPdf()} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
           <FileDown className="h-3.5 w-3.5" />
-          Label PDF
+          Shipping Label PDF
+        </Button>
+
+        <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => void downloadLabelData()} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
+          <FileText className="h-3.5 w-3.5" />
+          Label Data
+        </Button>
+
+        <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => openPackageDocument("EPOD")} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
+          <FileDown className="h-3.5 w-3.5" />
+          EPOD
+        </Button>
+
+        <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => openPackageDocument("SIGNATURE_URL")} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
+          <FileText className="h-3.5 w-3.5" />
+          Signature
+        </Button>
+
+        <Button size="sm" variant="outline" className={actionButtonClassName} onClick={() => openPackageDocument("RVP_QC_IMAGE")} disabled={saving} title={!hasAwb ? missingAwbMessage : undefined}>
+          <FileText className="h-3.5 w-3.5" />
+          QC Images
         </Button>
 
         <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>

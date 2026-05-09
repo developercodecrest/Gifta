@@ -7,7 +7,6 @@ import {
   RefreshCcw,
   Route,
   Truck,
-  XCircle,
 } from "lucide-react";
 import { ensureAdminAccess } from "@/app/admin/_utils";
 import { AdminHero, AdminSection } from "@/app/admin/_components/admin-surface";
@@ -40,9 +39,9 @@ const actionSequence = [
   },
   {
     step: "04",
-    title: "Download label PDF",
-    description: "Print the shipping label once the shipment payload is correct and the desk is ready.",
-    detail: "This is the clean handoff point for packing, label printing, and pickup staging.",
+    title: "Download shipping label PDF",
+    description: "Print the Delhivery AWB label once the shipment payload is correct and the desk is ready.",
+    detail: "This uses Delhivery's packing-slip API for the printable AWB label, not a receipt or proof-of-delivery document.",
     icon: FileDown,
   },
   {
@@ -79,8 +78,8 @@ const decisionCards = [
   },
   {
     title: "Label desk needs the print file",
-    action: "Download label PDF",
-    description: "Use the proxied PDF download when packaging is complete and the shipment data is already verified.",
+    action: "Download shipping label PDF",
+    description: "Use the proxied AWB label PDF when packaging is complete and the shipment data is already verified.",
   },
   {
     title: "Pickup request was missed",
@@ -134,7 +133,7 @@ export default async function AdminDelhiveryGuidePage() {
 
               return (
                 <div key={entry.step} className="flex items-center gap-3">
-                  <Card className="w-[270px] border-[#ead8b2] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,248,234,0.95))] shadow-[0_24px_60px_-48px_rgba(116,84,26,0.3)]">
+                  <Card className="w-67.5 border-[#ead8b2] bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,248,234,0.95))] shadow-[0_24px_60px_-48px_rgba(116,84,26,0.3)]">
                     <CardContent className="space-y-4 p-5">
                       <div className="flex items-center justify-between gap-3">
                         <Badge className="bg-[#cd9933] text-white hover:bg-[#cd9933]">Step {entry.step}</Badge>

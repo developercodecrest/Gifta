@@ -50,7 +50,9 @@ export async function GET(
       waybill: target.shippingAwb,
       operation: "label-generate",
       status: "label-generated",
-      description: `Shipping label generated in ${pdfSize} format`,
+      description: pdf
+        ? `Shipping label PDF generated in ${pdfSize} format`
+        : `Shipping label data generated for ${pdfSize} format`,
       request: {
         waybill: target.shippingAwb,
         pdf,
