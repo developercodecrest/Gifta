@@ -88,6 +88,41 @@ function randomOtpCode() {
   return String(crypto.randomInt(100000, 1000000));
 }
 
+function getFixedOtpCode() {
+  const value = process.env.OTP_FIXED_CODE?.trim();
+  if (!value || !/^\d{6}$/.test(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function getFixedOtpEmails() {
+  const rawValue = process.env.OTP_FIXED_EMAILS ?? process.env.OTP_FIXED_EMAIL ?? "";
+  return rawValue
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(normalizeEmail);
+}
+
+function resolveOtpCode(email: string) {
+  const fixedOtpCode = getFixedOtpCode();
+  const fixedOtpEmails = getFixedOtpEmails();
+
+  if (fixedOtpCode && fixedOtpEmails.includes(email)) {
+    return {
+      otpCode: fixedOtpCode,
+      usesFixedCode: true,
+    };
+  }
+
+  return {
+    otpCode: randomOtpCode(),
+    usesFixedCode: false,
+  };
+}
+
 export function getTransporter() {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT ?? "587");
@@ -408,7 +443,7 @@ export async function requestOtpForEmail(input: { email: string; ip?: string }) 
     };
   }
 
-  const otpCode = randomOtpCode();
+  const { otpCode, usesFixedCode } = resolveOtpCode(email);
   const codeHash = buildCodeHash(email, otpCode);
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
 
@@ -448,6 +483,7 @@ export async function requestOtpForEmail(input: { email: string; ip?: string }) 
     email: maskEmail(email),
     mode: latestByEmail?._id ? "update" : "insert",
     sendsUsed: sentInWindow + 1,
+    usesFixedCode,
   });
 
   await otpCodes.createIndex({ email: 1, createdAt: -1 });

@@ -41,6 +41,8 @@ SMTP_PORT=587
 SMTP_USER=your-smtp-user
 SMTP_PASS=your-smtp-password
 EMAIL_FROM="Gifta <no-reply@gifta.com>"
+OTP_FIXED_EMAILS=comma-separated-emails-for-fixed-otp
+OTP_FIXED_CODE=123456
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxx
 RAZORPAY_WEBHOOK_SECRET=whsec_test_xxxxxxxxxxxx
@@ -138,6 +140,7 @@ All APIs return an envelope format:
 - Auth.js v5 is configured with:
 	- Google OAuth login
 	- Email OTP login (custom OTP via Nodemailer + MongoDB verification)
+- Optional fixed OTP config is available through `OTP_FIXED_EMAILS` and `OTP_FIXED_CODE` for specific email addresses.
 - Auth route: `/api/auth/[...nextauth]`
 - OTP request route: `POST /api/auth/otp/request`
 - Admin pages are session-protected via `proxy.ts` and server-side role checks.
