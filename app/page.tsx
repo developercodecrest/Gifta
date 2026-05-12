@@ -168,7 +168,7 @@ export default async function Home() {
   });
 
   return (
-    <div className="space-y-8 pb-10 sm:space-y-10 sm:pb-16">
+    <div className="space-y-10 pb-12 sm:space-y-12 sm:pb-16 lg:space-y-14">
       <section className="full-bleed overflow-hidden">
         <HeroSlider />
       </section>
@@ -176,17 +176,17 @@ export default async function Home() {
       <GiftCategoryHeroSection categories={homepageCategories} />
 
       <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Trending now</p>
-            <h2 className="font-display mt-2 text-3xl font-semibold sm:text-4xl">Hot gifts this week</h2>
+            <p className="gc-eyebrow text-primary">Trending now</p>
+            <h2 className="gc-title mt-2 text-3xl sm:text-4xl">Hot gifts this week</h2>
           </div>
-          <Button >
+          <Button asChild>
             <Link href="/products">See trending gifts</Link>
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {effectiveTrending.map((item) => (
             <ProductCard key={`home-${item.id}`} product={item} />
           ))}
@@ -194,17 +194,17 @@ export default async function Home() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Best sellers</p>
-            <h3 className="font-display mt-2 text-3xl font-semibold">Most ordered gifts</h3>
+            <p className="gc-eyebrow text-primary">Best sellers</p>
+            <h3 className="gc-title mt-2 text-3xl">Most ordered gifts</h3>
           </div>
-          <Button >
+          <Button asChild>
             <Link href="/products">View all</Link>
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {effectiveBestSellers.map((item) => (
             <ProductCard key={`rating-${item.id}`} product={item} />
           ))}
@@ -212,17 +212,17 @@ export default async function Home() {
       </section>
 
       <section className="space-y-5 rounded-4xl border border-[#ffb8d4] bg-[linear-gradient(150deg,#fff6fb_0%,#ffe9f4_52%,#ffe0ee_100%)] p-5 shadow-[0_30px_64px_-42px_rgba(255,0,102,0.3)] sm:p-7 lg:p-8">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#ff0066]">Editor&apos;s curation</p>
-            <h3 className="font-display mt-2 text-3xl font-semibold text-[#ff0066] sm:text-4xl">Signature picks this week</h3>
+            <p className="gc-eyebrow text-[#ff0066]">Editor&apos;s curation</p>
+            <h3 className="gc-title mt-2 text-3xl text-[#ff0066] sm:text-4xl">Signature picks this week</h3>
           </div>
-          <Button variant="outline">
-            <Link href="/products?tag=luxury" className="text-white">Explore signature gifts</Link>
+          <Button asChild variant="outline">
+            <Link href="/products?tag=luxury">Explore signature gifts</Link>
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
           {effectiveSignaturePicks.map((item) => (
             <ProductCard key={`editor-${item.id}`} product={item} />
           ))}
@@ -232,11 +232,11 @@ export default async function Home() {
       <section className="relative overflow-hidden rounded-4xl border border-[#f4d9e8] bg-[linear-gradient(120deg,#fffdff_0%,#fff6fb_62%,#ffeff6_100%)] p-6 text-[#111111] shadow-[0_32px_66px_-48px_rgba(136,70,102,0.26)] sm:p-8">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(255,226,239,0.48),transparent_34%),radial-gradient(circle_at_90%_90%,rgba(255,214,232,0.34),transparent_42%)]" />
 
-        <div className="relative grid gap-4 lg:grid-cols-3">
+        <div className="relative grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {giftingPrograms.map((program) => (
             <article
               key={program.id}
-              className="rounded-3xl border border-[#f1d9e6] bg-white/92 p-4 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:bg-white sm:p-5"
+              className="rounded-3xl border border-[#f1d9e6] bg-white/92 p-4 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-[0_24px_42px_-30px_rgba(136,70,102,0.3)] sm:p-5"
             >
               <h3 className="text-lg font-semibold">{program.title}</h3>
               <p className="mt-3 text-sm leading-7 text-[#1f1f1f]">{program.description}</p>
@@ -250,8 +250,8 @@ export default async function Home() {
 
         <div className="relative space-y-6">
           <div className="text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#785017]">Loved by customers</p>
-            <h3 className="font-display mt-2 text-3xl font-semibold text-[#1c1711] sm:text-4xl">What clients say about Gifta</h3>
+            <p className="gc-eyebrow text-[#785017]">Loved by customers</p>
+            <h3 className="gc-title mt-2 text-3xl text-[#1c1711] sm:text-4xl">What clients say about Gifta</h3>
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
               Real feedback from teams using Gifta for celebrations, campaigns, and employee milestones.
             </p>
@@ -293,12 +293,14 @@ export default async function Home() {
 
             <div className="motion-safe:animate-rise flex flex-wrap items-center gap-3 pt-2 [animation-delay:420ms] fill-mode-[both]">
               <Button
+                asChild
                 size="lg"
                 className="h-12 bg-white px-7 text-[#e80067] shadow-[0_16px_34px_-20px_rgba(20,8,14,0.58)] hover:bg-[#ffe8f3]"
               >
                 <Link href="/vendor-onboarding">Register as a vendor</Link>
               </Button>
               <Button
+                asChild
                 size="lg"
                 variant="outline"
                 className="h-12 border-white/40 bg-white/10 px-6 text-white hover:bg-white/18"

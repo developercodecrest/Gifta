@@ -49,34 +49,34 @@ export function HomeItemSections({
     <>
       <section
         aria-label="Collections"
-        className="relative overflow-hidden rounded-[3rem] border border-border/50 bg-card/40 p-6 sm:p-10"
+        className="relative overflow-hidden rounded-[2.5rem] border border-border/50 bg-card/40 p-5 sm:p-8 lg:p-10"
       >
-        <div className="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-secondary/30 blur-3xl" />
+        <div className="absolute -right-32 -top-32 h-64 w-64 rounded-full bg-secondary/40 blur-3xl sm:-right-40 sm:-top-40 sm:h-80 sm:w-80" />
         <div className="relative z-10 space-y-2">
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Collections</p>
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">Curated seasonal picks</h2>
+            <h2 className="font-display text-2xl font-semibold tracking-[-0.03em] sm:text-4xl">Curated seasonal picks</h2>
             <div className="h-px flex-1 bg-gradient-to-r from-border to-transparent" />
           </div>
         </div>
-        <p className="relative z-10 mt-3 text-base text-muted-foreground">Explore signature collections with premium quality, trending styles, and delightful packaging.</p>
+        <p className="relative z-10 mt-3 max-w-2xl text-base text-muted-foreground">Explore signature collections with premium quality, trending styles, and delightful packaging.</p>
         <div className="relative z-10 mt-8 flex flex-wrap gap-3">
           {curatedFilters.map((tag, i) => (
             <button
               key={tag.label}
               type="button"
               onClick={() => setActiveCurated(i)}
-              className={`relative overflow-hidden rounded-full px-6 py-2.5 text-sm font-semibold transition-all duration-300 hover:scale-105 hover:shadow-md ${
+              className={`relative overflow-hidden rounded-full bg-[color:var(--brand-gold)] px-5 py-2.5 text-[0.82rem] font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-[color:var(--brand-gold-strong)] ${
                 i === activeCurated
-                  ? "bg-primary text-primary-foreground shadow-primary/25"
-                  : "bg-background text-foreground ring-1 ring-border/50 hover:bg-secondary hover:ring-border"
+                  ? "opacity-100 shadow-[0_18px_32px_-18px_rgba(205,153,51,0.78)] ring-2 ring-white/80"
+                  : "opacity-80"
               }`}
             >
               {tag.label}
             </button>
           ))}
         </div>
-        <div className="relative z-10 mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative z-10 mt-10 grid gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
           {filteredFeatured.length > 0 ? (
             filteredFeatured.map((item) => <ProductCard key={item.id} product={item} />)
           ) : (
@@ -87,11 +87,11 @@ export function HomeItemSections({
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-[3rem] bg-gradient-to-br from-secondary/30 via-background to-primary/5 p-6 sm:p-10" aria-label="New arrivals">
+      <section className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-secondary/30 via-background to-primary/5 p-5 sm:p-8 lg:p-10" aria-label="New arrivals">
         <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay" />
         <div className="relative z-10 text-center">
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Latest drop</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">New Arrivals</h2>
+          <h2 className="font-display mt-2 text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">New Arrivals</h2>
           <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground">
             Freshly added gifting picks with high ratings, premium finish, and fast delivery options.
           </p>
@@ -102,17 +102,17 @@ export function HomeItemSections({
               key={tag.label}
               type="button"
               onClick={() => setActiveArrivals(i)}
-              className={`relative overflow-hidden rounded-full px-6 py-2.5 text-sm font-semibold transition-all duration-300 hover:scale-105 hover:shadow-md ${
+              className={`relative overflow-hidden rounded-full bg-[color:var(--brand-gold)] px-5 py-2.5 text-[0.82rem] font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-[color:var(--brand-gold-strong)] ${
                 i === activeArrivals
-                  ? "bg-primary text-primary-foreground shadow-primary/25"
-                  : "bg-background text-foreground ring-1 ring-border/50 hover:bg-secondary hover:ring-border"
+                  ? "opacity-100 shadow-[0_18px_32px_-18px_rgba(205,153,51,0.78)] ring-2 ring-white/80"
+                  : "opacity-80"
               }`}
             >
               {tag.label}
             </button>
           ))}
         </div>
-        <div className="relative z-10 mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative z-10 mt-10 grid gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
           {filteredArrivals.length > 0 ? (
             filteredArrivals.map((item) => <ProductCard key={`arrival-${item.id}`} product={item} />)
           ) : (

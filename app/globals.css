@@ -5,23 +5,29 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --brand-gold: #cd9933;
+  --brand-gold-strong: #b8872d;
+  --brand-gold-soft: #f5e2bc;
+  --brand-rose: #e80067;
+  --brand-ink: #2d1f12;
+  --font-mono-stack: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --primary: #9e7526;
+  --primary-foreground: #fffdf9;
+  --secondary: #f8efe1;
+  --secondary-foreground: #4e3617;
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: #fff5e8;
+  --accent-foreground: #4e3617;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: #fff4f3;
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #dab370;
   --radius: 0.625rem;
   --page-gutter: clamp(1rem, 5vw, 5rem);
   --background: oklch(1 0 0);
@@ -96,8 +102,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-exo-2);
+  --font-mono: var(--font-mono-stack);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -120,13 +126,20 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+html {
+  font-size: clamp(15px, 0.18vw + 14.35px, 16.5px);
+  scroll-behavior: smooth;
+}
+
 body {
   background:
     radial-gradient(circle at top left, rgba(224, 188, 108, 0.22), transparent 24%),
     radial-gradient(circle at top right, rgba(222, 165, 87, 0.18), transparent 22%),
     linear-gradient(180deg, #fffaf4 0%, #fff6ef 52%, #fffdf8 100%);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  line-height: 1.5;
+  color: var(--brand-ink);
+  font-family: var(--font-exo-2), "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.58;
+  letter-spacing: 0.01em;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -151,11 +164,13 @@ h1,
 h2,
 h3,
 h4 {
-  letter-spacing: -0.03em;
+  color: var(--brand-ink);
+  letter-spacing: -0.022em;
 }
 
 .font-display {
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-exo-2), "Segoe UI", system-ui, sans-serif;
+  font-weight: 700;
 }
 
 .page-gutter {
@@ -216,22 +231,23 @@ h4 {
 }
 
 .gc-eyebrow {
-  font-size: 0.68rem;
+  font-size: clamp(0.68rem, 0.2vw + 0.64rem, 0.78rem);
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .gc-title {
-  font-family: var(--font-display), Georgia, serif;
-  letter-spacing: -0.024em;
-  line-height: 1.08;
+  font-family: var(--font-exo-2), "Segoe UI", system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
 }
 
 .gc-copy {
-  color: #5f5047;
-  line-height: 1.7;
+  color: #5d4c40;
+  line-height: 1.75;
 }
 
 .gc-tag {
@@ -240,11 +256,11 @@ h4 {
   background: rgba(255, 255, 255, 0.92);
   color: #5f4424;
   display: inline-flex;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.11em;
   line-height: 1;
-  padding: 0.48rem 0.78rem;
+  padding: 0.52rem 0.88rem;
   text-transform: uppercase;
 }
 

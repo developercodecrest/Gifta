@@ -50,24 +50,24 @@ const officeDetails = [
 
 export function Footer() {
   return (
-    <footer className="mt-18 border-t border-[#ffb8d4] bg-[linear-gradient(180deg,#ffe7f3_0%,#ffd6ea_20%,#2e2112_20%,#1b130b_100%)] text-[#f9edd3]">
-      <div className="page-gutter py-8 sm:py-10">
-        <div className="mx-auto max-w-400 px-2 sm:px-4">
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-t-[1.35rem] bg-[#e80067] px-5 py-4 text-white shadow-[0_14px_34px_-26px_rgba(232,0,103,0.45)] sm:px-8">
+    <footer className="mt-16 border-t border-[#ffbfd8] bg-[linear-gradient(180deg,#ffe8f4_0%,#ffd9ea_18%,#2f2114_18%,#1a120b_100%)] text-[#f9edd3]">
+      <div className="page-gutter py-10 sm:py-12">
+        <div className="mx-auto max-w-[92rem]">
+          <div className="grid gap-4 rounded-t-[1.55rem] bg-[linear-gradient(90deg,#f50069_0%,#e80067_58%,#c30058_100%)] px-5 py-5 text-white shadow-[0_18px_38px_-28px_rgba(232,0,103,0.48)] sm:px-8 lg:grid-cols-[auto_1fr] lg:items-center">
             <Link href="/" className="inline-flex items-center">
-              <Image src="/logo.jpeg" alt="Gifta" width={112} height={48} className="h-11 w-auto object-contain" />
+              <Image src="/logo.jpeg" alt="Gifta" width={124} height={52} className="h-12 w-auto object-contain" />
             </Link>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-semibold uppercase tracking-[0.18em] sm:text-sm">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[0.7rem] font-semibold uppercase tracking-[0.18em] sm:text-xs lg:justify-end">
               {trustMarks.map((mark) => (
                 <span key={mark}>{mark}</span>
               ))}
             </div>
           </div>
 
-          <section className="relative overflow-hidden rounded-b-[1.8rem] border border-white/8 bg-[linear-gradient(135deg,rgba(201,155,42,0.16),rgba(31,22,11,0.94)_24%,rgba(27,19,11,0.98)_100%)] p-6 shadow-[0_24px_54px_-40px_rgba(0,0,0,0.58)] sm:p-8 lg:p-10">
+          <section className="relative overflow-hidden rounded-b-[2rem] border border-white/8 bg-[linear-gradient(135deg,rgba(201,155,42,0.16),rgba(31,22,11,0.94)_24%,rgba(27,19,11,0.98)_100%)] p-6 shadow-[0_24px_54px_-40px_rgba(0,0,0,0.58)] sm:p-8 xl:p-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,178,85,0.16),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
             <div className="relative flex flex-col gap-10">
-              <div className="grid gap-8 lg:grid-cols-[0.85fr_0.85fr_0.95fr_1.15fr]">
+              <div className="grid gap-8 lg:grid-cols-2 xl:grid-cols-[0.72fr_0.72fr_0.72fr_1fr]">
                 {footerColumns.map((column) => (
                   <section key={column.title}>
                     <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[#f0d18d]">{column.title}</h3>
@@ -106,8 +106,8 @@ export function Footer() {
                 </section>
               </div>
 
-              <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                <div className="max-w-2xl">
+              <div className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_auto] xl:items-end">
+                <div className="max-w-3xl">
                   <div className="flex items-center gap-3">
                     <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-[#f0d18d]">
                       <Gift className="h-5 w-5" />
@@ -119,9 +119,9 @@ export function Footer() {
                   </div>
 
                   <form className="mt-6" action="#">
-                    <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                       <Input type="email" placeholder="Enter your email" className="h-12 border-white/12 bg-white text-slate-900 placeholder:text-slate-400" />
-                      <Button type="submit" className="h-12 min-w-36 sm:px-6">Join Gifta</Button>
+                      <Button type="submit" className="h-12 min-w-40 sm:px-6">Join Gifta</Button>
                     </div>
 
                     <Label className="mt-4 flex items-start gap-2 text-xs text-[#d8c0b4]">
@@ -133,7 +133,7 @@ export function Footer() {
                   </form>
                 </div>
 
-                <div className="flex flex-col items-start gap-6 lg:items-end">
+                <div className="flex flex-col items-start gap-6 xl:items-end">
                   <Button asChild className="min-w-36">
                     <Link href="/products?tag=luxury">Explore premium gifts</Link>
                   </Button>
@@ -160,16 +160,16 @@ export function Footer() {
               <span>•</span>
               <Link href="/account" className="transition hover:text-white hover:underline">Account</Link>
             </div>
-            <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+            <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
               <p>© {new Date().getFullYear()} Gifta. Curated gifting for birthdays, anniversaries, and meaningful surprises.</p>
               <Link
                 href="#top"
-                className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#e6d4aa] bg-[#efe2bb] text-[#8a6820] shadow-[0_16px_26px_-22px_rgba(95,69,20,0.45)] transition hover:-translate-y-0.5 hover:bg-white"
+                className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#e6d4aa] bg-[#efe2bb] text-[#8a6820] shadow-[0_16px_26px_-22px_rgba(95,69,20,0.45)] transition hover:-translate-y-0.5 hover:bg-white"
                 aria-label="Back to top"
               >
                 <ArrowUp className="h-5 w-5" />
               </Link>
-              <p className="sm:text-right">Built for elegant discovery, trusted checkout, and responsive gifting flows.</p>
+              <p className="lg:text-right">Built for elegant discovery, trusted checkout, and responsive gifting flows.</p>
             </div>
           </div>
         </div>
@@ -191,7 +191,7 @@ function SocialIcon({
     <Link
       href={href}
       aria-label={label}
-      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-white/8 text-slate-100 shadow-[0_16px_24px_-22px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 hover:bg-white/12"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/8 bg-white/8 text-slate-100 shadow-[0_16px_24px_-22px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 hover:bg-white/12"
     >
       <Icon className="h-4 w-4" />
     </Link>
