@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 type HeroSlide = {
   eyebrow: string;
@@ -143,64 +142,42 @@ export function HeroSlider() {
         ))}
       </div>
 
-      <div className="animate-glow-drift absolute -left-14 top-10 h-40 w-40 rounded-full bg-[#ff7b63]/30 blur-3xl sm:-left-20 sm:top-8 sm:h-60 sm:w-60" />
-      <div className="animate-float-soft absolute -right-10 -top-6 h-48 w-48 rounded-full bg-[#f6c87a]/20 blur-3xl sm:right-0 sm:top-0 sm:h-64 sm:w-64" />
+      <div className="animate-glow-drift absolute -left-20 top-8 h-60 w-60 rounded-full bg-[#ff7b63]/30 blur-3xl" />
+      <div className="animate-float-soft absolute right-0 top-0 h-64 w-64 rounded-full bg-[#f6c87a]/20 blur-3xl" />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(20,10,14,0.88)_0%,rgba(20,10,14,0.72)_35%,rgba(20,10,14,0.2)_100%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_22%,rgba(7,4,6,0.44)_100%)]" />
 
-      <div className="relative z-20 flex min-h-[30rem] flex-col justify-end px-(--page-gutter) py-10 pb-12 transition-all sm:min-h-[36rem] sm:py-12 sm:pb-16 lg:min-h-[38rem] lg:py-16 lg:pb-20">
-        <article className="animate-rise relative z-30 max-w-2xl space-y-5 sm:space-y-6">
+      <div className="relative z-20 flex min-h-120 flex-col justify-end px-(--page-gutter) py-10 pb-12 transition-all sm:min-h-148 sm:py-12 sm:pb-16 lg:min-h-140 lg:py-16 lg:pb-20">
+        <article className="animate-rise relative z-30 max-w-xl space-y-4 sm:space-y-5">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/88 backdrop-blur-md">
             <Sparkles className="h-3.5 w-3.5 text-[#ffc38f]" />
             {active.eyebrow}
           </span>
-          <div className="space-y-3 sm:space-y-4">
-            <h1 className="gc-title text-4xl text-white sm:text-5xl lg:text-[4rem]">{active.title}</h1>
-            <p className="max-w-xl text-sm leading-7 text-white/82 sm:text-base sm:leading-8">{active.subtitle}</p>
-          </div>
-          <div className="flex flex-wrap gap-2.5 pt-1">
-            {active.highlights.map((highlight) => (
-              <span
-                key={highlight}
-                className="rounded-full border border-white/14 bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/88 backdrop-blur-sm"
-              >
-                {highlight}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Button asChild size="lg" className="h-12 px-7 sm:h-[3.25rem] sm:px-8">
-              <Link href={active.ctaHref} className="inline-flex items-center gap-2">
-                {active.ctaLabel}
-                <ArrowRight className="h-5 w-5 transition-transform group-hover/button:translate-x-1" />
-              </Link>
-            </Button>
+          <div className="flex flex-wrap gap-3 pt-1">
             <Link
-              href={active.secondaryHref}
-              className="inline-flex h-12 items-center justify-center rounded-full border border-white/18 bg-white/10 px-5 text-sm font-semibold tracking-[0.01em] text-white transition hover:bg-white/16"
+              href={active.ctaHref}
+              className="group relative z-30 inline-flex h-12 items-center justify-center overflow-hidden rounded-full bg-linear-to-r from-primary to-primary/90 px-7 font-semibold text-white shadow-lg transition-all hover:scale-[1.01] hover:shadow-xl"
             >
-              {active.secondaryLabel}
+              <span className="relative z-10 flex items-center gap-2">
+                {active.ctaLabel}
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+              </span>
             </Link>
           </div>
         </article>
 
-        <div className="absolute bottom-6 left-(--page-gutter) right-(--page-gutter) z-30 flex items-center justify-between gap-4 sm:bottom-10">
-          <div className="rounded-full border border-white/15 bg-black/15 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80 backdrop-blur-sm">
-            {String(index + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
-          </div>
-          <div className="flex items-center gap-3">
-            {slides.map((slide, slideIndex) => (
-              <button
-                key={slide.title}
-                type="button"
-                aria-label={`Go to slide ${slideIndex + 1}`}
-                onClick={() => setIndex(slideIndex)}
-                className={`h-3 rounded-full transition-all duration-500 ${
-                  slideIndex === index ? "w-12 bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]" : "w-3 bg-white/40 hover:bg-white/60"
-                }`}
-              />
-            ))}
-          </div>
+        <div className="absolute bottom-6 right-(--page-gutter) z-30 flex items-center gap-3 sm:bottom-10">
+          {slides.map((slide, slideIndex) => (
+            <button
+              key={slide.title}
+              type="button"
+              aria-label={`Go to slide ${slideIndex + 1}`}
+              onClick={() => setIndex(slideIndex)}
+              className={`h-3 rounded-full transition-all duration-500 ${
+                slideIndex === index ? "w-12 bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]" : "w-3 bg-white/40 hover:bg-white/60"
+              }`}
+            />
+          ))}
         </div>
       </div>
     </section>
